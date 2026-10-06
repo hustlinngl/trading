@@ -103,7 +103,7 @@ def _promote_asset_bundle(asset_dir: str | Path, champion_dir: str | Path = "mod
     src = Path(asset_dir)
     dst = Path(champion_dir)
     dst.mkdir(parents=True, exist_ok=True)
-    for name in ("signal_model.joblib", "analog_memory.joblib", "regime_detector.joblib", "meta_policy.joblib", "feature_efficiency.joblib", "base_training_meta.json"):
+    for name in ("signal_model.joblib", "analog_memory.joblib", "regime_detector.joblib", "meta_policy.joblib", "feature_efficiency.joblib", "base_training_meta.json", "deployment_manifest.json"):
         path = src / name
         if path.exists():
             shutil.copy2(path, dst / name)
