@@ -138,7 +138,10 @@ def master_tune(df,settings,trials=40,final_holdout_frac=0.15,stability_samples=
     cache={}
     trial_fold_scores={}
     def objective(trial):
-        params=_suggest(trial); rep=_evaluate_params(folds,settings,params,cost_multipliers=(1.0,1.5)); cache[trial.number]=rep; return float(rep['objective'])
+        params=_suggest(trial); rep=_evaluate_params(folds,settings,params,cost_multipliers=(1.0,1.5)); cache[trial.number]=rep
+        if isinstance(rep.get('rows'),pd.DataFrame) and not rep['rows'].empty:
+            trial_fold_scores[int(trial.number)] = rep['rows'].groupby('fold').robust_score.median().to_dict()
+        return float(rep['objective'])
     study.optimize(objective,n_trials=max(1,int(trials)),show_progress_bar=False)
     completed={int(t.number) for t in study.trials if getattr(t.state,'name',str(t.state).split('.')[-1])=='COMPLETE'}; evaluated=[cache.get(n,{}) for n in sorted(completed) if n in cache]
     if not evaluated: raise RuntimeError('Master tuning produced no completed trial evaluations; refuse to select an arbitrary candidate.')
@@ -146,7 +149,19 @@ def master_tune(df,settings,trials=40,final_holdout_frac=0.15,stability_samples=
     best=dict(study.best_params); rep=cache.get(study.best_trial.number) or _evaluate_params(folds,settings,best)
     if selected_ids==set(all_ids): folds_all=folds
     else: folds_all=sorted(folds+_collect_folds(tuning_df,settings,only_folds=set(all_ids)-selected_ids),key=lambda x:x.fold)
-    full_rep=_evaluate_params(folds_all,settings,best,cost_multipliers=(1.0,1.25,1.5)); stability=_stability_test(folds,settings,best,seed=settings.seed,n=stability_samples); placebo=_placebo_test(folds,settings,best,seed=settings.seed+17,n=min(6,max(3,stability_samples//2)))
+    full_rep=_evaluate_params(folds_all,settings,best,cost_multipliers=(1.0,1.25,1.5));
+    pbo_evidence={'available':False,'reason':'insufficient_trial_fold_matrix','pbo':None,'combinations':0};
+    try:
+        trial_ids=sorted(trial_fold_scores.keys()); fold_ids=sorted({int(k) for d in trial_fold_scores.values() for k in d.keys()})
+        if len(trial_ids)>=8 and len(fold_ids)>=6:
+            mat=np.full((len(fold_ids),len(trial_ids)),np.nan,dtype=float)
+            for j,tid in enumerate(trial_ids):
+                for i,fid in enumerate(fold_ids):
+                    if fid in trial_fold_scores[tid]: mat[i,j]=float(trial_fold_scores[tid][fid])
+            pbo_evidence=combinatorial_pbo(mat,partitions=min(8,len(fold_ids)),seed=settings.seed)
+    except Exception as exc:
+        pbo_evidence={'available':False,'reason':f'{type(exc).__name__}: {exc}','pbo':None,'combinations':0}
+    stability=_stability_test(folds,settings,best,seed=settings.seed,n=stability_samples); placebo=_placebo_test(folds,settings,best,seed=settings.seed+17,n=min(6,max(3,stability_samples//2)))
     tuned=replace(settings,**{k:v for k,v in best.items() if hasattr(settings,k)}); engine=AdaptiveEngine(tuned); engine.fit(tuning_df); feat=make_oos_features(tuning_df,holdout_df,tuned.horizon_bars,external_feature_lag_bars=getattr(tuned,'external_feature_lag_bars',1)); pred=engine.model.predict(feat); regimes=engine.regimes.transform(feat); analog=engine.memory.query_many(feat); rp=engine.regimes.persistence(feat); rprob=engine.regimes.semantic_probabilities(feat); meta_p=engine.meta.predict_proba(MetaPolicy.frame(pred,feat,regimes,analog,regime_persistence=rp,regime_probs=rprob)); snap=FoldSnapshot(-1,holdout_df,feat,pred,regimes,analog,meta_p,rp,rprob,getattr(engine.model,'conformal_abs_residuals_',None),getattr(engine.model,'conformal_scaled_residuals_',None)); final=_evaluate_params([snap],tuned,best,cost_multipliers=(1,1.25,1.5))
     final_stats=final['rows'].copy() if isinstance(final.get('rows'),pd.DataFrame) else pd.DataFrame(); final_evidence={}
     try:
