@@ -23,7 +23,7 @@ from .evaluation import run_configured_backtest, make_risk
 from .backtest import run_backtest
 from .validation import robust_score
 from .purged_cv import walk_forward_splits
-from .statistical_evidence import selection_adjusted_psr, bootstrap_max_drawdown
+from .statistical_evidence import selection_adjusted_psr, deflated_sharpe_ratio, combinatorial_pbo, bootstrap_max_drawdown
 from .fingerprint import strong_dataset_fingerprint
 
 @dataclass
@@ -136,6 +136,7 @@ def master_tune(df,settings,trials=40,final_holdout_frac=0.15,stability_samples=
     try: study.enqueue_trial(baseline)
     except Exception: pass
     cache={}
+    trial_fold_scores={}
     def objective(trial):
         params=_suggest(trial); rep=_evaluate_params(folds,settings,params,cost_multipliers=(1.0,1.5)); cache[trial.number]=rep; return float(rep['objective'])
     study.optimize(objective,n_trials=max(1,int(trials)),show_progress_bar=False)
@@ -152,9 +153,10 @@ def master_tune(df,settings,trials=40,final_holdout_frac=0.15,stability_samples=
         final_risk=make_risk(tuned,stop_atr_mult=best['stop_atr_mult'],take_profit_rr=best['take_profit_rr']); final_bt=run_backtest(holdout_df.assign(atr_14=feat['atr_14']),_actions(snap,tuned,best),final_risk,tuned.initial_cash,fee_bps=tuned.fee_bps,slippage_bps=tuned.slippage_bps,max_holding_bars=int(best['max_holding_bars']),intrabar_barriers=getattr(tuned,'intrabar_barriers',True),impact_bps_per_sqrt=getattr(tuned,'impact_bps_per_sqrt',1.5),force_daily_loss_exit=getattr(tuned,'force_daily_loss_exit',True),short_borrow_bps_per_bar=getattr(tuned,'short_borrow_bps_per_bar',0.0)); bar_returns=final_bt.equity.pct_change().replace([np.inf,-np.inf],np.nan).dropna().to_numpy(float)
         if len(bar_returns)>=30:
             periods=365.25*24*3600/max(1.0,pd.Series(holdout_df.index).diff().dropna().dt.total_seconds().median()) if len(holdout_df.index)>1 else 365.0
-            final_evidence={'selection_adjusted_psr_proxy':selection_adjusted_psr(bar_returns,len(study.trials),periods_per_year=periods),'path_stress':bootstrap_max_drawdown(bar_returns,reps=min(1000,max(200,stability_samples*100)),block=max(1,int(best['max_holding_bars'])//4),seed=settings.seed)}
+            final_evidence={'selection_adjusted_psr_proxy':selection_adjusted_psr(bar_returns,len(study.trials),periods_per_year=periods),
+            'deflated_sharpe_ratio':deflated_sharpe_ratio(bar_returns,len(study.trials),periods_per_year=periods),'path_stress':bootstrap_max_drawdown(bar_returns,reps=min(1000,max(200,stability_samples*100)),block=max(1,int(best['max_holding_bars'])//4),seed=settings.seed)}
     except Exception as exc: final_evidence={'error':f'{type(exc).__name__}: {exc}'}
-    result={'data':{'rows_total':len(df),'rows_tuning':len(tuning_df),'rows_final_holdout':len(holdout_df),'final_holdout_start':str(holdout_df.index[0]),'final_holdout_end':str(holdout_df.index[-1])},'best_params':best,'study_best_value':float(study.best_value),'trials':len(study.trials),'tuning_summary':{k:v for k,v in rep.items() if k!='rows'},'full_tuning_set_verification':{k:v for k,v in full_rep.items() if k!='rows'},'full_tuning_fold_rows': full_rep['rows'].to_dict(orient='records'),'stability':stability,'negative_control_placebo':placebo,'final_holdout':{k:v for k,v in final.items() if k!='rows'},'final_holdout_summary':final_stats.to_dict(orient='records'),'final_holdout_rows':final['rows'].to_dict(orient='records'),'final_statistical_evidence':final_evidence,'folds_used_for_optimization':[{'fold':x.fold,'start':str(x.test.index[0]),'end':str(x.test.index[-1])} for x in folds],'all_tuning_folds':[{'fold':x.fold,'start':str(x.test.index[0]),'end':str(x.test.index[-1])} for x in folds_all],'interpretation':'No finite tuning run can establish a perfect or future-proof optimum. The objective rewards robustness, cost tolerance and parameter plateau stability while preserving an untouched final holdout.'}
+    result={'data':{'rows_total':len(df),'rows_tuning':len(tuning_df),'rows_final_holdout':len(holdout_df),'final_holdout_start':str(holdout_df.index[0]),'final_holdout_end':str(holdout_df.index[-1])},'best_params':best,'study_best_value':float(study.best_value),'trials':len(study.trials),'tuning_summary':{k:v for k,v in rep.items() if k!='rows'},'full_tuning_set_verification':{k:v for k,v in full_rep.items() if k!='rows'},'full_tuning_fold_rows': full_rep['rows'].to_dict(orient='records'),'stability':stability,'negative_control_placebo':placebo,'final_holdout':{k:v for k,v in final.items() if k!='rows'},'final_holdout_summary':final_stats.to_dict(orient='records'),'final_holdout_rows':final['rows'].to_dict(orient='records'),'final_statistical_evidence':final_evidence,'probability_of_backtest_overfitting':pbo_evidence,'trial_count_ledger':int(len(study.trials)),'folds_used_for_optimization':[{'fold':x.fold,'start':str(x.test.index[0]),'end':str(x.test.index[-1])} for x in folds],'all_tuning_folds':[{'fold':x.fold,'start':str(x.test.index[0]),'end':str(x.test.index[-1])} for x in folds_all],'interpretation':'No finite tuning run can establish a perfect or future-proof optimum. The objective rewards robustness, cost tolerance and parameter plateau stability while preserving an untouched final holdout.'}
     if save_path:
         path=Path(save_path); path.parent.mkdir(parents=True,exist_ok=True); path.write_text(json.dumps(result,indent=2,default=str),encoding='utf-8')
     return result
