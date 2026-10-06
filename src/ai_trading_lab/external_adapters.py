@@ -20,8 +20,11 @@ class ProviderHealth:
 def event_features(text): return extract_event_terms(text)
 def _as_signal(doc): return ExternalSignal(doc.provider,doc.retrieved_at,doc.published_at,doc.title,doc.url,doc.text,float(doc.score or 0.0),extract_event_terms(doc.text))
 class WebSearchRouter:
-    def __init__(self,timeout=25):
-        self.timeout=timeout; self.health=ProviderHealth(); self.clients={"exa":ExaClient(timeout=timeout),"tavily":TavilyClient(timeout=timeout)}
+    def __init__(self,timeout=25,providers=("exa","tavily")):
+        self.timeout=timeout; self.health=ProviderHealth()
+        allowed={"exa","tavily"}
+        selected=[p for p in providers if str(p).lower() in allowed]
+        self.clients={p:(ExaClient(timeout=timeout) if p=="exa" else TavilyClient(timeout=timeout)) for p in dict.fromkeys(selected)}
     def _search_provider(self,provider,query,n,deep):
         try:
             docs=self.clients[provider].search(query,num_results=n,deep=deep); self.health.record(provider,bool(docs)); return [_as_signal(d) for d in docs]
