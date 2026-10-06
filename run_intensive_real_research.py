@@ -9,6 +9,10 @@ holdout and 1x/1.5x/2x/3x cost stress. It never promotes a model.
 
 import argparse
 import copy
+import os
+import platform
+import hashlib
+import importlib.metadata
 import sys
 import json
 from dataclasses import asdict
@@ -35,6 +39,15 @@ from ai_trading_lab.evaluation import run_configured_backtest
 from ai_trading_lab.objectives import robust_performance_utility
 from ai_trading_lab.research_gates import score_asset_evidence
 
+
+def runtime_provenance(config_path):
+    path=Path(config_path)
+    config_sha=hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
+    packages={}
+    for name in ("numpy","pandas","scikit-learn","xgboost","lightgbm","optuna","scipy","pyarrow"):
+        try: packages[name]=importlib.metadata.version(name)
+        except Exception: pass
+    return {"git_commit":os.getenv("GITHUB_SHA"),"python":platform.python_version(),"platform":platform.platform(),"config_sha256":config_sha,"packages":packages}
 
 def _clone_settings(settings):
     return copy.deepcopy(settings)
@@ -235,6 +248,7 @@ def main():
     ok = [x for x in reports if x.get("rows", 0) > 0 and x.get("status") != "ERROR"]
     summary = {
         "run_at": datetime.now(timezone.utc).isoformat(),
+        "runtime": runtime_provenance(args.config),
         "configuration": {
             "symbols": [x.strip() for x in args.symbols.split(",") if x.strip()],
             "timeframe": args.timeframe,
