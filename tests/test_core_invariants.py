@@ -105,3 +105,28 @@ def test_engine_exposes_live_inference_compatibility_api():
     assert isinstance(features, pd.DataFrame)
     assert not features.empty
     assert callable(engine.load)
+
+
+def test_import_normalization_preserves_microstructure_and_rejects_conflicts():
+    from ai_trading_lab.dataset import normalize_ohlcv
+    idx = pd.date_range("2026-01-01", periods=3, freq="15min", tz="UTC")
+    raw = pd.DataFrame({
+        "timestamp": list(idx),
+        "open": [100.0, 101.0, 102.0],
+        "high": [101.0, 102.0, 103.0],
+        "low": [99.0, 100.0, 101.0],
+        "close": [100.5, 101.5, 102.5],
+        "volume": [1000.0, 1100.0, 1200.0],
+        "quote_volume": [100500.0, 111650.0, 123000.0],
+        "trades": [10, 11, 12],
+    })
+    normalized = normalize_ohlcv(raw)
+    assert {"quote_volume", "trades"}.issubset(normalized.columns)
+
+    conflicting = pd.concat([raw, raw.iloc[[1]].assign(close=999.0)], ignore_index=True)
+    try:
+        normalize_ohlcv(conflicting)
+    except ValueError as exc:
+        assert "Conflicting duplicate timestamps" in str(exc)
+    else:
+        raise AssertionError("conflicting duplicate data must be rejected")
