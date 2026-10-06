@@ -20,6 +20,10 @@ def row(**overrides):
         "analog_n": 32,
         "analog_agreement": 0.85,
         "action": "LONG",
+        "trade_window_available": True,
+        "trade_window_ready": True,
+        "trade_window_direction": "LONG",
+        "trade_window_confidence": 0.90,
     }
     base.update(overrides)
     return pd.Series(base)
