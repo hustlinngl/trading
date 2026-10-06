@@ -25,6 +25,10 @@ on:
         required: false
         default: '60'
 
+concurrency:
+  group: intensive-real-research
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
