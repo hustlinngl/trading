@@ -34,7 +34,16 @@ def autonomous_cycle(settings: Settings, query: str, root: str | Path = ".") -> 
 
     try:
         macro_vals = {k: float(v["last"]) for k, v in growth.get("macro", {}).get("series", {}).items() if isinstance(v, dict) and v.get("last") is not None}
-        ext_health = {k: float(v) for k, v in growth.get("external", {}).get("provider_health", {}).items() if isinstance(v, (int, float))}
+        ext_health = {}
+        provider_health = growth.get("external", {}).get("provider_health", {}) or {}
+        for provider, stats in provider_health.items():
+            if isinstance(stats, dict):
+                ok=float(stats.get("ok",0.0)); fail=float(stats.get("fail",0.0))
+                ext_health[f"{provider}_reliability"]=(ok+2.0)/(ok+fail+4.0)
+        event_summary = growth.get("external", {}).get("event_summary", {}) or {}
+        for key, value in event_summary.items():
+            if isinstance(value, (int,float)):
+                ext_health[key]=float(value)
         state = build_market_state(
             ex, settings.symbol, settings.timeframe, float(df["close"].iloc[-1]),
             macro=macro_vals, external=ext_health,
