@@ -1,9 +1,9 @@
-# Final cleanup handoff — V6 / 0.9.11
+# Final cleanup handoff — V6 / 0.9.13
 
-The repository now contains the hardened research core plus the autonomous orchestration, data utilities, memory/state components, UI controller, safety examples and operational documentation that were missing from the earlier research-only sync.
+The repository now contains the hardened research core plus autonomous orchestration, data utilities, memory/state components, UI controller, strict live/paper inference, regression tests, benchmark controls and CI automation.
 
 ## Status
-- Engineering focus: research validity, economic realism, provenance and promotion safety.
+- Engineering focus: research validity, economic realism, provenance, promotion safety and operational correctness.
 - Trading edge: unproven; synthetic benchmark is negative and must not be treated as production evidence.
 - Default operating mode: paper + sandbox.
 - Public-data research path: Binance Vision for long history, Kraken for bounded cross-exchange validation.
