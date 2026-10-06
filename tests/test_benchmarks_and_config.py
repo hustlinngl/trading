@@ -1,14 +1,22 @@
 from __future__ import annotations
 
-import pandas as pd
-
 from ai_trading_lab.benchmarks import evaluate_suite
 from ai_trading_lab.config import load_settings
 
 
-def test_config_reads_economic_edge_hurdle():
-    settings = load_settings("config.yaml")
-    assert settings.min_edge_after_cost_bps == 5.0
+def test_config_reads_and_overrides_economic_edge_hurdle(tmp_path):
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        """
+model:
+  min_expected_return: 0.001
+  min_edge_after_cost_bps: 12.5
+""",
+        encoding="utf-8",
+    )
+    settings = load_settings(config)
+    assert settings.min_expected_return == 0.001
+    assert settings.min_edge_after_cost_bps == 12.5
 
 
 def test_benchmark_suite_returns_controls():
