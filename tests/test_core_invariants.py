@@ -1,0 +1,107 @@
+from __future__ import annotations
+
+from dataclasses import replace
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from ai_trading_lab.config import load_settings
+from ai_trading_lab.data import asof_join, drop_unclosed_tail, timeframe_offset
+from ai_trading_lab.master_tuner import _fold_cache_key
+from ai_trading_lab.risk import RiskEngine
+from ai_trading_lab.backtest import run_backtest
+from ai_trading_lab.engine import AdaptiveEngine
+
+
+def market_frame(n: int = 240, freq: str = "15min") -> pd.DataFrame:
+    idx = pd.date_range("2026-01-01", periods=n, freq=freq, tz="UTC")
+    close = np.linspace(100.0, 112.0, n)
+    return pd.DataFrame(
+        {
+            "open": close,
+            "high": close + 0.5,
+            "low": close - 0.5,
+            "close": close,
+            "volume": np.full(n, 100_000.0),
+        },
+        index=idx,
+    )
+
+
+def test_timeframe_and_unclosed_tail():
+    df = market_frame(4)
+    now = df.index[-1] + pd.Timedelta(minutes=7)
+    out = drop_unclosed_tail(df, "15m", now=now)
+    assert len(out) == 3
+    assert timeframe_offset("15m") == pd.Timedelta(minutes=15)
+
+
+def test_asof_join_respects_lag_and_never_looks_forward():
+    base = pd.DataFrame(index=pd.date_range("2026-01-01", periods=4, freq="15min", tz="UTC"))
+    source = pd.DataFrame(
+        {"value": [10.0, 20.0, 30.0]},
+        index=pd.date_range("2026-01-01", periods=3, freq="15min", tz="UTC"),
+    )
+    out = asof_join(base, source, lag=pd.Timedelta(minutes=15))
+    assert np.isnan(out.iloc[0]["value"])
+    assert out.iloc[1]["value"] == 10.0
+    assert out.iloc[2]["value"] == 20.0
+    assert out.iloc[3]["value"] == 30.0
+
+
+def test_risk_sizing_respects_position_cap_and_economic_costs():
+    risk = RiskEngine(
+        initial_cash=10_000.0,
+        risk_per_trade=0.01,
+        max_position_pct=0.10,
+        max_daily_loss_pct=0.02,
+        stop_atr_mult=2.0,
+        rr=2.0,
+        fee_bps=7.0,
+        slippage_bps=5.0,
+        max_participation_pct=0.10,
+        impact_bps_per_sqrt=1.5,
+    )
+    decision = risk.size(10_000.0, 100.0, 1.0, 1)
+    assert decision.allowed
+    assert decision.qty * 100.0 <= 1_000.0 + 1e-9
+    assert decision.take_profit > 100.0 > decision.stop
+
+
+def test_backtest_executes_on_next_bar_not_same_bar():
+    df = market_frame(40)
+    actions = pd.Series("FLAT", index=df.index)
+    actions.iloc[4] = "LONG"
+    risk = RiskEngine(10_000.0, 0.01, 0.25, 0.20, 1.0, 2.0, 0.0, 0.0, 1.0, 0.0)
+    result = run_backtest(
+        df.assign(atr_14=1.0),
+        actions,
+        risk,
+        10_000.0,
+        fee_bps=0.0,
+        slippage_bps=0.0,
+        max_holding_bars=10,
+        intrabar_barriers=False,
+    )
+    assert not result.trades.empty
+    assert pd.Timestamp(result.trades.iloc[0]["entry_timestamp"]) == df.index[5]
+
+
+def test_master_tuner_cache_key_accepts_fold_subset():
+    settings = load_settings(Path("config.yaml"))
+    df = market_frame(100)
+    key_all = _fold_cache_key(df, settings)
+    key_subset = _fold_cache_key(df, settings, {1, 3})
+    assert key_all != key_subset
+    assert len(key_all) == 24
+    assert len(key_subset) == 24
+
+
+def test_engine_exposes_live_inference_compatibility_api():
+    settings = replace(load_settings(Path("config.yaml")), min_train_rows=100)
+    engine = AdaptiveEngine(settings)
+    features = engine.features(market_frame(120))
+    assert isinstance(features, pd.DataFrame)
+    assert not features.empty
+    assert callable(engine.load)
