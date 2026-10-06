@@ -91,7 +91,7 @@ class CognitionEngine:
         result={"query":str(query),"search":[],"provider_health":{},"macro":{"series":{}},"sec":{"filings":{}},"event_summary":{}}
         try:
             if bool(getattr(self.settings,"external_deep_search",True)):
-                router=WebSearchRouter(timeout=25)
+                router=WebSearchRouter(timeout=25,providers=getattr(self.settings,"external_providers",("exa","tavily")))
                 queries=[str(query)]
                 for suffix in ("market structure volatility","rates liquidity macro","regulation ETF flows"):
                     if len(queries)<int(getattr(budget,"search_queries",1)):
