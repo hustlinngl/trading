@@ -39,6 +39,8 @@ def bundle_compatibility(settings, bundle: str | Path, symbol: str) -> tuple[boo
     """Validate lightweight persisted identity metadata before live/paper inference."""
     bundle = Path(bundle)
     meta_path = bundle / "base_training_meta.json"
+    if not meta_path.exists() and bool(getattr(settings, "signal_only_mode", True)):
+        return False, "model_metadata_missing"
     if meta_path.exists():
         try:
             import json
