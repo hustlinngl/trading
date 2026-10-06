@@ -1,6 +1,15 @@
 name: intensive-real-research
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'run_intensive_real_research.py'
+      - 'config.yaml'
+      - 'pyproject.toml'
+      - 'requirements.txt'
+      - '.github/workflows/intensive-real-research.yml'
   workflow_dispatch:
     inputs:
       start:
@@ -34,17 +43,20 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install -e .
+
+      - name: Compile and import check
+        run: |
+          python -m compileall -q src run_intensive_real_research.py
+          python - <<'PY'
+          from ai_trading_lab.config import load_settings
+          from ai_trading_lab.engine import AdaptiveEngine
+          from ai_trading_lab.master_tuner import master_tune
+          print("core-import-ok", load_settings().timeframe, AdaptiveEngine.__name__, callable(master_tune))
+          PY
 
       - name: Run intensive real-data research
         run: |
-          python run_intensive_real_research.py \
-            --symbols BTC/USDT,ETH/USDT,SOL/USDT \
-            --timeframe 15m \
-            --start '${{ inputs.start || '2022-01-01' }}' \
-            --end '${{ inputs.end || '2026-10-07' }}' \
-            --trials '${{ inputs.trials || '60' }}' \
-            --holdout-frac 0.15
+          python run_intensive_real_research.py             --symbols BTC/USDT,ETH/USDT,SOL/USDT             --timeframe 15m             --start '${{ inputs.start || '2022-01-01' }}'             --end '${{ inputs.end || '2026-10-07' }}'             --trials '${{ inputs.trials || '60' }}'             --holdout-frac 0.15
 
       - name: Upload research reports
         uses: actions/upload-artifact@v4
