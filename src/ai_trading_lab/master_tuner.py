@@ -133,8 +133,10 @@ def master_tune(df,settings,trials=40,final_holdout_frac=0.15,stability_samples=
     split_meta=list(walk_forward_splits(len(tuning_df),settings.walk_forward_train_bars,settings.walk_forward_test_bars,settings.walk_forward_step,int(getattr(settings,'validation_purge_bars',settings.horizon_bars+max(1,settings.horizon_bars//2))),settings.min_train_rows,independent_test=True))
     if not split_meta: raise ValueError('Not enough data for purged master tuning folds')
     all_ids=[sp.fold for sp in split_meta]
-    if len(all_ids)<=int(tuning_folds): selected_ids=set(all_ids)
-    else: selected_ids={all_ids[int(i)] for i in np.linspace(0,len(all_ids)-1,int(tuning_folds)).round().astype(int)}
+    audit_target=int(getattr(settings,'master_audit_folds',18))
+    optimization_target=int(tuning_folds or getattr(settings,'master_optimization_folds',6))
+    audit_ids=representative_fold_ids(all_ids,audit_target)
+    selected_ids=representative_fold_ids(sorted(audit_ids),optimization_target)
     folds=_collect_folds(tuning_df,settings,only_folds=selected_ids)
     if not folds: raise ValueError('Selected master tuning folds could not be built')
     if not HAVE_OPTUNA: raise RuntimeError('Optuna is required for master tuning')
@@ -157,8 +159,7 @@ def master_tune(df,settings,trials=40,final_holdout_frac=0.15,stability_samples=
     if not evaluated: raise RuntimeError('Master tuning produced no completed trial evaluations; refuse to select an arbitrary candidate.')
     if max(int(x.get('total_trades',0)) for x in evaluated)<=0: raise RuntimeError('Master tuning found no trading activity on the tuning folds. Refuse to select an arbitrary zero-trade candidate.')
     best=dict(study.best_params); rep=cache.get(study.best_trial.number) or _evaluate_params(folds,settings,best)
-    if selected_ids==set(all_ids): folds_all=folds
-    else: folds_all=sorted(folds+_collect_folds(tuning_df,settings,only_folds=set(all_ids)-selected_ids),key=lambda x:x.fold)
+    folds_all=sorted(_collect_folds(tuning_df,settings,only_folds=audit_ids),key=lambda x:x.fold)
     full_rep=_evaluate_params(folds_all,settings,best,cost_multipliers=(1.0,1.25,1.5));
     pbo_evidence={'available':False,'reason':'insufficient_trial_fold_matrix','pbo':None,'combinations':0};
     try:
