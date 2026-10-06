@@ -56,20 +56,30 @@ def download_daily(symbol,interval='15m',day=None,market='spot',out_dir='data/ra
     d=pd.Timestamp(day).date(); sym=symbol.replace('/','').upper(); prefix='spot' if market=='spot' else 'futures/um'; folder=Path(out_dir)/market/f'{sym}_{interval}'/'daily'; name=f'{sym}-{interval}-{d.isoformat()}.zip'; url=f'{BASE}/{prefix}/daily/klines/{sym}/{interval}/{name}'
     return _download(url,name,folder/name,timeout,verify_checksum)
 def download_range(symbol,interval,start,end,market='spot',out_dir='data/raw/binance',timeout=60,verify_checksum=True,exact=True):
-    raw_start=pd.Timestamp(start); raw_end=pd.Timestamp(end); start_ts=raw_start.tz_localize('UTC') if raw_start.tzinfo is None else raw_start.tz_convert('UTC'); end_ts=raw_end.tz_localize('UTC') if raw_end.tzinfo is None else raw_end.tz_convert('UTC')
-    out=[]
-    for y,m in _months(start,end):
-        try:out.append(download_month(symbol,interval,y,m,market,out_dir,timeout,verify_checksum))
-        except FileNotFoundError:pass
+    raw_start=pd.Timestamp(start); raw_end=pd.Timestamp(end)
+    start_ts=raw_start.tz_localize('UTC') if raw_start.tzinfo is None else raw_start.tz_convert('UTC')
+    end_ts=raw_end.tz_localize('UTC') if raw_end.tzinfo is None else raw_end.tz_convert('UTC')
+    if isinstance(start,str) and len(start.strip())==10: start_ts=start_ts.normalize()
+    if isinstance(end,str) and len(end.strip())==10: end_ts=end_ts.normalize()+pd.Timedelta(days=1)-pd.Timedelta(nanoseconds=1)
+    if end_ts<start_ts: raise ValueError('end must be >= start')
+    out=[]; boundary_months=set()
     if exact:
-        month_start=end_ts.normalize().replace(day=1); month_end=(month_start+pd.offsets.MonthEnd(0)).date()
-        if end_ts.date()<month_end:
-            d=max(start_ts.date(),month_start.date())
-            while d<=end_ts.date():
-                try:out.append(download_daily(symbol,interval,d,market,out_dir,timeout,verify_checksum))
-                except FileNotFoundError:pass
+        if start_ts.day!=1: boundary_months.add((start_ts.year,start_ts.month))
+        if end_ts.date()!=(end_ts.normalize()+pd.offsets.MonthEnd(0)).date(): boundary_months.add((end_ts.year,end_ts.month))
+    for y,m in _months(start,end):
+        if (y,m) in boundary_months: continue
+        try: out.append(download_month(symbol,interval,y,m,market,out_dir,timeout,verify_checksum))
+        except FileNotFoundError: continue
+    if exact:
+        for y,m in sorted(boundary_months):
+            first=max(start_ts.date(),date(y,m,1)); last=min(end_ts.date(),(pd.Timestamp(y=y,m=m,day=1)+pd.offsets.MonthEnd(0)).date())
+            d=first
+            while d<=last:
+                try: out.append(download_daily(symbol,interval,d,market,out_dir,timeout,verify_checksum))
+                except FileNotFoundError: pass
                 d+=timedelta(days=1)
     return list(dict.fromkeys(out))
+
 def _normalize_vision_csv(raw):
     with zipfile.ZipFile(io.BytesIO(raw)) as z:
         names=[n for n in z.namelist() if n.lower().endswith('.csv')]
