@@ -172,6 +172,8 @@ class Settings:
     broad_crypto_symbol_cap: int = 250
     intraday_research_top_n: int = 10
     final_holdout_frac: float = 0.15
+    master_audit_folds: int = 18
+    master_optimization_folds: int = 6
     historical_sources: tuple[str, ...] = ("binance", "fred", "sec", "cftc", "treasury", "alpha_vantage")
     live_symbols: tuple[str, ...] = ("BTC/USDT", "ETH/USDT", "SOL/USDT")
 
@@ -335,6 +337,8 @@ def load_settings(path: str | Path = ROOT / "config.yaml") -> Settings:
         broad_crypto_symbol_cap=int(d.get("broad_crypto_symbol_cap", 250)),
         intraday_research_top_n=int(d.get("intraday_research_top_n", 10)),
         final_holdout_frac=float(d.get("final_holdout_frac", 0.15)),
+        master_audit_folds=int(d.get("master_audit_folds", 18)),
+        master_optimization_folds=int(d.get("master_optimization_folds", 6)),
         historical_sources=tuple(d.get("historical_sources", ("binance", "fred", "sec", "cftc", "treasury", "alpha_vantage")) or ()),
         live_symbols=tuple(d.get("live_symbols", ("BTC/USDT", "ETH/USDT", "SOL/USDT")) or ()),
     )
