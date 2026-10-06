@@ -149,7 +149,7 @@ def run_symbol(symbol, args, base_settings):
     fold_dds = [float(x.get("max_drawdown", 0.0)) for x in wf_records]
     evidence = _aggregate_bootstrap(fold_returns, fold_dds, int(settings.seed))
     evidence["holdout_utility"] = robust_performance_utility(
-        holdout_stats,
+        tuned_holdout_stats,
         tuned_holdout_stats,
         min_trades=int(getattr(settings, "base_min_holdout_trades", 20)),
         max_drawdown=float(getattr(settings, "base_max_holdout_drawdown", -0.25)),
