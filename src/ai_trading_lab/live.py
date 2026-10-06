@@ -9,7 +9,7 @@ from .engine import AdaptiveEngine
 from .fingerprint import strong_dataset_fingerprint
 from .policy import live_signal_gate
 from .trade_window import assess_trade_window
-from .deployment import resolve_signal_bundle, resolve_trade_window_model
+from .deployment import resolve_signal_bundle, resolve_trade_window_model, bundle_compatibility
 
 @dataclass
 class LiveAssessment:
@@ -35,7 +35,10 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None):
 
         model_dir=resolve_signal_bundle(settings,root,symbol)
         if not (model_dir/"signal_model.joblib").exists():
-            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,["champion_missing"],fp)
+            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,["model_missing"],fp)
+        compatible, compatibility_reason=bundle_compatibility(settings,model_dir,symbol)
+        if not compatible:
+            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[compatibility_reason],fp)
 
         eng=AdaptiveEngine(settings).load(model_dir)
         feat=eng.features(df)
