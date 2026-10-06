@@ -9,6 +9,7 @@ from .data_quality import audit_market_data
 from .engine import AdaptiveEngine
 from .fingerprint import strong_dataset_fingerprint
 from .policy import live_signal_gate
+from .trade_window import assess_trade_window
 
 def one_iteration(settings, root: str | Path = "."):
     root=Path(root); (root/"logs").mkdir(parents=True,exist_ok=True)
@@ -39,7 +40,13 @@ def one_iteration(settings, root: str | Path = "."):
                 if pred.empty:
                     result["reason"]=["empty_prediction"]
                 else:
-                    last=pred.iloc[-1]
+                    last=pred.iloc[-1].copy()
+                    asset_model = root / "models" / "assets" / settings.symbol.replace("/", "_").replace(":", "_") / "trade_window_specialist.joblib"
+                    configured_model = root / getattr(settings, "trade_window_model_path", "models/champion/trade_window_specialist.joblib")
+                    tw_path = asset_model if asset_model.exists() else configured_model
+                    tw = assess_trade_window(df, settings, tw_path)
+                    for key, value in tw.items():
+                        last[key] = value
                     signal,reasons=live_signal_gate(last,settings)
                     p=float(last.get("p_up",0.5))
                     confidence=p if signal=="LONG" else (1.0-p if signal=="SHORT" else 0.0)
