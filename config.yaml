@@ -75,3 +75,6 @@ real_data:
   final_holdout_frac: 0.15
   historical_sources: [binance]
   universe_manifest: data/real_universe/manifest.json
+
+  master_audit_folds: 18
+  master_optimization_folds: 6
