@@ -4,8 +4,10 @@ from pathlib import Path
 import json, numpy as np, pandas as pd
 
 from .data import exchange_client, fetch_ohlcv
+from .data_quality import audit_market_data
 from .engine import AdaptiveEngine
 from .fingerprint import strong_dataset_fingerprint
+from .policy import live_signal_gate
 
 @dataclass
 class LiveAssessment:
@@ -19,20 +21,40 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None):
     symbol=symbol or settings.symbol
     ex=exchange or exchange_client(getattr(settings,"exchange","binance"),sandbox=False)
     df=fetch_ohlcv(ex,symbol,settings.timeframe,int(getattr(settings,"live_lookback_bars",600)))
-    stamp=df.index[-1].isoformat(); price=float(df.close.iloc[-1]); fp=strong_dataset_fingerprint(df)
-    model_dir=_model_dir(settings,root)
-    if not (model_dir/"signal_model.joblib").exists():
-        return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,["champion_missing"],fp)
+    stamp=df.index[-1].isoformat()
+    price=float(df.close.iloc[-1])
+    fp=strong_dataset_fingerprint(df)
+
     try:
-        eng=AdaptiveEngine(settings); eng.load(model_dir)
-        feat=eng.features(df) if hasattr(eng,"features") else df
-        pred=eng.model.predict(feat).iloc[-1]
-        p=float(pred.get("p_up",0.5)); er=float(pred.get("expected_return",0.0)); thr=float(getattr(settings,"probability_threshold",.57)); min_er=float(getattr(settings,"min_expected_return",.0015))
-        sig="LONG" if p>=thr and er>=min_er else ("SHORT" if p<=1-thr and er<=-min_er else "FLAT")
-        reasons=[] if sig!="FLAT" else ["policy_gate"]
-        return LiveAssessment(symbol,stamp,"SIGNAL" if sig!="FLAT" else "WAIT",sig,max(p,1-p) if sig!="FLAT" else 0.0,er,price,reasons,fp)
+        quality=audit_market_data(df, settings.timeframe)
+        age_minutes=max(0.0,(pd.Timestamp.now(tz="UTC")-pd.Timestamp(df.index[-1])).total_seconds()/60.0)
+        quality_reasons=[f"data_quality:{reason}" for reason in quality.reasons]
+        if not quality.passed:
+            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,quality_reasons or ["data_quality"],fp)
+        if age_minutes > float(getattr(settings,"live_max_data_age_minutes",30.0)):
+            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[f"stale_data:{age_minutes:.1f}m"],fp)
+
+        model_dir=_model_dir(settings,root)
+        if not (model_dir/"signal_model.joblib").exists():
+            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,["champion_missing"],fp)
+
+        eng=AdaptiveEngine(settings).load(model_dir)
+        feat=eng.features(df)
+        pred=eng.predict_frame(feat)
+        if pred.empty:
+            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,["empty_prediction"],fp)
+
+        last=pred.iloc[-1]
+        signal,reasons=live_signal_gate(last,settings)
+        p=float(last.get("p_up",0.5))
+        confidence=p if signal=="LONG" else (1.0-p if signal=="SHORT" else 0.0)
+        return LiveAssessment(
+            symbol,stamp,"SIGNAL" if signal!="FLAT" else "WAIT",signal,
+            confidence,float(last.get("expected_return",0.0)),price,
+            reasons or quality_reasons,fp,
+        )
     except Exception as exc:
-        return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[f"runtime:{exc}"],fp)
+        return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[f"runtime:{type(exc).__name__}:{exc}"],fp)
 
 def scan_top5(settings,root=".",symbols=None):
     ex=exchange_client(getattr(settings,"exchange","binance"),sandbox=False)
