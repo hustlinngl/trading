@@ -34,6 +34,21 @@ class AdaptiveEngine:
         self.model.conformal_level=float(getattr(settings,'conformal_level',0.90))
         self.memory=AnalogMemory(k=getattr(settings,'memory_k',32)); self.meta=MetaPolicy(settings.seed); self.meta_regimes=None
 
+    def features(self, df):
+        """Build the canonical feature frame used by both research and live inference."""
+        features, _, _ = make_features(
+            df,
+            self.settings.horizon_bars,
+            external_feature_lag_bars=getattr(self.settings, "external_feature_lag_bars", 1),
+        )
+        return features
+
+    def load(self, out_dir):
+        """Load a persisted bundle into this engine instance."""
+        loaded = type(self).load_bundle(self.settings, out_dir)
+        self.__dict__.update(loaded.__dict__)
+        return self
+
     def fit(self,df):
         features,y_cls,future_ret=make_features(df,self.settings.horizon_bars,external_feature_lag_bars=getattr(self.settings,'external_feature_lag_bars',1))
         tb=triple_barrier_labels(df,self.settings.horizon_bars,self.settings.pt_atr,self.settings.sl_atr); y=y_cls.copy()
