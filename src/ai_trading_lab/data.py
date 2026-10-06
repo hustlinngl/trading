@@ -1,0 +1,139 @@
+from __future__ import annotations
+
+import time
+from typing import Iterable
+from pathlib import Path
+import pandas as pd
+
+def timeframe_offset(timeframe: str):
+    tf = str(timeframe).strip().lower()
+    import re
+    m = re.fullmatch(r'(\d+)(s|min|m|h|d|w)', tf)
+    if not m:
+        raise ValueError(f'Unsupported timeframe: {timeframe}')
+    n, unit = int(m.group(1)), m.group(2)
+    unit = {'m':'min'}.get(unit, unit)
+    return pd.tseries.frequencies.to_offset(f'{n}{unit}')
+
+try:
+    import ccxt
+except ImportError:
+    ccxt = None
+
+def exchange_client(exchange_id: str = 'binance', sandbox: bool = True, api_key: str | None = None, secret: str | None = None):
+    if ccxt is None:
+        raise RuntimeError('ccxt is not installed. Install the project before using exchange data.')
+    cls = getattr(ccxt, exchange_id)
+    params = {'enableRateLimit': True}
+    if api_key: params['apiKey'] = api_key
+    if secret: params['secret'] = secret
+    ex = cls(params)
+    if sandbox: ex.set_sandbox_mode(True)
+    ex.load_markets()
+    return ex
+
+def fetch_ohlcv(exchange, symbol: str, timeframe: str, limit: int = 8000, since: int | None = None, include_unclosed: bool = False) -> pd.DataFrame:
+    all_rows = []
+    tf_ms = int(exchange.parse_timeframe(timeframe) * 1000)
+    cursor = since
+    target = int(limit)
+    while len(all_rows) < target:
+        batch_limit = min(1000, target - len(all_rows))
+        batch = exchange.fetch_ohlcv(symbol, timeframe=timeframe, since=cursor, limit=batch_limit)
+        if not batch:
+            break
+        all_rows.extend(batch)
+        last_ts = int(batch[-1][0])
+        next_cursor = last_ts + tf_ms
+        if cursor is not None and next_cursor <= cursor:
+            break
+        cursor = next_cursor
+        if len(batch) < batch_limit:
+            break
+        time.sleep(max(float(getattr(exchange, 'rateLimit', 0)) / 1000.0, 0.0))
+    df = pd.DataFrame(all_rows, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+    if df.empty: raise RuntimeError(f'No OHLCV returned for {symbol} {timeframe}')
+    df = df.drop_duplicates('timestamp').sort_values('timestamp')
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
+    df = df.set_index('timestamp').astype(float)
+    return df if include_unclosed else drop_unclosed_tail(df, timeframe)
+
+def drop_unclosed_tail(df: pd.DataFrame, timeframe: str, now: pd.Timestamp | None = None) -> pd.DataFrame:
+    if df.empty or not isinstance(df.index, pd.DatetimeIndex):
+        return df
+    now = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+    now = now.tz_localize("UTC") if now.tzinfo is None else now.tz_convert("UTC")
+    try:
+        delta = timeframe_offset(timeframe)
+    except Exception:
+        return df
+    return df.iloc[:-1] if df.index[-1] + delta > now else df
+
+def cache_ohlcv(df: pd.DataFrame, path: str | Path) -> None:
+    p = Path(path); p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(p.suffix + '.tmp')
+    df.to_parquet(tmp, index=True)
+    tmp.replace(p)
+
+def load_cached(path: str | Path) -> pd.DataFrame:
+    return pd.read_parquet(path).sort_index()
+
+def fetch_ohlcv_incremental(exchange, symbol: str, timeframe: str, cache_path: str | Path, target_bars: int = 8000, include_unclosed: bool = False) -> pd.DataFrame:
+    path = Path(cache_path)
+    if not path.exists():
+        df = fetch_ohlcv(exchange, symbol, timeframe, target_bars, include_unclosed=include_unclosed)
+        cache_ohlcv(df, path)
+        return df
+    cached = load_cached(path)
+    if cached.empty:
+        df = fetch_ohlcv(exchange, symbol, timeframe, target_bars, include_unclosed=include_unclosed)
+        cache_ohlcv(df, path)
+        return df
+    tf_ms = int(exchange.parse_timeframe(timeframe) * 1000)
+    last_ts = int(cached.index[-1].timestamp() * 1000)
+    since = max(0, last_ts - 2 * tf_ms)
+    try:
+        combined = cached.copy()
+        cursor = since
+        while len(combined) < target_bars:
+            need = min(1000, target_bars - len(combined) + 2)
+            fresh = fetch_ohlcv(exchange, symbol, timeframe, need, since=cursor)
+            if fresh.empty:
+                break
+            combined = pd.concat([combined, fresh]).sort_index()
+            combined = combined[~combined.index.duplicated(keep='last')]
+            last = int(fresh.index[-1].timestamp() * 1000)
+            next_cursor = last + tf_ms
+            if next_cursor <= cursor or len(fresh) < need:
+                break
+            cursor = next_cursor
+            time.sleep(max(float(getattr(exchange, 'rateLimit', 0)) / 1000.0, 0.0))
+        combined = combined.sort_index()
+        if not include_unclosed:
+            combined = drop_unclosed_tail(combined, timeframe)
+        if len(combined) > target_bars:
+            combined = combined.iloc[-target_bars:]
+        cache_ohlcv(combined, path)
+        return combined
+    except Exception:
+        return cached.iloc[-target_bars:]
+
+def asof_join(base: pd.DataFrame, source: pd.DataFrame, *, source_time: str = "timestamp", columns: Iterable[str] | None = None, lag: pd.Timedelta | None = None, tolerance: pd.Timedelta | None = None, suffix: str = "") -> pd.DataFrame:
+    if base.empty or source.empty:
+        return base.copy()
+    b = base.copy().sort_index()
+    s = source.copy()
+    if source_time in s.columns:
+        s[source_time] = pd.to_datetime(s[source_time], utc=True)
+        s = s.set_index(source_time)
+    if not isinstance(b.index, pd.DatetimeIndex) or not isinstance(s.index, pd.DatetimeIndex):
+        raise TypeError("base and source must use DatetimeIndex or source_time must define one")
+    s = s.sort_index()
+    if columns is not None:
+        s = s[[c for c in columns if c in s.columns]]
+    if lag is not None:
+        s = s.copy(); s.index = s.index + lag
+    left = b.reset_index(names="__base_ts")
+    right = s.reset_index(names="__source_ts").rename(columns={"__source_ts": "__eligible_ts"})
+    out = pd.merge_asof(left, right, left_on="__base_ts", right_on="__eligible_ts", direction="backward", tolerance=tolerance, suffixes=("", suffix))
+    return out.drop(columns=["__eligible_ts"], errors="ignore").set_index("__base_ts").reindex(b.index)

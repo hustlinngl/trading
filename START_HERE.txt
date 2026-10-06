@@ -1,0 +1,13 @@
+ADAPTIVE AI TRADING LAB V6
+==========================
+
+1. Install Python 3.11+ 64-bit.
+2. Run: python -m pip install -e ".[full]"
+3. Run: python -m streamlit run app.py
+4. Data -> import OHLCV.
+5. Train & Test -> train-complete.
+6. Live Radar -> public-data scan.
+
+Safety defaults: paper_only=true, sandbox=true.
+A failed evidence gate must remain WAIT/research-only.
+Never commit secrets; use .env locally or GitHub Actions Secrets.
