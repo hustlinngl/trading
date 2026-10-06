@@ -60,6 +60,20 @@ def live_signal_gate(row, settings):
         if float(row.get("analog_agreement", 0.0)) < float(getattr(settings, "signal_memory_min_agreement", 0.70)):
             reasons.append("memory_agreement")
 
+    if bool(getattr(settings, "trade_window_required_for_signal", False)):
+        tw_available = bool(row.get("trade_window_available", False))
+        tw_ready = bool(row.get("trade_window_ready", False))
+        tw_direction = str(row.get("trade_window_direction", "FLAT"))
+        tw_confidence = float(row.get("trade_window_confidence", 0.0))
+        if not tw_available:
+            reasons.append("trade_window_missing")
+        elif not tw_ready:
+            reasons.append("trade_window_not_ready")
+        elif tw_direction != ("LONG" if direction > 0 else "SHORT"):
+            reasons.append("trade_window_disagreement")
+        elif tw_confidence < float(getattr(settings, "trade_window_min_confidence", 0.80)):
+            reasons.append("trade_window_confidence")
+
     if reasons:
         return "FLAT", reasons
     return ("LONG" if direction > 0 else "SHORT"), []
