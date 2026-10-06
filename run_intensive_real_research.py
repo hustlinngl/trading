@@ -111,12 +111,19 @@ def run_symbol(symbol, args, base_settings):
         symbol, args.timeframe, args.start, args.end, args.market, raw_dir,
         timeout=args.timeout, verify_checksum=not args.skip_checksum,
     )
-    df = merge_archives(paths, merged_path)
+    df = merge_archives(paths, None)
     if df.empty:
         raise RuntimeError(f"No real market data retrieved for {symbol}")
     if not isinstance(df.index, pd.DatetimeIndex) and "timestamp" in df.columns:
         df = df.set_index("timestamp")
-    df = df.sort_index()
+    df = clip_history(df, args.start, args.end)
+    if df.empty:
+        raise RuntimeError(f"Requested date range returned no completed rows for {symbol}")
+    merged_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        df.to_parquet(merged_path, index=True)
+    except Exception:
+        df.to_csv(merged_path.with_suffix('.csv'))
 
     quality = audit_market_data(df, settings.timeframe)
     if not quality.passed:
@@ -164,6 +171,7 @@ def run_symbol(symbol, args, base_settings):
         "start": str(df.index.min()),
         "end": str(df.index.max()),
         "data_fingerprint": strong_dataset_fingerprint(df),
+        "archive_provenance": archive_provenance(paths),
         "quality": asdict(quality),
         "walk_forward": wf_records,
         "walk_forward_summary": {
