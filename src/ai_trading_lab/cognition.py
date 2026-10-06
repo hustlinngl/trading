@@ -85,7 +85,59 @@ class CognitionEngine:
         except Exception: return []
 
     def observe_external(self,query,budget):
-        return {"search":[],"note":"External provider credentials are optional; external enrichment is disabled in this minimal repository sync."}
+        """Collect optional external intelligence without giving it execution authority."""
+        from .external_adapters import WebSearchRouter, FredAdapter, SecAdapter
+
+        result={"query":str(query),"search":[],"provider_health":{},"macro":{"series":{}},"sec":{"filings":{}},"event_summary":{}}
+        try:
+            if bool(getattr(self.settings,"external_deep_search",True)):
+                router=WebSearchRouter(timeout=25)
+                queries=[str(query)]
+                for suffix in ("market structure volatility","rates liquidity macro","regulation ETF flows"):
+                    if len(queries)<int(getattr(budget,"search_queries",1)):
+                        queries.append(f"{query} {suffix}")
+                docs=[]
+                for q in queries:
+                    docs.extend(router.search(q,n=int(getattr(budget,"search_results_per_query",6)),deep=bool(getattr(budget,"deep_search",True))))
+                unique={}
+                for doc in docs:
+                    key=doc.url or f"{doc.provider}:{doc.title}"
+                    if key not in unique or float(doc.score)>float(unique[key].score): unique[key]=doc
+                event_totals={}
+                for doc in sorted(unique.values(),key=lambda d:float(d.score),reverse=True)[:int(getattr(budget,"search_results_per_query",6))*2]:
+                    from .external_intelligence import extract_event_terms
+                    features=extract_event_terms(doc.title+" "+doc.text)
+                    for k,v in features.items(): event_totals[k]=event_totals.get(k,0.0)+float(v)
+                    result["search"].append({"provider":doc.provider,"retrieved_at":doc.retrieved_at,"published_at":doc.published_at,"title":doc.title[:240],"url":doc.url,"score":float(doc.score),"features":features})
+                result["provider_health"]=router.health.to_dict()
+                result["event_summary"]=event_totals
+            if getattr(self.settings,"fred_series",()):
+                fred=FredAdapter()
+                now=pd.Timestamp.now(tz="UTC")
+                start=(now-pd.Timedelta(days=90)).date().isoformat()
+                for sid in tuple(getattr(self.settings,"fred_series",())):
+                    try:
+                        frame=fred.series(sid,start=start,end=now.date().isoformat())
+                        if not frame.empty:
+                            values=pd.to_numeric(frame,errors="coerce").dropna()
+                            result["macro"]["series"][sid]={"last":float(values.iloc[-1]),"previous":float(values.iloc[-2]) if len(values)>1 else None,"observed_at":str(frame.index[-1])}
+                    except Exception as exc:
+                        result["macro"]["series"][sid]={"error":f"{type(exc).__name__}:{exc}"}
+            if getattr(self.settings,"sec_ciks",()):
+                sec=SecAdapter()
+                for cik in tuple(getattr(self.settings,"sec_ciks",())):
+                    try:
+                        frame=sec.submissions(cik)
+                        if not frame.empty:
+                            latest=frame.sort_values("filingDate",ascending=False).head(10)
+                            result["sec"]["filings"][str(cik)]=latest[[c for c in ("accessionNumber","filingDate","form","primaryDocument") if c in latest]].to_dict(orient="records")
+                    except Exception as exc:
+                        result["sec"]["filings"][str(cik)]={"error":f"{type(exc).__name__}:{exc}"}
+        except Exception as exc:
+            result["error"]=f"{type(exc).__name__}:{exc}"
+        if not result["search"] and not result["macro"]["series"] and not result["sec"]["filings"] and "error" not in result:
+            result["note"]="No external provider credentials or configured SEC CIKs were available; market-only research remains valid."
+        return result
 
     def run_research(self,df,query):
         fp=strong_dataset_fingerprint(df); cached=self._cache("research",fp,query)
