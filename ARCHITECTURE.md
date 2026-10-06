@@ -1,4 +1,4 @@
-# Adaptive AI Trading Lab — V6 architecture
+# Adaptive AI Trading Lab — V6 architecture (0.9.13)
 
 The project is a research system that can grow itself without self-authorizing live trading.
 
@@ -9,3 +9,5 @@ Deep-evolution components include experience graph, matched-event memory, preque
 Idempotence and anti-leakage rules are enforced: no future returns are backfilled as zeros, repeated cycles do not re-assimilate identical timestamps, event controls exclude nearby windows, and shadow learners have no promotion authority.
 
 The 3–24h specialist is an additional signal verifier, not a substitute for the base engine. Live deployment remains paper/sandbox-only until independent evidence gates pass.
+
+The research runner, paper runner and live radar share canonical feature construction and strict signal gating; diagnostic benchmarks are controls, never promotion objectives.
