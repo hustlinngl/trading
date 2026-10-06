@@ -66,10 +66,8 @@ class ExaClient:
         payload: dict[str, Any] = {
             "query": str(query),
             "numResults": max(1, min(100, int(num_results))),
-            "contents": {"text": {"maxCharacters": 5000}},
+            "contents": {"text": {"maxCharacters": 5000 if deep else 1800}},
         }
-        if not deep:
-            payload["type"] = "fast"
         data = _request(
             "POST",
             self.endpoint,
