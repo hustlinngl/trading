@@ -14,7 +14,17 @@ def evaluate_engine(df,settings):
     folds=walk_forward(df,settings,independent_test=True)
     if folds.empty: return -np.inf,{"folds":0,"_fold_frame":folds}
     score=float(folds["robust_score"].median()-0.20*abs(folds["robust_score"].std(ddof=0)))
-    return score,{"folds":int(len(folds)),"median_score":float(folds["robust_score"].median()),"score_std":float(folds["robust_score"].std(ddof=0)),"positive_folds":int((folds["robust_score"]>0).sum()),"worst_drawdown":float(folds["max_drawdown"].min()),"total_trades":int(folds["trades"].sum()),"median_return":float(folds["total_return"].median()),"median_sharpe":float(folds["sharpe_like"].median()),"_fold_frame":folds}
+    fold_scores=folds["robust_score"].to_numpy(float)
+    champion_hint=float(getattr(settings,"_champion_score_hint",-np.inf))
+    if not np.isfinite(champion_hint):
+        bootstrap_prob=1.0
+    else:
+        rng=np.random.default_rng(int(getattr(settings,"seed",42)))
+        medians=np.empty(2000,dtype=float)
+        for i in range(len(medians)):
+            medians[i]=float(np.median(fold_scores[rng.integers(0,len(fold_scores),len(fold_scores))]))
+        bootstrap_prob=float(np.mean(medians>champion_hint))
+    return score,{"folds":int(len(folds)),"median_score":float(folds["robust_score"].median()),"score_std":float(folds["robust_score"].std(ddof=0)),"positive_folds":int((folds["robust_score"]>0).sum()),"positive_fold_ratio":float((folds["robust_score"]>0).mean()),"worst_drawdown":float(folds["max_drawdown"].min()),"total_trades":int(folds["trades"].sum()),"median_return":float(folds["total_return"].median()),"median_sharpe":float(folds["sharpe_like"].median()),"bootstrap_superiority_prob":bootstrap_prob,"_fold_frame":folds}
 
 def _final_holdout_eval(df,settings):
     frac=float(np.clip(getattr(settings,"final_holdout_frac",0.15),0.05,0.30)); cut=int(len(df)*(1-frac))
@@ -34,6 +44,7 @@ def _final_holdout_eval(df,settings):
 def auto_update(df,settings,model_dir="models"):
     mdir=Path(model_dir); mdir.mkdir(parents=True,exist_ok=True); state_path=mdir/"promotion_state.json"; state=json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}; champion=float(state.get("score",-np.inf)); fp=strong_dataset_fingerprint(df)
     if (mdir/"signal_model.joblib").exists() and state.get("data_fingerprint")==fp: return {"promoted":False,"skipped":True,"skip_reason":"dataset_unchanged","data_fingerprint":fp,"champion_score":champion,"challenger_score":champion}
+    setattr(settings,"_champion_score_hint",champion)
     score,stats=evaluate_engine(df,settings); stats["score"]=score; stats["positive_fold_ratio"]=stats.get("positive_folds",0)/max(stats.get("folds",1),1)
     gate=promotion_gate(stats,champion,min_folds=getattr(settings,"growth_min_folds",4),min_trades=max(settings.min_trades_promotion,getattr(settings,"growth_min_trades",50)),max_dd=settings.max_promotion_drawdown,min_positive_fold_ratio=getattr(settings,"growth_min_positive_fold_ratio",.65),min_bootstrap_prob=getattr(settings,"growth_min_bootstrap_probability",.58))
     holdout=_final_holdout_eval(df,settings); gate["final_holdout"]=bool(holdout.get("passed")); gate["approved"]=bool(gate.get("approved") and holdout.get("passed"))
