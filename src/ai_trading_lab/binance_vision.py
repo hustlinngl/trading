@@ -91,11 +91,28 @@ def _normalize_vision_csv(raw):
     df['timestamp']=pd.to_datetime(df['timestamp'],unit=_timestamp_unit(df['timestamp'].iloc[0]),utc=True)
     for c in [c for c in cols if c!='timestamp']:
         if c in df:df[c]=pd.to_numeric(df[c],errors='coerce')
-    return df.dropna(subset=['timestamp','open','high','low','close']).sort_values('timestamp').drop_duplicates('timestamp')
+    df=df.dropna(subset=['timestamp','open','high','low','close']).sort_values('timestamp')
+    dup=df[df['timestamp'].duplicated(keep=False)]
+    if not dup.empty:
+        numeric=[c for c in ('open','high','low','close','volume') if c in dup.columns]
+        conflicting=dup.groupby('timestamp')[numeric].nunique(dropna=False).max(axis=1)
+        if bool((conflicting>1).any()):
+            bad=str(conflicting[conflicting>1].index[0])
+            raise ValueError(f"Conflicting duplicate market bar in archive at {bad}")
+        df=df.drop_duplicates('timestamp',keep='first')
+    return df
 def merge_archives(paths,out_path=None):
     frames=[_normalize_vision_csv(Path(p).read_bytes()) for p in paths]
     if not frames:return pd.DataFrame()
-    df=pd.concat(frames,ignore_index=True).sort_values('timestamp').drop_duplicates('timestamp')
+    df=pd.concat(frames,ignore_index=True).sort_values('timestamp')
+    dup=df[df['timestamp'].duplicated(keep=False)]
+    if not dup.empty:
+        numeric=[c for c in ('open','high','low','close','volume') if c in dup.columns]
+        conflicting=dup.groupby('timestamp')[numeric].nunique(dropna=False).max(axis=1)
+        if bool((conflicting>1).any()):
+            bad=str(conflicting[conflicting>1].index[0])
+            raise ValueError(f"Conflicting duplicate market bars across archives at {bad}")
+        df=df.drop_duplicates('timestamp',keep='first')
     if out_path:
         p=Path(out_path);p.parent.mkdir(parents=True,exist_ok=True)
         try:df.to_parquet(p,index=False)
