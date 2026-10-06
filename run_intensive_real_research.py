@@ -83,6 +83,58 @@ def _holdout_eval(df: pd.DataFrame, settings, holdout_frac: float):
     return dict(result.stats), actions, bt
 
 
+def _tuned_holdout_stress(df: pd.DataFrame, settings, best_params: dict, holdout_frac: float, cost_multipliers):
+    """Recompute the selected challenger on the pristine holdout at the requested costs."""
+    from ai_trading_lab.master_tuner import FoldSnapshot, _actions
+
+    split = int(len(df) * (1.0 - float(holdout_frac)))
+    tuning_df, holdout_df = df.iloc[:split].copy(), df.iloc[split:].copy()
+    tuned = copy.deepcopy(settings)
+    for key, value in best_params.items():
+        if hasattr(tuned, key):
+            setattr(tuned, key, value)
+
+    engine = AdaptiveEngine(tuned)
+    engine.fit(tuning_df)
+    features = make_oos_features(
+        tuning_df,
+        holdout_df,
+        tuned.horizon_bars,
+        external_feature_lag_bars=getattr(tuned, "external_feature_lag_bars", 1),
+    )
+    pred = engine.model.predict(features)
+    regimes = engine.regimes.transform(features)
+    persistence = engine.regimes.persistence(features)
+    probs = engine.regimes.semantic_probabilities(features)
+    analog = engine.memory.query_many(features)
+    meta_x = __import__("ai_trading_lab.meta", fromlist=["MetaPolicy"]).MetaPolicy.frame(
+        pred, features, regimes, analog, regime_persistence=persistence, regime_probs=probs
+    )
+    meta_p = engine.meta.predict_proba(meta_x)
+    snap = FoldSnapshot(
+        -1, holdout_df, features, pred, regimes, analog, meta_p, persistence, probs,
+        getattr(engine.model, "conformal_abs_residuals_", None),
+        getattr(engine.model, "conformal_scaled_residuals_", None),
+    )
+    actions = _actions(snap, tuned, best_params)
+    rows = []
+    for multiplier in dict.fromkeys(float(x) for x in cost_multipliers):
+        bt = holdout_df.copy()
+        bt["atr_14"] = features["atr_14"]
+        result = run_configured_backtest(
+            bt, actions, tuned, cost_multiplier=multiplier,
+            stop_atr_mult=best_params["stop_atr_mult"],
+            take_profit_rr=best_params["take_profit_rr"],
+            max_holding_bars=int(best_params["max_holding_bars"]),
+        )
+        rows.append({
+            **result.stats,
+            "cost_multiplier": multiplier,
+            "robust_score": float(robust_performance_utility(result.stats)),
+        })
+    return rows
+
+
 def _aggregate_bootstrap(fold_returns, fold_dds, seed):
     r = np.asarray([x for x in fold_returns if np.isfinite(x)], dtype=float)
     dd = np.asarray([x for x in fold_dds if np.isfinite(x)], dtype=float)
@@ -151,19 +203,14 @@ def run_symbol(symbol, args, base_settings):
     # The tuner owns challenger selection and evaluates the tuned challenger on the
     # pristine final holdout. Keep a separate baseline holdout only for comparison.
     baseline_holdout_stats, _, _ = _holdout_eval(df, settings, args.holdout_frac)
-    tuned_holdout_rows = tuning.get("final_holdout_summary") or []
-    tuned_holdout_stats = {}
-    for row in tuned_holdout_rows:
-        if abs(float(row.get("cost_multiplier", 1.0)) - 1.0) < 1e-9:
-            tuned_holdout_stats = dict(row)
-            break
-    if not tuned_holdout_stats:
-        tuned_holdout_stats = dict(tuning.get("final_holdout", {}))
-    stress = {
-        str(row.get("cost_multiplier")): row
-        for row in tuned_holdout_rows
-        if "cost_multiplier" in row
-    }
+    tuned_holdout_rows = _tuned_holdout_stress(
+        df, settings, tuning.get("best_params") or {}, args.holdout_frac, args.cost_multipliers
+    )
+    tuned_holdout_stats = next(
+        (dict(row) for row in tuned_holdout_rows if abs(float(row.get("cost_multiplier", 1.0)) - 1.0) < 1e-9),
+        dict(tuning.get("final_holdout", {})),
+    )
+    stress = {str(row["cost_multiplier"]): row for row in tuned_holdout_rows}
 
     wf_records = [x for x in (tuning.get("full_tuning_fold_rows") or []) if abs(float(x.get("cost_multiplier", 1.0)) - 1.0) < 1e-9]
     fold_returns = [float(x.get("total_return", 0.0)) for x in wf_records]
