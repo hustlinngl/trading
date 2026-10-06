@@ -44,3 +44,57 @@ def train_trade_window_backbone(df,settings,holdout_frac=.15,save_path=None):
     if save_path is not None:
         pth=Path(save_path); pth.parent.mkdir(parents=True,exist_ok=True); joblib.dump({"model":model,"feature_columns":list(x.columns),"report":report},pth)
     return report
+
+
+def assess_trade_window(df, settings, model_path=None):
+    """Evaluate the persisted 3–24h specialist as a final direction/quality verifier."""
+    path = Path(model_path or getattr(settings, "trade_window_model_path", "models/champion/trade_window_specialist.joblib"))
+    out = {
+        "trade_window_available": False,
+        "trade_window_ready": False,
+        "trade_window_direction": "FLAT",
+        "trade_window_confidence": 0.0,
+        "trade_window_reason": "disabled",
+    }
+    if not bool(getattr(settings, "trade_window_enabled", True)):
+        return out
+    if not path.exists():
+        out["trade_window_reason"] = "artifact_missing"
+        return out
+    try:
+        artifact = joblib.load(path)
+        model = artifact["model"]
+        feature_columns = list(artifact.get("feature_columns", []))
+        report = artifact.get("report", {}) or {}
+        base_minutes = float(getattr(settings, "base_bar_minutes", timeframe_minutes(getattr(settings, "timeframe", "15m"))))
+        max_bars = max(1, int(round(float(getattr(settings, "trade_window_max_hours", 24.0)) * 60.0 / base_minutes)))
+        features, _, _ = make_features(
+            df,
+            max_bars,
+            external_feature_lag_bars=getattr(settings, "external_feature_lag_bars", 1),
+        )
+        x = features.reindex(columns=feature_columns).replace([np.inf, -np.inf], np.nan).ffill().fillna(0.0)
+        if x.empty:
+            out["trade_window_reason"] = "empty_features"
+            return out
+        proba = model.predict_proba(x.iloc[[-1]])[0]
+        p_up = float(proba[1]) if len(proba) > 1 else float(proba[0])
+        direction = "LONG" if p_up >= 0.5 else "SHORT"
+        confidence = max(p_up, 1.0 - p_up)
+        min_conf = float(getattr(settings, "trade_window_min_confidence", 0.80))
+        production_ready = bool(report.get("production_ready", False))
+        active = confidence >= min_conf
+        out.update({
+            "trade_window_available": True,
+            "trade_window_ready": bool(production_ready and active),
+            "trade_window_direction": direction if active else "FLAT",
+            "trade_window_confidence": confidence,
+            "trade_window_report_precision": float(report.get("holdout_precision", 0.0) or 0.0),
+            "trade_window_reason": "ok" if production_ready and active else (
+                "not_production_ready" if not production_ready else "below_confidence"
+            ),
+        })
+        return out
+    except Exception as exc:
+        out["trade_window_reason"] = f"{type(exc).__name__}:{exc}"
+        return out
