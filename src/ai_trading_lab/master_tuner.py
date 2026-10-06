@@ -40,12 +40,19 @@ class FoldSnapshot:
     conformal_abs_residuals:np.ndarray|None=None
     conformal_scaled_residuals:np.ndarray|None=None
 
+def representative_fold_ids(all_ids, target):
+    ids=list(dict.fromkeys(int(x) for x in all_ids)); n=max(0,int(target))
+    if n<=0 or not ids: return set()
+    if len(ids)<=n: return set(ids)
+    pos=np.linspace(0,len(ids)-1,n).round().astype(int)
+    return {ids[int(i)] for i in pos}
+
 def _fold_cache_key(df,settings):
-    fields={'schema':6,'data':strong_dataset_fingerprint(df),'train':int(settings.walk_forward_train_bars),'test':int(settings.walk_forward_test_bars),'step':int(settings.walk_forward_step),'purge':int(getattr(settings,'validation_purge_bars',12)),'min_train':int(settings.min_train_rows),'horizon':int(settings.horizon_bars),'seed':int(settings.seed),'xgb':int(getattr(settings,'xgb_estimators',240)),'lgbm':int(getattr(settings,'lgbm_estimators',240)),'hist':int(getattr(settings,'hist_max_iter',260)),'regime_n_init':int(getattr(settings,'regime_n_init',5)),'memory_k':int(getattr(settings,'memory_k',32)),'feature_lag':int(getattr(settings,'external_feature_lag_bars',1)),'fee_bps':float(getattr(settings,'fee_bps',0.0)),'slippage_bps':float(getattr(settings,'slippage_bps',0.0))}
+    fields={'schema':6,'data':strong_dataset_fingerprint(df),'train':int(settings.walk_forward_train_bars),'test':int(settings.walk_forward_test_bars),'step':int(settings.walk_forward_step),'purge':int(getattr(settings,'validation_purge_bars',12)),'min_train':int(settings.min_train_rows),'horizon':int(settings.horizon_bars),'seed':int(settings.seed),'xgb':int(getattr(settings,'xgb_estimators',240)),'lgbm':int(getattr(settings,'lgbm_estimators',240)),'hist':int(getattr(settings,'hist_max_iter',260)),'regime_n_init':int(getattr(settings,'regime_n_init',5)),'memory_k':int(getattr(settings,'memory_k',32)),'feature_lag':int(getattr(settings,'external_feature_lag_bars',1)),'fee_bps':float(getattr(settings,'fee_bps',0.0)),'slippage_bps':float(getattr(settings,'slippage_bps',0.0)),'fold_subset':sorted(int(x) for x in only_folds) if only_folds is not None else None}
     return hashlib.sha256(json.dumps(fields,sort_keys=True).encode()).hexdigest()[:24]
 
 def _collect_folds(df,settings,max_folds=None,only_folds=None):
-    purge=int(getattr(settings,'validation_purge_bars',settings.horizon_bars+max(1,settings.horizon_bars//2))); cache_root=Path(getattr(settings,'master_tuning_cache_dir','data/master_cache')); cache_root.mkdir(parents=True,exist_ok=True); cache_path=cache_root/f"folds_{_fold_cache_key(df,settings)}.joblib"; cached_all=None
+    purge=int(getattr(settings,'validation_purge_bars',settings.horizon_bars+max(1,settings.horizon_bars//2))); cache_root=Path(getattr(settings,'master_tuning_cache_dir','data/master_cache')); cache_root.mkdir(parents=True,exist_ok=True); cache_path=cache_root/f"folds_{_fold_cache_key(df,settings,only_folds)}.joblib"; cached_all=None
     if cache_path.exists():
         try:
             cached_all=joblib.load(cache_path)
@@ -53,7 +60,10 @@ def _collect_folds(df,settings,max_folds=None,only_folds=None):
         except Exception: cached_all=None
     if cached_all is None:
         built=[]
-        for sp in walk_forward_splits(len(df),settings.walk_forward_train_bars,settings.walk_forward_test_bars,settings.walk_forward_step,purge,settings.min_train_rows,independent_test=True):
+        splits=list(walk_forward_splits(len(df),settings.walk_forward_train_bars,settings.walk_forward_test_bars,settings.walk_forward_step,purge,settings.min_train_rows,independent_test=True))
+        if only_folds is not None: splits=[sp for sp in splits if sp.fold in only_folds]
+        if max_folds is not None: splits=splits[:max(0,int(max_folds))]
+        for sp in splits:
             train=df.iloc[sp.train_start:sp.train_end].copy(); test=df.iloc[sp.test_start:sp.test_end].copy(); engine=AdaptiveEngine(settings); engine.fit(train); feat=make_oos_features(train,test,settings.horizon_bars,external_feature_lag_bars=getattr(settings,'external_feature_lag_bars',1)); pred=engine.model.predict(feat); regimes=engine.regimes.transform(feat); rp=engine.regimes.persistence(feat); rprob=engine.regimes.semantic_probabilities(feat); analog=engine.memory.query_many(feat); meta_x=MetaPolicy.frame(pred,feat,regimes,analog,regime_persistence=rp,regime_probs=rprob); meta_p=engine.meta.predict_proba(meta_x); built.append(FoldSnapshot(sp.fold,test,feat,pred,regimes,analog,meta_p,rp,rprob,getattr(engine.model,'conformal_abs_residuals_',None),getattr(engine.model,'conformal_scaled_residuals_',None)))
         try: joblib.dump(built,cache_path,compress=3)
         except Exception: pass
@@ -171,7 +181,7 @@ def master_tune(df,settings,trials=40,final_holdout_frac=0.15,stability_samples=
             final_evidence={'selection_adjusted_psr_proxy':selection_adjusted_psr(bar_returns,len(study.trials),periods_per_year=periods),
             'deflated_sharpe_ratio':deflated_sharpe_ratio(bar_returns,len(study.trials),periods_per_year=periods),'path_stress':bootstrap_max_drawdown(bar_returns,reps=min(1000,max(200,stability_samples*100)),block=max(1,int(best['max_holding_bars'])//4),seed=settings.seed)}
     except Exception as exc: final_evidence={'error':f'{type(exc).__name__}: {exc}'}
-    result={'data':{'rows_total':len(df),'rows_tuning':len(tuning_df),'rows_final_holdout':len(holdout_df),'final_holdout_start':str(holdout_df.index[0]),'final_holdout_end':str(holdout_df.index[-1])},'best_params':best,'study_best_value':float(study.best_value),'trials':len(study.trials),'tuning_summary':{k:v for k,v in rep.items() if k!='rows'},'full_tuning_set_verification':{k:v for k,v in full_rep.items() if k!='rows'},'full_tuning_fold_rows': full_rep['rows'].to_dict(orient='records'),'stability':stability,'negative_control_placebo':placebo,'final_holdout':{k:v for k,v in final.items() if k!='rows'},'final_holdout_summary':final_stats.to_dict(orient='records'),'final_holdout_rows':final['rows'].to_dict(orient='records'),'final_statistical_evidence':final_evidence,'probability_of_backtest_overfitting':pbo_evidence,'trial_count_ledger':int(len(study.trials)),'folds_used_for_optimization':[{'fold':x.fold,'start':str(x.test.index[0]),'end':str(x.test.index[-1])} for x in folds],'all_tuning_folds':[{'fold':x.fold,'start':str(x.test.index[0]),'end':str(x.test.index[-1])} for x in folds_all],'interpretation':'No finite tuning run can establish a perfect or future-proof optimum. The objective rewards robustness, cost tolerance and parameter plateau stability while preserving an untouched final holdout.'}
+    result={'data':{'rows_total':len(df),'rows_tuning':len(tuning_df),'rows_final_holdout':len(holdout_df),'final_holdout_start':str(holdout_df.index[0]),'final_holdout_end':str(holdout_df.index[-1])},'best_params':best,'study_best_value':float(study.best_value),'trials':len(study.trials),'tuning_summary':{k:v for k,v in rep.items() if k!='rows'},'full_tuning_set_verification':{k:v for k,v in full_rep.items() if k!='rows'},'full_tuning_fold_rows': full_rep['rows'].to_dict(orient='records'),'stability':stability,'negative_control_placebo':placebo,'final_holdout':{k:v for k,v in final.items() if k!='rows'},'final_holdout_summary':final_stats.to_dict(orient='records'),'final_holdout_rows':final['rows'].to_dict(orient='records'),'final_statistical_evidence':final_evidence,'probability_of_backtest_overfitting':pbo_evidence,'trial_count_ledger':int(len(study.trials)),'folds_used_for_optimization':[{'fold':x.fold,'start':str(x.test.index[0]),'end':str(x.test.index[-1])} for x in folds],'all_tuning_folds':[{'fold':x.fold,'start':str(x.test.index[0]),'end':str(x.test.index[-1])} for x in folds_all],'candidate_fold_count':len(all_ids),'representative_audit_fold_count':len(audit_ids),'optimization_fold_count':len(selected_ids),'interpretation':'No finite tuning run can establish a perfect or future-proof optimum. The objective rewards robustness, cost tolerance and parameter plateau stability while preserving an untouched final holdout.'}
     if save_path:
         path=Path(save_path); path.parent.mkdir(parents=True,exist_ok=True); path.write_text(json.dumps(result,indent=2,default=str),encoding='utf-8')
     return result
