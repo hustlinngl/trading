@@ -28,21 +28,95 @@ def _barrier_labels(df,horizon_bars=96,min_bars=12,pt_atr=1.25,sl_atr=.90):
         rows.append((out,abs(out)))
     return pd.DataFrame(rows,index=x.index[:len(rows)],columns=["direction","margin"])
 
+def _wilson_lower_bound(successes, total, z=1.6448536269514722):
+    n=int(total)
+    if n<=0: return 0.0
+    phat=float(successes)/n
+    denom=1.0+(z*z)/n
+    centre=phat+(z*z)/(2*n)
+    radius=z*np.sqrt(max(0.0,phat*(1.0-phat)/n+(z*z)/(4*n*n)))
+    return float((centre-radius)/denom)
+
+
 def train_trade_window_backbone(df,settings,holdout_frac=.15,save_path=None):
-    base_minutes=float(getattr(settings,"base_bar_minutes",15)); min_hours=float(getattr(settings,"trade_window_min_hours",3.0)); max_hours=float(getattr(settings,"trade_window_max_hours",24.0))
-    min_bars=max(1,int(round(min_hours*60/base_minutes))); max_bars=max(min_bars,int(round(max_hours*60/base_minutes)))
-    x,_,_=make_features(df,max_bars,external_feature_lag_bars=getattr(settings,"external_feature_lag_bars",1)); lab=_barrier_labels(df,max_bars,min_bars)
-    common=x.index.intersection(lab.index); x=x.loc[common]; lab=lab.loc[common]; mask=lab["direction"]!=0
+    base_minutes=float(getattr(settings,"base_bar_minutes",timeframe_minutes(getattr(settings,"timeframe","15m"))))
+    min_hours=float(getattr(settings,"trade_window_min_hours",3.0))
+    max_hours=float(getattr(settings,"trade_window_max_hours",24.0))
+    min_bars=max(1,int(round(min_hours*60/base_minutes)))
+    max_bars=max(min_bars,int(round(max_hours*60/base_minutes)))
+    x,_,_=make_features(df,max_bars,external_feature_lag_bars=getattr(settings,"external_feature_lag_bars",1))
+    lab=_barrier_labels(df,max_bars,min_bars)
+    common=x.index.intersection(lab.index)
+    x=x.loc[common]; lab=lab.loc[common]
+    mask=lab["direction"]!=0
     x=x.loc[mask]; y=lab.loc[mask,"direction"].map({-1:0,1:1}).astype(int)
-    if len(x)<80: return {"production_ready":False,"reason":"insufficient_labeled_rows","rows":int(len(x))}
+    if len(x)<80:
+        return {"production_ready":False,"reason":"insufficient_labeled_rows","rows":int(len(x))}
     cut=max(40,min(len(x)-20,int(len(x)*(1-holdout_frac))))
-    model=ExtraTreesClassifier(n_estimators=300,min_samples_leaf=12,max_features="sqrt",random_state=int(settings.seed),n_jobs=-1,class_weight="balanced"); model.fit(x.iloc[:cut],y.iloc[:cut])
-    p=model.predict_proba(x.iloc[cut:])[:,1]; active=(p>=.62)|(p<=.38); pred=(p>=.62).astype(int); truth=y.iloc[cut:].to_numpy()
-    precision=float(np.mean(pred[active]==truth[active])) if active.any() else 0.0; support=int(active.sum())
-    ready=precision>=float(getattr(settings,"trade_window_min_precision",.60)) and support>=int(getattr(settings,"trade_window_min_holdout_trades",12))
-    report={"production_ready":bool(ready),"holdout_precision":precision,"holdout_signals":support,"rows":int(len(x)),"min_hours":min_hours,"max_hours":max_hours}
+    model=ExtraTreesClassifier(
+        n_estimators=300,min_samples_leaf=12,max_features="sqrt",
+        random_state=int(settings.seed),n_jobs=-1,class_weight="balanced"
+    )
+    model.fit(x.iloc[:cut],y.iloc[:cut])
+    holdout_x=x.iloc[cut:]
+    p=model.predict_proba(holdout_x)[:,1]
+    active=(p>=.62)|(p<=.38)
+    pred=(p>=.62).astype(int)
+    truth=y.iloc[cut:].to_numpy()
+    successes=int(np.sum(pred[active]==truth[active])) if active.any() else 0
+    precision=float(successes/max(1,int(active.sum()))) if active.any() else 0.0
+    support=int(active.sum())
+    wilson=_wilson_lower_bound(successes,support)
+
+    # Economic holdout: direction is evaluated on the realized close return over the
+    # full specialist horizon, net of conservative round-trip costs.
+    raw_cost_bps=2.0*(float(getattr(settings,"fee_bps",0.0))+float(getattr(settings,"slippage_bps",0.0)))
+    raw_cost_bps += 2.0*float(getattr(settings,"impact_bps_per_sqrt",0.0))*np.sqrt(float(np.clip(getattr(settings,"max_participation_pct",0.10),0.0,1.0)))
+    net_returns=[]
+    positions=df.index.get_indexer(holdout_x.index)
+    for local_i, is_active in enumerate(active):
+        if not bool(is_active): continue
+        pos=int(positions[local_i])
+        if pos<0 or pos+1>=len(df): continue
+        exit_pos=min(len(df)-1,pos+max_bars)
+        entry=float(df["open"].iloc[pos+1]); exit_price=float(df["close"].iloc[exit_pos])
+        direction=1.0 if int(pred[local_i])==1 else -1.0
+        gross=direction*(exit_price/entry-1.0)
+        net_returns.append(gross-raw_cost_bps/10000.0)
+    net_arr=np.asarray(net_returns,dtype=float)
+    mean_net=float(net_arr.mean()) if len(net_arr) else 0.0
+    compounded_net=float(np.prod(1.0+net_arr)-1.0) if len(net_arr) and np.all(net_arr>-1.0) else -1.0
+    target_precision=float(getattr(settings,"trade_window_target_precision",0.80))
+    min_wilson=float(getattr(settings,"trade_window_min_holdout_wilson",0.60))
+    min_net=float(getattr(settings,"trade_window_min_net_return",0.0005))
+    ready=(
+        precision>=target_precision
+        and wilson>=min_wilson
+        and support>=int(getattr(settings,"trade_window_min_holdout_trades",12))
+        and len(net_returns)>=int(getattr(settings,"trade_window_min_holdout_trades",12))
+        and mean_net>=min_net
+        and (compounded_net>0.0 if bool(getattr(settings,"trade_window_require_positive_holdout_backtest",True)) else True)
+    )
+    report={
+        "production_ready":bool(ready),
+        "holdout_precision":precision,
+        "holdout_wilson_lower":wilson,
+        "holdout_signals":support,
+        "holdout_net_return_mean":mean_net,
+        "holdout_net_return_compounded":compounded_net,
+        "holdout_economic_observations":int(len(net_returns)),
+        "target_precision":target_precision,
+        "min_wilson":min_wilson,
+        "min_net_return":min_net,
+        "rows":int(len(x)),
+        "train_rows":int(cut),
+        "holdout_rows":int(len(x)-cut),
+        "min_hours":min_hours,
+        "max_hours":max_hours,
+    }
     if save_path is not None:
-        pth=Path(save_path); pth.parent.mkdir(parents=True,exist_ok=True); joblib.dump({"model":model,"feature_columns":list(x.columns),"report":report},pth)
+        pth=Path(save_path); pth.parent.mkdir(parents=True,exist_ok=True)
+        joblib.dump({"model":model,"feature_columns":list(x.columns),"report":report},pth)
     return report
 
 
