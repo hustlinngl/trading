@@ -33,6 +33,7 @@ from ai_trading_lab.master_tuner import master_tune
 from ai_trading_lab.policy import make_actions
 from ai_trading_lab.evaluation import run_configured_backtest
 from ai_trading_lab.objectives import robust_performance_utility
+from ai_trading_lab.research_gates import score_asset_evidence
 
 
 def _clone_settings(settings):
@@ -155,7 +156,7 @@ def run_symbol(symbol, args, base_settings):
         max_drawdown=float(getattr(settings, "base_max_holdout_drawdown", -0.25)),
     )
 
-    return {
+    result = {
         "symbol": symbol,
         "timeframe": args.timeframe,
         "market": args.market,
@@ -188,6 +189,8 @@ def run_symbol(symbol, args, base_settings):
         "bootstrap_evidence": evidence,
         "promotion": "NOT_PERFORMED",
     }
+    result["evidence"] = score_asset_evidence(result)
+    return result
 
 
 def main():
