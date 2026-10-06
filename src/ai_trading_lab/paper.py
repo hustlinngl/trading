@@ -10,11 +10,12 @@ from .engine import AdaptiveEngine
 from .fingerprint import strong_dataset_fingerprint
 from .policy import live_signal_gate
 from .trade_window import assess_trade_window
+from .deployment import resolve_signal_bundle, resolve_trade_window_model
 
 def one_iteration(settings, root: str | Path = "."):
     root=Path(root); (root/"logs").mkdir(parents=True,exist_ok=True)
     result={"timestamp":pd.Timestamp.now(tz="UTC").isoformat(),"symbol":settings.symbol,"timeframe":settings.timeframe,"status":"WAIT","signal":"FLAT","reason":[],"paper_only":True,"sandbox":True}
-    model=Path(getattr(settings,"model_dir","models/champion"))/"signal_model.joblib"
+    model=resolve_signal_bundle(settings,root,settings.symbol)/"signal_model.joblib"
     if not model.exists():
         result["reason"].append("champion_missing")
         (root/"logs"/"paper_last.json").write_text(json.dumps(result,indent=2,default=str),encoding="utf-8")
@@ -34,16 +35,15 @@ def one_iteration(settings, root: str | Path = "."):
             if age_minutes > float(getattr(settings,"live_max_data_age_minutes",30.0)):
                 result["reason"]=[f"stale_data:{age_minutes:.1f}m"]
             else:
-                eng=AdaptiveEngine(settings).load(Path(getattr(settings,"model_dir","models/champion")))
+                model_dir=model.parent
+                eng=AdaptiveEngine(settings).load(model_dir)
                 feat=eng.features(df)
                 pred=eng.predict_frame(feat)
                 if pred.empty:
                     result["reason"]=["empty_prediction"]
                 else:
                     last=pred.iloc[-1].copy()
-                    asset_model = root / "models" / "assets" / settings.symbol.replace("/", "_").replace(":", "_") / "trade_window_specialist.joblib"
-                    configured_model = root / getattr(settings, "trade_window_model_path", "models/champion/trade_window_specialist.joblib")
-                    tw_path = asset_model if asset_model.exists() else configured_model
+                    tw_path = resolve_trade_window_model(settings,root,settings.symbol)
                     tw = assess_trade_window(df, settings, tw_path)
                     for key, value in tw.items():
                         last[key] = value
