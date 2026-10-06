@@ -79,6 +79,20 @@ def write_live_snapshot(results,root="."):
 HISTORY_NAME="live_signal_history.jsonl"
 def append_live_signal_history(results,root="."):
     p=Path(root)/"logs"/HISTORY_NAME; p.parent.mkdir(parents=True,exist_ok=True)
+    seen=set()
+    if p.exists():
+        for line in p.read_text(encoding="utf-8",errors="replace").splitlines()[-5000:]:
+            try:
+                obj=json.loads(line)
+                seen.add((str(obj.get("symbol")),str(obj.get("timestamp"))))
+            except json.JSONDecodeError:
+                continue
+    added=0
     with p.open("a",encoding="utf-8") as fh:
-        for r in results: fh.write(json.dumps(r.to_dict(),default=str)+"\n")
-    return p
+        for r in results:
+            key=(str(r.symbol),str(r.timestamp))
+            if key in seen:
+                continue
+            fh.write(json.dumps(r.to_dict(),default=str)+"\n")
+            seen.add(key); added+=1
+    return {"path":str(p),"added":int(added),"duplicates_skipped":int(len(results)-added)}
