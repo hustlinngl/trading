@@ -32,7 +32,6 @@ from ai_trading_lab.fingerprint import strong_dataset_fingerprint
 from ai_trading_lab.master_tuner import master_tune
 from ai_trading_lab.policy import make_actions
 from ai_trading_lab.evaluation import run_configured_backtest
-from ai_trading_lab.research import walk_forward
 from ai_trading_lab.objectives import robust_performance_utility
 
 
@@ -122,9 +121,6 @@ def run_symbol(symbol, args, base_settings):
     if not quality.passed:
         raise RuntimeError(f"Data quality failed for {symbol}: {quality.reasons}")
 
-    wf = walk_forward(df, settings, independent_test=True)
-    wf_records = wf.to_dict("records") if not wf.empty else []
-
     tuning = master_tune(
         df, settings, trials=args.trials, final_holdout_frac=args.holdout_frac,
         save_path=Path(args.log_dir) /
@@ -148,11 +144,13 @@ def run_symbol(symbol, args, base_settings):
         if "cost_multiplier" in row
     }
 
+    wf_records = [x for x in (tuning.get("full_tuning_fold_rows") or []) if abs(float(x.get("cost_multiplier", 1.0)) - 1.0) < 1e-9]
     fold_returns = [float(x.get("total_return", 0.0)) for x in wf_records]
     fold_dds = [float(x.get("max_drawdown", 0.0)) for x in wf_records]
     evidence = _aggregate_bootstrap(fold_returns, fold_dds, int(settings.seed))
     evidence["holdout_utility"] = robust_performance_utility(
         holdout_stats,
+        tuned_holdout_stats,
         min_trades=int(getattr(settings, "base_min_holdout_trades", 20)),
         max_drawdown=float(getattr(settings, "base_max_holdout_drawdown", -0.25)),
     )
@@ -168,12 +166,12 @@ def run_symbol(symbol, args, base_settings):
         "quality": asdict(quality),
         "walk_forward": wf_records,
         "walk_forward_summary": {
-            "folds": int(len(wf)),
-            "median_return": float(wf["total_return"].median()) if not wf.empty else 0.0,
-            "positive_folds": int((wf["total_return"] > 0).sum()) if not wf.empty else 0,
-            "median_robust_score": float(wf["robust_score"].median()) if not wf.empty else 0.0,
-            "worst_drawdown": float(wf["max_drawdown"].min()) if not wf.empty else 0.0,
-            "trades": int(wf["trades"].sum()) if not wf.empty else 0,
+            "folds": int(len(wf_records)),
+            "median_return": float(np.median([float(x.get("total_return", 0.0)) for x in wf_records])) if wf_records else 0.0,
+            "positive_folds": int(sum(float(x.get("total_return", 0.0)) > 0 for x in wf_records)),
+            "median_robust_score": float(np.median([float(x.get("robust_score", 0.0)) for x in wf_records])) if wf_records else 0.0,
+            "worst_drawdown": float(min([float(x.get("max_drawdown", 0.0)) for x in wf_records])) if wf_records else 0.0,
+            "trades": int(sum(int(x.get("trades", 0)) for x in wf_records)),
         },
         "master_tuning": {
             "best_params": tuning.get("best_params"),
@@ -185,7 +183,7 @@ def run_symbol(symbol, args, base_settings):
         },
         "holdout_baseline": baseline_holdout_stats,
         "holdout_tuned": tuned_holdout_stats,
-        "holdout_data_rows": int(0 if not tuned_holdout_rows else len(tuned_holdout_rows)),
+        "holdout_data_rows": int(tuning.get("data", {}).get("rows_final_holdout", 0)),
         "cost_stress_tuned": stress,
         "bootstrap_evidence": evidence,
         "promotion": "NOT_PERFORMED",
