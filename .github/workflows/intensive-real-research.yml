@@ -1,0 +1,64 @@
+name: intensive-real-research
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: UTC start date
+        required: false
+        default: '2022-01-01'
+      end:
+        description: UTC end date
+        required: false
+        default: '2026-10-07'
+      trials:
+        description: Master tuning trials per asset
+        required: false
+        default: '60'
+
+permissions:
+  contents: write
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run intensive real-data research
+        run: |
+          python run_intensive_real_research.py \
+            --symbols BTC/USDT,ETH/USDT,SOL/USDT \
+            --timeframe 15m \
+            --start '${{ inputs.start || '2022-01-01' }}' \
+            --end '${{ inputs.end || '2026-10-07' }}' \
+            --trials '${{ inputs.trials || '60' }}' \
+            --holdout-frac 0.15
+
+      - name: Upload research reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: intensive-real-research
+          path: |
+            logs/intensive_real/**
+            data/intensive_real/merged/**
+          if-no-files-found: error
+
+      - name: Record research summary
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add logs/intensive_real/intensive_real_research_summary.json
+          git diff --cached --quiet || git commit -m 'research: record intensive real-data run'
+          git push
