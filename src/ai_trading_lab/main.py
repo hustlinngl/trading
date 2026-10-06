@@ -210,8 +210,8 @@ def system_doctor(settings, root: str | Path = ".") -> dict:
         "numpy", "pandas", "sklearn", "yaml", "joblib", "ccxt", "plotly", "streamlit"
     ]}
     directories = {name: (root / name).exists() for name in ["data", "models", "logs"]}
-    core_names = ["numpy", "pandas", "sklearn", "yaml", "joblib", "plotly"]
-    ui_names = ["streamlit", "ccxt"]
+    core_names = ["numpy", "pandas", "sklearn", "yaml", "joblib"]
+    ui_names = ["plotly", "streamlit", "ccxt"]
     return {
         "version": (Path(root) / "VERSION").read_text(encoding="utf-8").strip() if (Path(root) / "VERSION").exists() else "unknown",
         "python": platform.python_version(),
@@ -247,6 +247,7 @@ def main():
     parser.add_argument('--symbols', default=None, help='Comma-separated symbols for live scan')
     parser.add_argument('--holdout-frac', type=float, default=0.15)
     parser.add_argument('--limit', type=int, default=700, help='Maximum bars for bounded real-data adapters such as Kraken')
+    parser.add_argument('--benchmark-bars', type=int, default=3000, help='Bars used by the diagnostic benchmark suite')
     args = parser.parse_args()
     s = load_settings(args.config)
     if args.symbol:
@@ -294,7 +295,7 @@ def main():
         return
 
     if args.command == 'rl-help':
-        print('Optional: pip install -e .[ml], then use ai_trading_lab.experimental.rl_agent.train_ppo for execution/sizing research.')
+        print('Optional: pip install -e .[full], then use ai_trading_lab.experimental.rl_agent.train_ppo for execution/sizing research.')
         return
 
     if args.command == 'paper-daemon':
@@ -353,7 +354,7 @@ def main():
 
     if args.command == 'benchmark':
         from .benchmarks import evaluate_suite, save_suite_report
-        result = evaluate_suite(s, n=max(1200, min(3000, s.lookback_bars)))
+        result = evaluate_suite(s, n=max(1200, int(args.benchmark_bars)))
         save_suite_report(result, 'logs/benchmark_suite.json')
         print(result.to_string(index=False))
         return
