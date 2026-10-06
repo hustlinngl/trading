@@ -1,36 +1,40 @@
-# Research status — 0.9.12
+# Research status — 0.9.13
 
 ## Current state
 
-The repository is connected and writable. The full hardened 0.9.12 codebase is currently still maintained in the working release archive; this repository currently contains the bootstrap/control layer rather than the full source tree.
+The repository contains the full research source tree plus the autonomous orchestration, data utilities, model bundles, UI controller, tests and GitHub Actions workflows needed to operate the project coherently.
 
-The research harness is designed to run on an internet-enabled GitHub Actions runner so it can retrieve real historical market data directly.
+The system is deliberately research-first. No result in this repository should be interpreted as proof of a durable trading edge, and the live/paper signal path defaults to conservative WAIT behavior.
 
 ## Research protocol
 
-1. Download real historical OHLCV from Binance Vision.
+1. Download versioned real historical OHLCV.
 2. Remove the live/incomplete candle.
 3. Verify chronology, gaps, duplicates, OHLC consistency and provenance.
-4. Train only on the past.
+4. Train only on information available at the decision timestamp.
 5. Use purged walk-forward out-of-sample evaluation.
-6. Keep a final chronological holdout untouched.
-7. Stress costs at 1x/1.5x/2x/3x.
-8. Run bootstrap/evidence diagnostics and benchmark controls.
-9. Never auto-promote from this research runner.
+6. Keep a chronological final holdout untouched by tuning.
+7. Stress fees, slippage, impact and borrow assumptions.
+8. Run bootstrap/statistical diagnostics, placebo controls and stability checks.
+9. Compare against simple non-ML controls and cross-market validation.
+10. Never auto-promote from a research runner without passing all promotion evidence gates.
 
-## Current evidence
+## Engineering state
 
-A bounded real-market cross-check was already performed using Kraken public BTC/USD 4h data: 720 completed candles spanning 2026-06-09 through 2026-10-06 UTC. This validates the real-data path but does not establish strategy profitability.
+The 0.9.13 hardening pass restores the missing benchmark command, fixes master-tuning cache partitioning, repairs paper/live inference, wires strict signal safety gates, makes configured cost-stress multipliers effective, and adds CI/regression coverage.
 
-The synthetic benchmark remains negative by design and must not be optimized into a false success.
+The current code remains suitable for research and paper/signal operation. A production-grade market edge remains **unproven** until fresh multi-year, multi-asset real-data evidence passes the full protocol.
 
-## Required final gate
+## Required deployment gate
 
-A candidate can become a deployment champion only after:
+A candidate must have:
 - purged walk-forward evidence;
-- pristine final holdout;
+- a pristine final holdout;
 - positive economic value after realistic costs;
-- minimum trade count;
+- sufficient trade count;
 - acceptable drawdown;
 - placebo / negative-control sanity checks;
-- stability across assets and regimes.
+- parameter stability;
+- consistent behavior across assets and regimes.
+
+The repository keeps deployment authority separate from autonomous research so learning cannot silently become execution authority.
