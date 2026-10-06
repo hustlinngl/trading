@@ -207,6 +207,7 @@ def main():
     p.add_argument("--skip-checksum", action="store_true")
     p.add_argument("--cost-multipliers", default="1,1.5,2,3")
     p.add_argument("--config", default="config.yaml")
+    p.add_argument("--require-all-assets", action="store_true")
     args = p.parse_args()
     args.cost_multipliers = [float(x.strip()) for x in args.cost_multipliers.split(",") if x.strip()]
     Path(args.log_dir).mkdir(parents=True, exist_ok=True)
@@ -241,6 +242,8 @@ def main():
     out = Path(args.log_dir) / "intensive_real_research_summary.json"
     out.write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
     print(json.dumps(summary, indent=2, default=str))
+    if args.require_all_assets and len(ok) != len(reports):
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":
