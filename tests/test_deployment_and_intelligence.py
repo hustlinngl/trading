@@ -47,3 +47,13 @@ def test_external_clients_fail_closed_without_credentials(monkeypatch):
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)
     assert ExaClient().search("test", num_results=2) == []
     assert TavilyClient().search("test", num_results=2) == []
+
+
+def test_strict_signal_mode_rejects_unlabelled_model(tmp_path):
+    settings = load_settings("config.yaml")
+    bundle = asset_bundle_dir(tmp_path, "BTC/USDT")
+    bundle.mkdir(parents=True)
+    (bundle / "signal_model.joblib").write_bytes(b"sentinel")
+    ok, reason = bundle_compatibility(settings, bundle, "BTC/USDT")
+    assert not ok
+    assert reason == "model_metadata_missing"
