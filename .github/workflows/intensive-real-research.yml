@@ -65,7 +65,7 @@ jobs:
 
       - name: Run intensive real-data research
         run: |
-          python run_intensive_real_research.py             --symbols BTC/USDT,ETH/USDT,SOL/USDT             --timeframe 15m             --start '${{ inputs.start || '2022-01-01' }}'             --end '${{ inputs.end || '2026-10-07' }}'             --trials '${{ inputs.trials || '60' }}'             --holdout-frac 0.15 \\
+          python run_intensive_real_research.py             --symbols BTC/USDT,ETH/USDT,SOL/USDT             --timeframe 15m             --start '${{ inputs.start || '2022-01-01' }}'             --end '${{ inputs.end || '2026-10-07' }}'             --trials '${{ inputs.trials || '60' }}'             --holdout-frac 0.15 \
             --require-all-assets
 
       - name: Run cross-exchange transfer validation
