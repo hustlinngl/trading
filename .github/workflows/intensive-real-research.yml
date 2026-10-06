@@ -6,6 +6,8 @@ on:
     paths:
       - 'src/**'
       - 'run_intensive_real_research.py'
+      - 'run_cross_exchange_validation.py'
+      - 'run_adversarial_integrity.py'
       - 'config.yaml'
       - 'pyproject.toml'
       - 'requirements.txt'
@@ -58,9 +60,17 @@ jobs:
           print("core-import-ok", load_settings().timeframe, AdaptiveEngine.__name__, callable(master_tune))
           PY
 
+      - name: Run adversarial integrity gate
+        run: python run_adversarial_integrity.py
+
       - name: Run intensive real-data research
         run: |
-          python run_intensive_real_research.py             --symbols BTC/USDT,ETH/USDT,SOL/USDT             --timeframe 15m             --start '${{ inputs.start || '2022-01-01' }}'             --end '${{ inputs.end || '2026-10-07' }}'             --trials '${{ inputs.trials || '60' }}'             --holdout-frac 0.15
+          python run_intensive_real_research.py             --symbols BTC/USDT,ETH/USDT,SOL/USDT             --timeframe 15m             --start '${{ inputs.start || '2022-01-01' }}'             --end '${{ inputs.end || '2026-10-07' }}'             --trials '${{ inputs.trials || '60' }}'             --holdout-frac 0.15 \\
+            --require-all-assets
+
+      - name: Run cross-exchange transfer validation
+        run: |
+          python run_cross_exchange_validation.py --trials 24 --holdout-frac 0.15
 
       - name: Upload research reports
         uses: actions/upload-artifact@v4
