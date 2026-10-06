@@ -22,6 +22,10 @@ ALIASES = {
     "low": {"low", "l"},
     "close": {"close", "c", "price"},
     "volume": {"volume", "vol", "v", "base_volume"},
+    "quote_volume": {"quote_volume", "quote_asset_volume", "quote_volume_usdt"},
+    "trades": {"trades", "number_of_trades", "trade_count"},
+    "taker_buy_base_volume": {"taker_buy_base_volume", "taker_buy_base_asset_volume"},
+    "taker_buy_quote_volume": {"taker_buy_quote_volume", "taker_buy_quote_asset_volume"},
 }
 
 
@@ -83,10 +87,12 @@ def normalize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
         if bool((dup.groupby(level=0)[check_cols].nunique(dropna=False).max(axis=1) > 1).any()):
             raise ValueError("Conflicting duplicate timestamps in imported market data")
         out = out[~out.index.duplicated(keep="last")]
-    for c in ["open", "high", "low", "close", "volume"]:
-
-        out[c] = pd.to_numeric(out[c], errors="coerce")
-    out = out.dropna(subset=["open", "high", "low", "close", "volume"])
+    required_cols=["open","high","low","close","volume"]
+    for c in required_cols:
+        out[c]=pd.to_numeric(out[c],errors="coerce")
+    invalid_required=int(out[required_cols].isna().any(axis=1).sum())
+    if invalid_required:
+        raise ValueError(f"Imported market data contains {invalid_required} rows with missing/non-numeric required OHLCV fields")
     if (out[["open", "high", "low", "close"]] <= 0).any().any():
         raise ValueError("OHLC prices must be positive")
     if (out["volume"] < 0).any():
