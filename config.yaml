@@ -1,0 +1,77 @@
+app:
+  seed: 42
+  log_level: INFO
+  timezone: UTC
+data:
+  exchange: binance
+  symbol: BTC/USDT
+  timeframe: 15m
+  lookback_bars: 8000
+  cache_dir: data
+model:
+  horizon_bars: 8
+  min_train_rows: 1500
+  retrain_every_bars: 96
+  probability_threshold: 0.57
+  min_expected_return: 0.0015
+  min_edge_after_cost_bps: 5.0
+  decision_threshold: 0.16
+  meta_threshold: 0.53
+  pt_atr: 1.6
+  sl_atr: 1.0
+  memory_k: 32
+  memory_information_weighted: false
+  max_holding_bars: 96
+risk:
+  initial_cash: 10000
+  risk_per_trade: 0.005
+  max_position_pct: 0.25
+  max_daily_loss_pct: 0.02
+  stop_atr_mult: 1.8
+  take_profit_rr: 2.2
+  fee_bps: 7
+  slippage_bps: 5
+  impact_bps_per_sqrt: 1.5
+  max_participation_pct: 0.10
+research:
+  walk_forward_train_bars: 3000
+  walk_forward_test_bars: 500
+  step_bars: 500
+  population_size: 250
+  generations: 15
+  min_trades_promotion: 20
+  max_promotion_drawdown: -0.20
+execution:
+  paper_only: true
+  sandbox: true
+  poll_seconds: 60
+  live_lookback_bars: 600
+  live_max_symbols: 15
+growth:
+  validation_purge_bars: 12
+  regime_weight: 0.08
+  uncertainty_penalty_mult: 2.0
+  memory_weight: 0.16
+  meta_weight: 0.18
+  conviction_weight: 0.34
+  edge_weight: 0.30
+  xgb_estimators: 240
+  lgbm_estimators: 240
+  hist_max_iter: 260
+  regime_n_init: 5
+  external_feature_lag_bars: 1
+  conformal_level: 0.90
+  conformal_blend: 0.60
+  efficiency_corr_threshold: 0.995
+  master_tuning_cache_dir: data/master_cache
+  short_borrow_bps_per_bar: 0.0
+  force_daily_loss_exit: true
+real_data:
+  broad_timeframe: 1d
+  research_timeframe: 15m
+  max_parallel_downloads: 6
+  broad_crypto_symbol_cap: 250
+  intraday_research_top_n: 10
+  final_holdout_frac: 0.15
+  historical_sources: [binance]
+  universe_manifest: data/real_universe/manifest.json
