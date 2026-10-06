@@ -8,6 +8,7 @@ from .data_quality import audit_market_data
 from .engine import AdaptiveEngine
 from .fingerprint import strong_dataset_fingerprint
 from .policy import live_signal_gate
+from .trade_window import assess_trade_window
 
 @dataclass
 class LiveAssessment:
@@ -44,14 +45,20 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None):
         if pred.empty:
             return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,["empty_prediction"],fp)
 
-        last=pred.iloc[-1]
+        last=pred.iloc[-1].copy()
+        asset_model = Path(root) / "models" / "assets" / symbol.replace("/", "_").replace(":", "_") / "trade_window_specialist.joblib"
+        configured_model = Path(root) / getattr(settings, "trade_window_model_path", "models/champion/trade_window_specialist.joblib")
+        tw_path = asset_model if asset_model.exists() else configured_model
+        tw = assess_trade_window(df, settings, tw_path)
+        for key, value in tw.items():
+            last[key] = value
         signal,reasons=live_signal_gate(last,settings)
         p=float(last.get("p_up",0.5))
         confidence=p if signal=="LONG" else (1.0-p if signal=="SHORT" else 0.0)
         return LiveAssessment(
             symbol,stamp,"SIGNAL" if signal!="FLAT" else "WAIT",signal,
             confidence,float(last.get("expected_return",0.0)),price,
-            reasons or quality_reasons,fp,
+            (reasons + ([str(last.get("trade_window_reason"))] if tw.get("trade_window_reason") not in {None, "ok", "disabled"} and str(last.get("trade_window_reason")) else []) or quality_reasons),fp,
         )
     except Exception as exc:
         return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[f"runtime:{type(exc).__name__}:{exc}"],fp)
