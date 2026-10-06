@@ -91,7 +91,11 @@ def _normalize_vision_csv(raw):
     df['timestamp']=pd.to_datetime(df['timestamp'],unit=_timestamp_unit(df['timestamp'].iloc[0]),utc=True)
     for c in [c for c in cols if c!='timestamp']:
         if c in df:df[c]=pd.to_numeric(df[c],errors='coerce')
-    df=df.dropna(subset=['timestamp','open','high','low','close']).sort_values('timestamp')
+    required=['timestamp','open','high','low','close','volume']
+    missing=int(df[required].isna().any(axis=1).sum())
+    if missing:
+        raise ValueError(f"Binance archive contains {missing} rows with missing required OHLCV fields")
+    df=df.sort_values('timestamp')
     dup=df[df['timestamp'].duplicated(keep=False)]
     if not dup.empty:
         numeric=[c for c in ('open','high','low','close','volume') if c in dup.columns]
