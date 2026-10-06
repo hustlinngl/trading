@@ -27,7 +27,7 @@ if str(SRC) not in sys.path:
 import numpy as np
 import pandas as pd
 
-from ai_trading_lab.binance_vision import download_range, merge_archives
+from ai_trading_lab.binance_vision import download_range, merge_archives, clip_history, archive_provenance
 from ai_trading_lab.config import load_settings
 from ai_trading_lab.data_quality import audit_market_data
 from ai_trading_lab.engine import AdaptiveEngine
@@ -171,7 +171,6 @@ def run_symbol(symbol, args, base_settings):
     evidence = _aggregate_bootstrap(fold_returns, fold_dds, int(settings.seed))
     evidence["holdout_utility"] = robust_performance_utility(
         tuned_holdout_stats,
-        tuned_holdout_stats,
         min_trades=int(getattr(settings, "base_min_holdout_trades", 20)),
         max_drawdown=float(getattr(settings, "base_max_holdout_drawdown", -0.25)),
     )
@@ -200,6 +199,8 @@ def run_symbol(symbol, args, base_settings):
             "study_best_value": tuning.get("study_best_value"),
             "stability": tuning.get("stability"),
             "negative_control_placebo": tuning.get("negative_control_placebo"),
+            "probability_of_backtest_overfitting": tuning.get("probability_of_backtest_overfitting"),
+            "trial_count_ledger": tuning.get("trial_count_ledger", tuning.get("trials")),
             "full_tuning_set_verification": tuning.get("full_tuning_set_verification"),
             "final_statistical_evidence": tuning.get("final_statistical_evidence"),
         },
