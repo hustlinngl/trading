@@ -10,14 +10,14 @@ from .engine import AdaptiveEngine
 from .fingerprint import strong_dataset_fingerprint
 from .policy import live_signal_gate
 from .trade_window import assess_trade_window
-from .deployment import resolve_signal_bundle, resolve_trade_window_model
+from .deployment import resolve_signal_bundle, resolve_trade_window_model, bundle_compatibility
 
 def one_iteration(settings, root: str | Path = "."):
     root=Path(root); (root/"logs").mkdir(parents=True,exist_ok=True)
     result={"timestamp":pd.Timestamp.now(tz="UTC").isoformat(),"symbol":settings.symbol,"timeframe":settings.timeframe,"status":"WAIT","signal":"FLAT","reason":[],"paper_only":True,"sandbox":True}
     model=resolve_signal_bundle(settings,root,settings.symbol)/"signal_model.joblib"
     if not model.exists():
-        result["reason"].append("champion_missing")
+        result["reason"].append("model_missing")
         (root/"logs"/"paper_last.json").write_text(json.dumps(result,indent=2,default=str),encoding="utf-8")
         return result
     try:
@@ -36,6 +36,11 @@ def one_iteration(settings, root: str | Path = "."):
                 result["reason"]=[f"stale_data:{age_minutes:.1f}m"]
             else:
                 model_dir=model.parent
+                compatible, compatibility_reason=bundle_compatibility(settings,model_dir,settings.symbol)
+                if not compatible:
+                    result["reason"]=[compatibility_reason]
+                    (root/"logs"/"paper_last.json").write_text(json.dumps(result,indent=2,default=str),encoding="utf-8")
+                    return result
                 eng=AdaptiveEngine(settings).load(model_dir)
                 feat=eng.features(df)
                 pred=eng.predict_frame(feat)
