@@ -131,13 +131,22 @@ def run_symbol(symbol, args, base_settings):
         f"master_tuning_{symbol.replace('/', '_')}_{args.timeframe}.json",
     )
 
-    holdout_stats, _, bt = _holdout_eval(df, settings, args.holdout_frac)
-
-    stress = {}
-    for mult in args.cost_multipliers:
-        stressed = _stress(settings, mult)
-        stressed_stats, _, _ = _holdout_eval(df, stressed, args.holdout_frac)
-        stress[str(mult)] = stressed_stats
+    # The tuner owns challenger selection and evaluates the tuned challenger on the
+    # pristine final holdout. Keep a separate baseline holdout only for comparison.
+    baseline_holdout_stats, _, _ = _holdout_eval(df, settings, args.holdout_frac)
+    tuned_holdout_rows = tuning.get("final_holdout_summary") or []
+    tuned_holdout_stats = {}
+    for row in tuned_holdout_rows:
+        if abs(float(row.get("cost_multiplier", 1.0)) - 1.0) < 1e-9:
+            tuned_holdout_stats = dict(row)
+            break
+    if not tuned_holdout_stats:
+        tuned_holdout_stats = dict(tuning.get("final_holdout", {}))
+    stress = {
+        str(row.get("cost_multiplier")): row
+        for row in tuned_holdout_rows
+        if "cost_multiplier" in row
+    }
 
     fold_returns = [float(x.get("total_return", 0.0)) for x in wf_records]
     fold_dds = [float(x.get("max_drawdown", 0.0)) for x in wf_records]
@@ -170,11 +179,14 @@ def run_symbol(symbol, args, base_settings):
             "best_params": tuning.get("best_params"),
             "study_best_value": tuning.get("study_best_value"),
             "stability": tuning.get("stability"),
+            "negative_control_placebo": tuning.get("negative_control_placebo"),
+            "full_tuning_set_verification": tuning.get("full_tuning_set_verification"),
             "final_statistical_evidence": tuning.get("final_statistical_evidence"),
         },
-        "holdout": holdout_stats,
-        "holdout_data_rows": int(len(bt)),
-        "cost_stress": stress,
+        "holdout_baseline": baseline_holdout_stats,
+        "holdout_tuned": tuned_holdout_stats,
+        "holdout_data_rows": int(0 if not tuned_holdout_rows else len(tuned_holdout_rows)),
+        "cost_stress_tuned": stress,
         "bootstrap_evidence": evidence,
         "promotion": "NOT_PERFORMED",
     }
