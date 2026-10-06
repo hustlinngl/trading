@@ -1,18 +1,9 @@
 name: intensive-real-research
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'run_intensive_real_research.py'
-      - 'run_cross_exchange_validation.py'
-      - 'run_adversarial_integrity.py'
-      - 'config.yaml'
-      - 'pyproject.toml'
-      - 'requirements.txt'
-      - '.github/workflows/intensive-real-research.yml'
   workflow_dispatch:
+  schedule:
+    - cron: '17 4 * * 0'
     inputs:
       start:
         description: UTC start date
