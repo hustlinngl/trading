@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.13
+- Restored the missing deterministic benchmark module behind the `benchmark` CLI.
+- Added regression tests for data timing, risk sizing, execution semantics, configuration and strict signal gating.
+- Added a CI workflow covering compile, pytest, CLI startup and benchmark smoke execution.
+- Fixed master-tuning fold-cache key handling so subsetted fold caches are deterministic.
+- Fixed paper/live inference to use canonical feature construction and the full engine prediction stack.
+- Activated strict live/paper quality gates for probability, robust expected return, meta confidence, score, model disagreement and analog-memory support.
+- Fixed the configured economic-edge hurdle being silently dropped while loading YAML settings.
+- Fixed the intensive research workflow shell continuation and made requested holdout cost multipliers actually run.
+- Made challenger promotion bootstrap evidence comparable against the incumbent score.
+- Clarified doctor dependency readiness and synchronized the release metadata.
+
 ## 0.9.11
 - Real-data Binance Vision and bounded Kraken adapters.
 - Strong dataset fingerprints and provenance.
