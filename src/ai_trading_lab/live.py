@@ -9,14 +9,12 @@ from .engine import AdaptiveEngine
 from .fingerprint import strong_dataset_fingerprint
 from .policy import live_signal_gate
 from .trade_window import assess_trade_window
+from .deployment import resolve_signal_bundle, resolve_trade_window_model
 
 @dataclass
 class LiveAssessment:
     symbol:str; timestamp:str; status:str; signal:str; confidence:float; expected_return:float; price:float; reason_codes:list[str]; data_fingerprint:str
     def to_dict(self): return asdict(self)
-
-def _model_dir(settings, root):
-    return Path(root)/getattr(settings,"model_dir","models/champion")
 
 def assess_symbol(settings,root=".",symbol=None,exchange=None):
     symbol=symbol or settings.symbol
@@ -35,7 +33,7 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None):
         if age_minutes > float(getattr(settings,"live_max_data_age_minutes",30.0)):
             return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[f"stale_data:{age_minutes:.1f}m"],fp)
 
-        model_dir=_model_dir(settings,root)
+        model_dir=resolve_signal_bundle(settings,root,symbol)
         if not (model_dir/"signal_model.joblib").exists():
             return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,["champion_missing"],fp)
 
@@ -46,9 +44,7 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None):
             return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,["empty_prediction"],fp)
 
         last=pred.iloc[-1].copy()
-        asset_model = Path(root) / "models" / "assets" / symbol.replace("/", "_").replace(":", "_") / "trade_window_specialist.joblib"
-        configured_model = Path(root) / getattr(settings, "trade_window_model_path", "models/champion/trade_window_specialist.joblib")
-        tw_path = asset_model if asset_model.exists() else configured_model
+        tw_path = resolve_trade_window_model(settings,root,symbol)
         tw = assess_trade_window(df, settings, tw_path)
         for key, value in tw.items():
             last[key] = value
