@@ -199,6 +199,7 @@ def load_settings(path: str | Path = ROOT / "config.yaml") -> Settings:
         retrain_every_bars=int(d.get("retrain_every_bars", 96)),
         probability_threshold=float(d.get("probability_threshold", 0.57)),
         min_expected_return=float(os.getenv("MIN_EDGE", d.get("min_expected_return", 0.0015))),
+        min_edge_after_cost_bps=float(d.get("min_edge_after_cost_bps", 5.0)),
         decision_threshold=float(d.get("decision_threshold", 0.16)),
         meta_threshold=float(d.get("meta_threshold", 0.53)),
         pt_atr=float(d.get("pt_atr", 1.6)),
