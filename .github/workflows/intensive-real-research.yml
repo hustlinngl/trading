@@ -1,9 +1,6 @@
-name: intensive-real-research
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '17 4 * * 0'
     inputs:
       start:
         description: UTC start date
@@ -17,6 +14,8 @@ on:
         description: Master tuning trials per asset
         required: false
         default: '60'
+  schedule:
+    - cron: '17 4 * * 0'
 
 concurrency:
   group: intensive-real-research
