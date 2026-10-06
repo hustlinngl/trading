@@ -47,7 +47,7 @@ def representative_fold_ids(all_ids, target):
     pos=np.linspace(0,len(ids)-1,n).round().astype(int)
     return {ids[int(i)] for i in pos}
 
-def _fold_cache_key(df,settings):
+def _fold_cache_key(df,settings,only_folds=None):
     fields={'schema':6,'data':strong_dataset_fingerprint(df),'train':int(settings.walk_forward_train_bars),'test':int(settings.walk_forward_test_bars),'step':int(settings.walk_forward_step),'purge':int(getattr(settings,'validation_purge_bars',12)),'min_train':int(settings.min_train_rows),'horizon':int(settings.horizon_bars),'seed':int(settings.seed),'xgb':int(getattr(settings,'xgb_estimators',240)),'lgbm':int(getattr(settings,'lgbm_estimators',240)),'hist':int(getattr(settings,'hist_max_iter',260)),'regime_n_init':int(getattr(settings,'regime_n_init',5)),'memory_k':int(getattr(settings,'memory_k',32)),'feature_lag':int(getattr(settings,'external_feature_lag_bars',1)),'fee_bps':float(getattr(settings,'fee_bps',0.0)),'slippage_bps':float(getattr(settings,'slippage_bps',0.0)),'fold_subset':sorted(int(x) for x in only_folds) if only_folds is not None else None}
     return hashlib.sha256(json.dumps(fields,sort_keys=True).encode()).hexdigest()[:24]
 
