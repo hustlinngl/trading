@@ -15,6 +15,13 @@ from .deployment import resolve_signal_bundle, resolve_trade_window_model, bundl
 def one_iteration(settings, root: str | Path = "."):
     root=Path(root); (root/"logs").mkdir(parents=True,exist_ok=True)
     result={"timestamp":pd.Timestamp.now(tz="UTC").isoformat(),"symbol":settings.symbol,"timeframe":settings.timeframe,"status":"WAIT","signal":"FLAT","reason":[],"paper_only":True,"sandbox":True}
+    previous_path=root/"logs"/"paper_last.json"
+    previous={}
+    if previous_path.exists():
+        try:
+            previous=json.loads(previous_path.read_text(encoding="utf-8"))
+        except Exception:
+            previous={}
     model=resolve_signal_bundle(settings,root,settings.symbol)/"signal_model.joblib"
     if not model.exists():
         result["reason"].append("model_missing")
@@ -24,7 +31,12 @@ def one_iteration(settings, root: str | Path = "."):
         ex=exchange_client(getattr(settings,"exchange","binance"),sandbox=False)
         df=fetch_ohlcv(ex,settings.symbol,settings.timeframe,int(getattr(settings,"live_lookback_bars",600)))
         quality=audit_market_data(df,settings.timeframe)
+        result["data_timestamp"]=df.index[-1].isoformat()
         result["data_quality"]=quality.to_dict()
+        if str(previous.get("data_timestamp","")) == str(result["data_timestamp"]):
+            result["reason"]=["same_completed_candle"]
+            previous_path.write_text(json.dumps(result,indent=2,default=str),encoding="utf-8")
+            return result
         result["data_fingerprint"]=strong_dataset_fingerprint(df)
         result["price"]=float(df["close"].iloc[-1])
         if not quality.passed:
