@@ -4,6 +4,7 @@ import joblib
 import numpy as np, pandas as pd
 from sklearn.ensemble import ExtraTreesClassifier
 from .features import make_features
+from .fingerprint import strong_dataset_fingerprint
 
 def timeframe_minutes(timeframe):
     tf=str(timeframe).lower()
@@ -113,6 +114,10 @@ def train_trade_window_backbone(df,settings,holdout_frac=.15,save_path=None):
         "holdout_rows":int(len(x)-cut),
         "min_hours":min_hours,
         "max_hours":max_hours,
+        "symbol":str(getattr(settings,"symbol","")),
+        "timeframe":str(getattr(settings,"timeframe","15m")),
+        "data_fingerprint":strong_dataset_fingerprint(df),
+        "trained_at":pd.Timestamp.now(tz="UTC").isoformat(),
     }
     if save_path is not None:
         pth=Path(save_path); pth.parent.mkdir(parents=True,exist_ok=True)
@@ -140,6 +145,14 @@ def assess_trade_window(df, settings, model_path=None):
         model = artifact["model"]
         feature_columns = list(artifact.get("feature_columns", []))
         report = artifact.get("report", {}) or {}
+        artifact_symbol = report.get("symbol")
+        artifact_timeframe = report.get("timeframe")
+        if artifact_symbol and str(artifact_symbol) != str(getattr(settings, "symbol", "")):
+            out["trade_window_reason"] = "symbol_mismatch"
+            return out
+        if artifact_timeframe and str(artifact_timeframe) != str(getattr(settings, "timeframe", "15m")):
+            out["trade_window_reason"] = "timeframe_mismatch"
+            return out
         base_minutes = float(getattr(settings, "base_bar_minutes", timeframe_minutes(getattr(settings, "timeframe", "15m"))))
         max_bars = max(1, int(round(float(getattr(settings, "trade_window_max_hours", 24.0)) * 60.0 / base_minutes)))
         features, _, _ = make_features(
