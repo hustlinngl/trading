@@ -179,7 +179,9 @@ class Settings:
 def load_settings(path: str | Path = ROOT / "config.yaml") -> Settings:
     raw = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     sections = ("data", "model", "risk", "research", "execution", "app", "autonomy", "growth", "real_data")
-    d = {key: value for section in sections for key, value in (raw.get(section, {}) or {}).items()}
+    top_level = {key: value for key, value in raw.items() if key not in sections}
+    section_values = {key: value for section in sections for key, value in (raw.get(section, {}) or {}).items()}
+    d = {**top_level, **section_values}
     return Settings(
         exchange=str(d.get("exchange", "binance")),
         cache_dir=str(d.get("cache_dir", "data")),
