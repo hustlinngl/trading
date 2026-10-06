@@ -26,6 +26,44 @@ def decide_actions(pred, regime, analog, meta_p, settings, *, regime_persistence
     score_series=pd.Series(score,index=pred.index,name='score'); score_series.attrs['effective_min_expected_return']=float(effective_min_expected_return); score_series.attrs['economic_hurdle_bps']=float(hurdle_bps)
     return pd.Series(action,index=pred.index,name='action'),score_series
 
+def live_signal_gate(row, settings):
+    """Apply the strictest live/paper signal gates without changing research semantics."""
+    p_up = float(row.get("p_up", 0.5))
+    expected_return = float(row.get("expected_return", 0.0))
+    expected_return_lcb = float(row.get("expected_return_lcb", expected_return))
+    action = str(row.get("action", "FLAT"))
+    direction = 1.0 if p_up >= 0.5 else -1.0
+    p_direction = p_up if direction > 0 else 1.0 - p_up
+    robust_expected_return = direction * expected_return_lcb
+    reasons = []
+
+    if action not in {"LONG", "SHORT"}:
+        reasons.append("base_policy")
+
+    if bool(getattr(settings, "signal_only_mode", True)):
+        probability_floor = max(
+            float(getattr(settings, "signal_confidence_threshold", 0.82)),
+            float(getattr(settings, "signal_probability_threshold", 0.72)),
+        )
+        if p_direction < probability_floor:
+            reasons.append("signal_probability")
+        if robust_expected_return < float(getattr(settings, "signal_min_expected_return", 0.003)):
+            reasons.append("signal_expected_return")
+        if float(row.get("meta_success", 0.5)) < float(getattr(settings, "signal_meta_threshold", 0.62)):
+            reasons.append("signal_meta")
+        if float(row.get("score", 0.0)) < float(getattr(settings, "signal_min_score", 0.22)):
+            reasons.append("signal_score")
+        if float(row.get("model_disagreement", 0.0)) > float(getattr(settings, "signal_max_disagreement", 0.05)):
+            reasons.append("model_disagreement")
+        if int(row.get("analog_n", 0)) < int(getattr(settings, "signal_memory_min_neighbors", 16)):
+            reasons.append("memory_neighbors")
+        if float(row.get("analog_agreement", 0.0)) < float(getattr(settings, "signal_memory_min_agreement", 0.70)):
+            reasons.append("memory_agreement")
+
+    if reasons:
+        return "FLAT", reasons
+    return ("LONG" if direction > 0 else "SHORT"), []
+
 
 def make_actions(engine,features,settings,probability_threshold=None,min_expected_return=None,decision_threshold=None,meta_threshold=None):
     pred=engine.model.predict(features); regime=engine.regimes.transform(features); regime_persistence=engine.regimes.persistence(features); regime_probs=engine.regimes.semantic_probabilities(features); analog=engine.memory.query_many(features)
