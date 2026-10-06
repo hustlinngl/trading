@@ -69,7 +69,11 @@ class AdaptiveEngine:
             idx=cal_oos.index.intersection(features.index); meta_base=cal_oos.loc[idx]; mm=self.meta_regimes if self.meta_regimes is not None else self.regimes; mr=mm.transform(features.loc[idx]); mp=mm.persistence(features.loc[idx]); mprob=mm.semantic_probabilities(features.loc[idx])
             meta_x=MetaPolicy.frame(meta_base,features.loc[idx],mr,meta_analog.loc[idx],regime_persistence=mp,regime_probs=mprob); rtc=2*(float(getattr(self.settings,'fee_bps',0))+float(getattr(self.settings,'slippage_bps',0)))/10000.0; meta_y=cost_aware_meta_target(future_ret.loc[idx].to_numpy(),meta_base.p_up.to_numpy(),rtc); valid=future_ret.loc[idx].notna().to_numpy()
             if valid.sum()>=100 and np.unique(meta_y[valid]).size>1: self.meta.fit(meta_x.loc[valid],pd.Series(meta_y[valid],index=idx[valid]))
-        meta_all=self.meta.predict_proba(MetaPolicy.frame(base,features,regime,analog,regime_persistence=regime_persistence,regime_probs=self.regimes.semantic_probabilities(features)))
+        meta_detector=self.meta_regimes if self.meta_regimes is not None else self.regimes
+        meta_regime=meta_detector.transform(features)
+        meta_persistence=meta_detector.persistence(features)
+        meta_probs=meta_detector.semantic_probabilities(features)
+        meta_all=self.meta.predict_proba(MetaPolicy.frame(base,features,meta_regime,analog,regime_persistence=meta_persistence,regime_probs=meta_probs))
         action_series,score_series=decide_actions(base,regime,analog,meta_all,self.settings,regime_persistence=regime_persistence,regime_probs=self.regimes.semantic_probabilities(features))
         pred=base.copy(); pred['regime']=regime; pred['analog_edge']=analog.edge; pred['analog_agreement']=analog.agreement; pred['analog_dispersion']=analog.dispersion; pred['analog_n']=analog.n; pred['regime_persistence']=regime_persistence; pred['meta_success']=meta_all; pred['score']=score_series; pred['action']=action_series
         return EngineArtifacts(features,tb,regime,self.model,self.memory,self.meta,pred.replace([np.inf,-np.inf],np.nan).fillna(0.0))
@@ -79,18 +83,23 @@ class AdaptiveEngine:
         p=Path(out_dir)
         if not (p/'signal_model.joblib').exists(): raise FileNotFoundError(f'Missing signal_model.joblib in {p}')
         import joblib
-        obj=cls(settings); obj.model=SignalModel.load(p/'signal_model.joblib'); obj.memory=AnalogMemory.load(p/'analog_memory.joblib'); obj.regimes=joblib.load(p/'regime_detector.joblib'); obj.meta=joblib.load(p/'meta_policy.joblib')
+        obj=cls(settings); obj.model=SignalModel.load(p/'signal_model.joblib'); obj.memory=AnalogMemory.load(p/'analog_memory.joblib'); obj.regimes=joblib.load(p/'regime_detector.joblib')
+        obj.meta_regimes=joblib.load(p/'meta_regime_detector.joblib') if (p/'meta_regime_detector.joblib').exists() else obj.regimes
+        obj.meta=joblib.load(p/'meta_policy.joblib')
         try: obj.feature_efficiency=joblib.load(p/'feature_efficiency.joblib')
         except Exception: obj.feature_efficiency=None
         return obj
 
     def predict_frame(self,features):
         if features is None or features.empty: return pd.DataFrame(index=getattr(features,'index',None))
-        base=self.model.predict(features); regime=self.regimes.transform(features); persistence=self.regimes.persistence(features); probs=self.regimes.semantic_probabilities(features); analog=self.memory.query_many(features); meta_x=MetaPolicy.frame(base,features,regime,analog,regime_persistence=persistence,regime_probs=probs); meta_p=self.meta.predict_proba(meta_x); actions,scores=decide_actions(base,regime,analog,meta_p,self.settings,regime_persistence=persistence,regime_probs=probs)
+        base=self.model.predict(features); regime=self.regimes.transform(features); persistence=self.regimes.persistence(features); probs=self.regimes.semantic_probabilities(features); analog=self.memory.query_many(features)
+        meta_detector=self.meta_regimes if self.meta_regimes is not None else self.regimes
+        meta_regime=meta_detector.transform(features); meta_persistence=meta_detector.persistence(features); meta_probs=meta_detector.semantic_probabilities(features)
+        meta_x=MetaPolicy.frame(base,features,meta_regime,analog,regime_persistence=meta_persistence,regime_probs=meta_probs); meta_p=self.meta.predict_proba(meta_x); actions,scores=decide_actions(base,regime,analog,meta_p,self.settings,regime_persistence=persistence,regime_probs=probs)
         pred=base.copy(); pred['regime']=regime; pred['analog_edge']=analog.edge; pred['analog_agreement']=analog.agreement; pred['analog_dispersion']=analog.dispersion; pred['analog_n']=analog.n; pred['regime_persistence']=persistence; pred['meta_success']=meta_p; pred['score']=scores; pred['action']=actions
         return pred.replace([np.inf,-np.inf],np.nan).fillna(0.0)
 
     def save(self,out_dir):
         p=Path(out_dir); p.mkdir(parents=True,exist_ok=True); self.model.save(p/'signal_model.joblib'); self.memory.save(p/'analog_memory.joblib')
         import joblib
-        joblib.dump(self.regimes,p/'regime_detector.joblib'); joblib.dump(self.meta,p/'meta_policy.joblib'); joblib.dump(getattr(self,'feature_efficiency',None),p/'feature_efficiency.joblib')
+        joblib.dump(self.regimes,p/'regime_detector.joblib'); joblib.dump(self.meta_regimes if self.meta_regimes is not None else self.regimes,p/'meta_regime_detector.joblib'); joblib.dump(self.meta,p/'meta_policy.joblib'); joblib.dump(getattr(self,'feature_efficiency',None),p/'feature_efficiency.joblib')
