@@ -76,15 +76,23 @@ def normalize_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("Dataset needs a timestamp/date column or DatetimeIndex")
     out.index = ts
     out = out[~out.index.isna()].sort_index()
-    out = out[~out.index.duplicated(keep="last")]
+    duplicated = out.index.duplicated(keep=False)
+    if duplicated.any():
+        dup = out.loc[duplicated]
+        check_cols = [c for c in ("open","high","low","close","volume","quote_volume","trades","taker_buy_base_volume","taker_buy_quote_volume") if c in dup.columns]
+        if bool((dup.groupby(level=0)[check_cols].nunique(dropna=False).max(axis=1) > 1).any()):
+            raise ValueError("Conflicting duplicate timestamps in imported market data")
+        out = out[~out.index.duplicated(keep="last")]
     for c in ["open", "high", "low", "close", "volume"]:
+
         out[c] = pd.to_numeric(out[c], errors="coerce")
     out = out.dropna(subset=["open", "high", "low", "close", "volume"])
     if (out[["open", "high", "low", "close"]] <= 0).any().any():
         raise ValueError("OHLC prices must be positive")
     if (out["volume"] < 0).any():
         raise ValueError("Volume cannot be negative")
-    return out[["open", "high", "low", "close", "volume"]]
+    extra=["quote_volume","trades","taker_buy_base_volume","taker_buy_quote_volume"]
+    return out[[c for c in ["open","high","low","close","volume"]+extra if c in out.columns]]
 
 
 def read_market_file(path: str | Path) -> pd.DataFrame:
