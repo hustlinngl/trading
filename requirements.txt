@@ -1,0 +1,4 @@
+-e .
+xgboost>=2.1
+lightgbm>=4.5
+websockets>=14.0
