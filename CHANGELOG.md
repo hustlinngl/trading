@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.21
+- Fixed the decision inspector lifecycle so it is actually wired, visible on open and correctly hidden on close.
+- Added dialog semantics, focus return and keyboard focus trapping for the inspector.
+- Redrew Top 5 mini-charts on resize with a frame-coalesced handler to keep the overview crisp.
+
 ## 0.9.20
 - Refined the Top 5 visual hierarchy with a stronger primary pick, tighter card density and clearer signal accents.
 - Made Top 5 cards keyboard-accessible and directly connected them to the decision inspector and market history.
