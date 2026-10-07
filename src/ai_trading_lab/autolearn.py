@@ -49,10 +49,12 @@ def auto_update(df,settings,model_dir="models"):
         return {
             "promoted":False,
             "skipped":True,
-            "skip_reason":"dataset_unchanged",
+            "skip_reason":"dataset_and_configuration_unchanged",
             "data_fingerprint":fp,
             "champion_score":previous_score,
             "challenger_score":previous_score,
+            "model_semantics_fingerprint":model_semantics,
+            "deployment_semantics_fingerprint":deployment_semantics,
         }
 
     score,stats=evaluate_engine(df,settings)
@@ -160,8 +162,6 @@ def auto_update(df,settings,model_dir="models"):
             "champion_holdout":champion_holdout,
             "deployment_manifest":deployment_manifest,
             "duration_report":duration_report,
-            "model_semantics_fingerprint":model_semantics,
-            "deployment_semantics_fingerprint":deployment_semantics,
         }
         state_path.write_text(json.dumps(state,indent=2,default=str),encoding="utf-8")
         result["deployment_manifest"]=deployment_manifest
