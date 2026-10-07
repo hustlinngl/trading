@@ -12,7 +12,7 @@ def decide_actions(pred, regime, analog, meta_p, settings, *, regime_persistence
     probability_threshold=float(val('probability_threshold',0.57)); min_expected_return=float(val('min_expected_return',0.0015))
     fee_bps=float(getattr(settings,'fee_bps',0.0)); slippage_bps=float(getattr(settings,'slippage_bps',0.0)); impact_bps=float(getattr(settings,'impact_bps_per_sqrt',0.0)); max_participation=float(np.clip(getattr(settings,'max_participation_pct',0.10),0,1))
     borrow_bps_per_bar=float(max(0.0,getattr(settings,'short_borrow_bps_per_bar',0.0)))
-    max_holding=int(max(1,getattr(settings,'max_holding_bars',96)))
+    max_holding=int(max(1,getattr(settings,'max_holding_bars',8)))
     base_hurdle_bps=2*(fee_bps+slippage_bps)+2*impact_bps*np.sqrt(max_participation)+max(0.0,float(getattr(settings,'min_edge_after_cost_bps',5.0)))
     short_borrow_hurdle_bps=borrow_bps_per_bar*max_holding
     direction_hint=np.where(pred['p_up'].to_numpy(float)>=0.5,1.0,-1.0)
