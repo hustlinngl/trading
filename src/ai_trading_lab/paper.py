@@ -11,11 +11,11 @@ from .fingerprint import strong_dataset_fingerprint
 from .policy import live_signal_gate
 from .trade_window import assess_trade_window
 from .deployment import resolve_signal_bundle, resolve_trade_window_model, bundle_compatibility
-from .signal_contract import DirectSignal, PUBLIC_SIGNALS
+from .signal_contract import PUBLIC_SIGNALS, compile_direct_signal
 
 
 def _public_signal(result, settings):
-    from .signal_contract import DirectSignal, SignalContractError
+    from .signal_contract import SignalContractError
 
     signal = str(result.get("signal", "FLAT")).upper()
     try:
@@ -25,18 +25,24 @@ def _public_signal(result, settings):
     except (KeyError, TypeError, ValueError) as exc:
         raise SignalContractError(f"invalid_paper_signal:{type(exc).__name__}") from exc
 
-    return DirectSignal(
+    p_up = (
+        confidence
+        if signal == "LONG"
+        else 1.0 - confidence
+        if signal == "SHORT"
+        else 0.5
+    )
+    return compile_direct_signal(
+        {
+            "action": signal,
+            "p_up": p_up,
+            "expected_return": expected_return,
+        },
         symbol=str(result.get("symbol", settings.symbol)),
         timestamp=str(result.get("data_timestamp") or result.get("timestamp") or ""),
-        signal=signal,
-        confidence=confidence,
-        expected_return=expected_return,
         price=price,
         horizon_bars=max(1, int(getattr(settings, "horizon_bars", 8))),
-        actionable=signal in {"LONG", "SHORT"},
-        reason="qualified" if signal in {"LONG", "SHORT"} else "no_actionable_setup",
     ).to_dict()
-
 
 def one_iteration(settings, root: str | Path = "."):
     root=Path(root); (root/"logs").mkdir(parents=True,exist_ok=True)
