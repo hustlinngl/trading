@@ -89,6 +89,18 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
         signal,reasons=live_signal_gate(last,settings)
         p=float(last.get("p_up",0.5))
         confidence=p if signal=="LONG" else (1.0-p if signal=="SHORT" else 0.0)
+        # Rank only after the hard gate, using directional conservative edge first.
+        lcb=float(last.get("expected_return_lcb", last.get("expected_return", 0.0)))
+        ucb=float(last.get("expected_return_ucb", last.get("expected_return", 0.0)))
+        robust_edge=lcb if signal=="LONG" else (-ucb if signal=="SHORT" else 0.0)
+        score=float(last.get("score", 0.0))
+        tw_conf=float(last.get("trade_window_confidence", 0.0))
+        selection_score=(
+            0.50 * max(0.0, min(1.0, robust_edge / 0.03))
+            + 0.25 * max(0.0, min(1.0, (confidence - 0.72) / 0.28))
+            + 0.15 * max(0.0, min(1.0, score / 0.50))
+            + 0.10 * max(0.0, min(1.0, tw_conf))
+        )
         detail_keys=(
             "p_up","expected_return","expected_return_lcb","expected_return_ucb","score",
             "meta_success","model_disagreement","return_disagreement","regime",
@@ -97,7 +109,13 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
             "trade_window_confidence","trade_window_reason",
         )
         details={k:last.get(k) for k in detail_keys if k in last.index}
-        details.update({"data_age_minutes":age_minutes,"bundle":str(model_dir),"compatibility":"ok"})
+        details.update({
+            "data_age_minutes": age_minutes,
+            "bundle": str(model_dir),
+            "compatibility": "ok",
+            "robust_directional_edge": robust_edge,
+            "selection_score": selection_score,
+        })
         return LiveAssessment(
             symbol,stamp,"SIGNAL" if signal!="FLAT" else "WAIT",signal,
             confidence,float(last.get("expected_return",0.0)),price,
@@ -199,8 +217,9 @@ def scan_top5(settings, root=".", symbols=None, *, return_meta=False):
 
     out.sort(
         key=lambda x: (
+            float((x.details or {}).get("selection_score", 0.0)),
+            float((x.details or {}).get("robust_directional_edge", 0.0)),
             float(x.confidence),
-            float(x.expected_return),
             str(x.timestamp),
         ),
         reverse=True,
