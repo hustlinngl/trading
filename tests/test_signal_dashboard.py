@@ -147,6 +147,4 @@ def test_signal_terminal_bulk_ticker_path_and_browser_escape(tmp_path, monkeypat
     terminal = terminal_mod.SignalTerminal(settings, tmp_path)
     out = terminal._quotes(["BTC/USDT"])
     assert out["BTC/USDT"]["price"] == 321.0
-    assert '\"function esc' not in terminal_mod.HTML
-    assert 'c==="&amp;"' not in terminal_mod.HTML
-    assert 'function esc(v){return String(v??"").replace(/[&<>"]/g' in terminal_mod.HTML
+    assert 'function esc(v){return String(v??"").replace(/[&<>"]/g,c=>c==="&"?"&amp;":c==="<"?"&lt;":c===">"?"&gt;":"&quot;");}' in terminal_mod.HTML
