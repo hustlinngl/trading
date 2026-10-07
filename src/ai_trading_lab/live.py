@@ -3,7 +3,7 @@ from dataclasses import dataclass, asdict, field
 from pathlib import Path
 import json, numpy as np, pandas as pd
 
-from .data import exchange_client, fetch_ohlcv
+from .data import exchange_client, fetch_ohlcv, timeframe_offset
 from .data_quality import audit_market_data
 from .engine import AdaptiveEngine
 from .fingerprint import strong_dataset_fingerprint
@@ -194,7 +194,7 @@ def discover_live_universe(settings, root=".", exchange=None, symbols=None):
     }
 
 
-def scan_top5(settings, root=".", symbols=None, *, exchange=None, return_meta=False):
+def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, return_meta=False):
     ex = exchange
     network_unavailable = ex is None
     if ex is None:
@@ -207,11 +207,37 @@ def scan_top5(settings, root=".", symbols=None, *, exchange=None, return_meta=Fa
     universe = discover_live_universe(settings, root, ex, symbols)
     candidates = universe["symbols"]
     out = []
+    now = pd.Timestamp.now(tz="UTC")
+    cache = cache if cache is not None else {}
+    try:
+        bar_delta = timeframe_offset(settings.timeframe)
+    except Exception:
+        bar_delta = pd.Timedelta(0)
+
+    reused = 0
+    refreshed = 0
     for symbol in candidates:
         try:
-            assessment = assess_symbol(
-                settings, root, symbol, exchange=ex, skip_network=network_unavailable
-            )
+            cached = cache.get(symbol)
+            assessment = None
+            if cached is not None and bar_delta > pd.Timedelta(0):
+                try:
+                    stamp = pd.Timestamp(cached.timestamp)
+                    if stamp.tzinfo is None:
+                        stamp = stamp.tz_localize("UTC")
+                    if stamp + bar_delta > now:
+                        assessment = cached
+                        reused += 1
+                except Exception:
+                    assessment = None
+
+            if assessment is None:
+                assessment = assess_symbol(
+                    settings, root, symbol, exchange=ex, skip_network=network_unavailable
+                )
+                cache[symbol] = assessment
+                refreshed += 1
+
             if assessment.signal in {"LONG", "SHORT"} and assessment.status == "SIGNAL":
                 out.append(assessment)
         except Exception:
@@ -234,6 +260,8 @@ def scan_top5(settings, root=".", symbols=None, *, exchange=None, return_meta=Fa
             "universe_evaluated": int(len(candidates)),
             "market_counts": universe["market_counts"],
             "universe_mode": "all_active_markets",
+            "assessments_reused": int(reused),
+            "assessments_refreshed": int(refreshed),
         }
     return picks
 
