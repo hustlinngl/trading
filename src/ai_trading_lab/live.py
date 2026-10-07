@@ -219,7 +219,7 @@ def discover_live_universe(settings, root=".", exchange=None, symbols=None):
     }
 
 
-def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, return_meta=False):
+def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, return_meta=False, progress_callback=None):
     ex = exchange
     network_unavailable = ex is None
     if ex is None:
@@ -243,6 +243,22 @@ def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, re
     refreshed = 0
     waits = 0
     failures = 0
+    evaluated = 0
+    total_candidates = len(candidates)
+    if callable(progress_callback):
+        try:
+            progress_callback({
+                "stage": "scanning",
+                "evaluated": 0,
+                "total": total_candidates,
+                "reused": 0,
+                "refreshed": 0,
+                "signals": 0,
+                "waits": 0,
+                "failures": 0,
+            })
+        except Exception:
+            pass
     for symbol in candidates:
         try:
             cached = cache.get(symbol)
@@ -274,7 +290,23 @@ def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, re
         except Exception:
             waits += 1
             failures += 1
-            continue
+        finally:
+            evaluated += 1
+            if callable(progress_callback):
+                try:
+                    progress_callback({
+                        "stage": "scanning",
+                        "evaluated": evaluated,
+                        "total": total_candidates,
+                        "reused": reused,
+                        "refreshed": refreshed,
+                        "signals": len(out),
+                        "waits": waits,
+                        "failures": failures,
+                        "symbol": symbol,
+                    })
+                except Exception:
+                    pass
 
     out.sort(
         key=lambda x: (
@@ -303,6 +335,8 @@ def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, re
             "universe_mode": "all_active_markets" if universe.get("exchange_market_metadata", ex is not None) else "local_fallback_universe",
             "assessments_reused": int(reused),
             "assessments_refreshed": int(refreshed),
+            "scan_completed": int(evaluated),
+            "scan_total": int(total_candidates),
         }
     return picks
 
