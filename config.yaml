@@ -52,6 +52,8 @@ execution:
   # 0 = unlimited model-backed active markets discovered from the exchange.
   live_max_symbols: 0
   live_market_types: [spot, swap, future, margin, option]
+  # Max concurrent model/data assessments during a full-universe scan.
+  live_scan_workers: 6
   live_symbols: [BTC/USDT, ETH/USDT, BNB/USDT, SOL/USDT, XRP/USDT]
 growth:
   validation_purge_bars: 12
