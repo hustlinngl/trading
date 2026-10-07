@@ -977,7 +977,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
 .pick-rank{font-size:11px;color:var(--muted);letter-spacing:.16em}.pick-symbol{font-size:20px;font-weight:800}
 .pick-signal{font-size:13px;font-weight:800;letter-spacing:.12em;padding:7px 10px;border-radius:999px;border:1px solid currentColor;box-shadow:0 0 22px var(--pick-glow)}
 .pick-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:0 18px 12px}.pick-stat{padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.025)}
-.pick-stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.pick-stat .v{margin-top:3px;font-weight:700}.pick-chart{height:220px;padding:0 8px 8px}.pick-chart canvas{display:block;width:100%;height:100%}
+.pick-stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.pick-stat .v{margin-top:3px;font-weight:700}.pick-stat-meter{position:relative;overflow:hidden}.pick-stat-meter .signal-meter{display:block;height:2px;margin-top:7px;background:rgba(255,255,255,.07);border-radius:999px;overflow:hidden}.pick-stat-meter .signal-meter::after{content:"";display:block;height:100%;width:var(--meter);background:var(--signal-accent,var(--pink));box-shadow:0 0 10px var(--signal-accent,var(--pink));border-radius:inherit}.pick-chart{height:220px;padding:0 8px 8px}.pick-chart canvas{display:block;width:100%;height:100%}
 .pick-foot{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 18px 15px;border-top:1px solid rgba(255,255,255,.05);font-size:11px;color:var(--muted)}
 
 .pick-card{cursor:pointer;position:relative;isolation:isolate}
@@ -1225,10 +1225,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   </nav>
 
   <section class="focus-only" id="focusDashboard" aria-live="polite">
-    <div class="top5-head">
-      <div><div class="eyebrow">Current signals</div><div class="top5-title">Top 5</div><div class="top5-sub">Solo LONG e SHORT attivi. I dati restano separati dalla decisione del modello.</div></div>
-      
-    </div>
+    <div class="top5-head"><div><div class="top5-title">Top 5 signals</div></div></div>
     <div id="top5Grid" class="top5-grid"></div>
   </section>
 
@@ -1611,26 +1608,27 @@ function renderFocus(data){
     return;
   }
   if(!data.ok){
-    box.innerHTML='<div class="top5-empty"><div class="eyebrow">Signal feed</div><h2 style="margin:8px 0 6px">Nessun risultato disponibile</h2><div class="small">'+esc(data.error||"Il feed dei segnali non è disponibile in questo momento.")+'</div></div>';
+    box.innerHTML='<div class="top5-empty"><h2 style="margin:0 0 6px">Nessun segnale disponibile</h2></div>';
     return;
   }
   const picks=(data.signals||[]).filter(x=>x.signal==="LONG"||x.signal==="SHORT").slice(0,5);
   if(!picks.length){
-    box.innerHTML='<div class="top5-empty"><div class="eyebrow">Signal feed</div><h2 style="margin:8px 0 6px">Nessun segnale</h2><div class="small">Nessun LONG o SHORT supera i criteri correnti.</div></div>';
+    box.innerHTML='<div class="top5-empty"><h2 style="margin:0">Nessun segnale</h2></div>';
     return;
   }
   box.innerHTML=picks.map((r,i)=>{
     const d=r.decision||{};
+    const confidenceNumber=Number(r.confidence);
+    const confidenceMeter=Number.isFinite(confidenceNumber)?Math.max(0,Math.min(100,confidenceNumber*100)):0;
     return '<article class="pick-card pick-'+(r.signal==="LONG"?"long":"short")+(i===0?' pick-primary':'')+'" data-focus-symbol="'+esc(r.symbol)+'" tabindex="0" role="button" aria-label="Apri '+esc(r.symbol)+' nel market inspector">'+
       '<div class="pick-head"><div><div class="pick-rank">#'+(i+1)+'</div><div class="pick-symbol">'+esc(r.symbol)+'</div></div><span class="pick-signal '+cls(r.signal)+'">'+esc(r.signal)+'</span></div>'+
       '<div class="pick-stats">'+
       '<div class="pick-stat"><div class="k">Price</div><div class="v">'+num(r.realtime_price??r.price,2)+'</div></div>'+
-      '<div class="pick-stat"><div class="k">Confidence</div><div class="v">'+pct(r.confidence,1)+'</div></div>'+
+      '<div class="pick-stat pick-stat-meter"><div class="k">Confidence</div><div class="v">'+pct(r.confidence,1)+'</div><span class="signal-meter" aria-hidden="true" style="--meter:'+confidenceMeter.toFixed(1)+'%"></span></div>'+
       '<div class="pick-stat"><div class="k">Edge</div><div class="v">'+pct(d.robust_directional_edge,2)+'</div></div>'+
       '<div class="pick-stat"><div class="k">Score</div><div class="v">'+num(d.score,2)+'</div></div>'+
       '</div>'+
       '<div class="pick-chart"><canvas data-pick-chart="'+esc(r.symbol)+'"></canvas></div>'+
-      '<div class="pick-foot"><span>15m · closed candles</span></div>'+
       '</article>';
   }).join("");
   bindFocusCards();
