@@ -1,4 +1,4 @@
-name: Build Windows EXE
+name: Build Windows EXE # final portable package build
 
 on:
   workflow_dispatch:
