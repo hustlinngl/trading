@@ -66,10 +66,19 @@ def _promote_asset_bundle(asset_dir: str | Path, champion_dir: str | Path = "mod
     src = Path(asset_dir)
     dst = Path(champion_dir)
     dst.mkdir(parents=True, exist_ok=True)
-    for name in ("signal_model.joblib", "analog_memory.joblib", "regime_detector.joblib", "meta_regime_detector.joblib", "meta_policy.joblib", "feature_efficiency.joblib", "trade_window_specialist.joblib", "trade_window_training_report.json", "base_training_meta.json", "base_holdout_report.json", "deployment_manifest.json"):
+    managed = (
+        "signal_model.joblib", "analog_memory.joblib", "regime_detector.joblib",
+        "meta_regime_detector.joblib", "meta_policy.joblib", "feature_efficiency.joblib",
+        "trade_window_specialist.joblib", "trade_window_training_report.json",
+        "base_training_meta.json", "base_holdout_report.json", "deployment_manifest.json",
+    )
+    for name in managed:
         path = src / name
+        target = dst / name
         if path.exists():
-            shutil.copy2(path, dst / name)
+            shutil.copy2(path, target)
+        elif target.exists():
+            target.unlink()
 
 
 def train_base_asset(df, settings, *, promote_champion: bool = False):
