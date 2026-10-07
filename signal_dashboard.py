@@ -224,34 +224,51 @@ class SignalTerminal:
         }
 
     def _quotes(self, symbols: list[str]) -> dict:
-        """Best-effort realtime ticker overlay; failure never blocks signals."""
+        """Best-effort ticker overlay with a short TTL to prevent request storms."""
         result = {}
-        try:
-            exchange = self._get_exchange()
-        except Exception as exc:
-            return {"_error": f"{type(exc).__name__}:{exc}"}
+        now = time.monotonic()
+        missing = []
+        for symbol in list(dict.fromkeys(symbols)):
+            cached = self._quote_cache.get(symbol)
+            if cached and now - cached[0] <= self._quote_cache_ttl:
+                result[symbol] = dict(cached[1])
+            else:
+                missing.append(symbol)
+        if not missing:
+            return result
 
-        missing = list(dict.fromkeys(symbols))
+        exchange = self._get_exchange()
+        if exchange is None:
+            for symbol in missing:
+                result[symbol] = {
+                    "symbol": symbol,
+                    "error": self._exchange_error or "exchange_unavailable",
+                }
+            return result
+
         bulk = getattr(exchange, "fetch_tickers", None)
-        if missing and callable(bulk):
+        if callable(bulk):
             try:
-                # Large universes are cheaper and safer to fetch as the exchange-wide ticker map
-                # when the adapter supports that form (Binance does); small lists stay targeted.
                 tickers = bulk() if len(missing) > 100 else bulk(missing)
                 if isinstance(tickers, dict):
-                    for symbol in missing:
+                    for symbol in list(missing):
                         ticker = tickers.get(symbol)
                         if isinstance(ticker, dict):
-                            result[symbol] = self._ticker_row(symbol, ticker)
+                            row = self._ticker_row(symbol, ticker)
+                            result[symbol] = row
+                            self._quote_cache[symbol] = (now, row)
                     missing = [symbol for symbol in missing if symbol not in result]
             except Exception:
                 pass
 
         for symbol in missing:
             try:
-                result[symbol] = self._ticker_row(symbol, exchange.fetch_ticker(symbol))
+                row = self._ticker_row(symbol, exchange.fetch_ticker(symbol))
             except Exception as exc:
-                result[symbol] = {"symbol": symbol, "error": f"{type(exc).__name__}:{exc}"}
+                row = {"symbol": symbol, "error": f"{type(exc).__name__}:{exc}"}
+            result[symbol] = row
+            if row.get("price") is not None:
+                self._quote_cache[symbol] = (now, row)
         return result
 
     def _quote(self, symbol: str) -> dict:
