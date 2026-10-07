@@ -138,6 +138,9 @@ def register_holdout_access(
         x for x in ledger.get("holdout_accesses", [])
         if isinstance(x, dict) and str(x.get("holdout_key")) == key
     ]
+    current_run_id = str(run_id or f"{purpose}:{_now()}")
+    prior_run_ids = {str(x.get("run_id")) for x in previous}
+    prior_other_runs = {x for x in prior_run_ids if x != current_run_id}
     access = {
         "access_id": f"{key}:{len(previous) + 1}",
         "holdout_key": key,
@@ -146,7 +149,7 @@ def register_holdout_access(
         "holdout_end": str(holdout_end),
         "holdout_frac": float(holdout_frac),
         "purpose": str(purpose),
-        "run_id": str(run_id or f"{purpose}:{_now()}"),
+        "run_id": current_run_id,
         "accessed_at": _now(),
         "metadata": metadata or {},
     }
@@ -155,8 +158,9 @@ def register_holdout_access(
     _write_atomic(_path(path), ledger)
     return {
         "holdout_key": key,
-        "pristine": not previous,
+        "pristine": not prior_other_runs,
         "access_count": len(previous) + 1,
         "previous_access_count": len(previous),
+        "same_run_access_count": sum(1 for x in previous if str(x.get("run_id")) == current_run_id),
         "access": access,
     }
