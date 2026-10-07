@@ -22,7 +22,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-ROOT = Path(__file__).resolve().parent
+def _runtime_root() -> Path:
+    """Repository root in source mode; executable directory when frozen by PyInstaller."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+ROOT = _runtime_root()
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
@@ -1668,12 +1675,13 @@ def main():
         f"http://{args.host if args.host not in {'0.0.0.0','::'} else '127.0.0.1'}:"
         f"{args.port}/"
     )
-    print(f"{APP_TITLE} v{__version__}")
-    print(
-        f"Read-only · exchange={settings.exchange} · timeframe={settings.timeframe}"
-    )
-    print(f"Dashboard: {url}")
-    print("No order endpoints are exposed by this process.")
+    if sys.stdout is not None:
+        print(f"{APP_TITLE} v{__version__}")
+        print(
+            f"Read-only · exchange={settings.exchange} · timeframe={settings.timeframe}"
+        )
+        print(f"Dashboard: {url}")
+        print("No order endpoints are exposed by this process.")
 
     if not args.no_browser:
         try:
@@ -1684,7 +1692,8 @@ def main():
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nStopping signal terminal.")
+        if sys.stdout is not None:
+            print("\nStopping signal terminal.")
     finally:
         server.server_close()
 
