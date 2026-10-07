@@ -618,3 +618,17 @@ def test_signal_terminal_offline_state_does_not_claim_realtime():
     assert 'aria-current="page"' in html
     assert 'REALTIME offline' in html
     assert 'STATE · OFFLINE' in html
+
+def test_signal_terminal_frontend_music_and_click_effect_are_bounded():
+    import signal_dashboard as terminal_mod
+
+    html = terminal_mod.HTML
+    assert 'id="sakuraMusic"' in html
+    assert 'aria-pressed="false"' in html
+    assert 'let sakuraAudio=null;' in html
+    assert 'sakuraMaster.gain.value=.035' in html
+    assert 'document.addEventListener("pointerdown",e=>' in html
+    assert 'e.isPrimary || e.button!==0 || e.clientX<0 || e.clientY<0' in html
+    assert 'document.addEventListener("click",e=>' not in html
+    assert 'history-badge' not in html
+    assert 'class="focus-status"' in html
