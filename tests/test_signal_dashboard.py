@@ -23,6 +23,9 @@ def test_dashboard_responsive_ui_and_chart_edge_case():
     assert "pick-primary" in html
     assert "bindFocusCards" in html
     assert 'role="button"' in html
+    assert "connection-stamp" in html
+    assert 'aria-busy="true"' in html
+    assert "scan-progress" in html
 
 
 def test_dashboard_market_explorer_ui():
