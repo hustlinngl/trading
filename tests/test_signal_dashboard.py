@@ -789,3 +789,38 @@ def test_signal_terminal_frontend_music_and_click_effect_are_bounded():
     assert 'document.addEventListener("click",e=>' not in html
     assert 'history-badge' not in html
     assert 'class="focus-status"' not in html
+
+
+def test_signal_terminal_persists_discovered_universe_for_restart(tmp_path):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path, refresh_seconds=30)
+    meta = {
+        "universe_total": 3,
+        "universe_mode": "all_active_markets",
+        "market_counts": {"spot": 2, "swap": 1},
+    }
+    symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
+    terminal._save_market_snapshot(symbols, meta)
+
+    reloaded = terminal_mod.SignalTerminal(settings, tmp_path, refresh_seconds=30)
+    snapshot = reloaded._load_market_snapshot()
+
+    assert snapshot["symbols"] == symbols
+    assert snapshot["universe_total"] == 3
+    assert snapshot["market_counts"]["swap"] == 1
+    assert set(symbols).issubset(reloaded._allowed_live_symbols())
+
+
+def test_bootstrap_live_data_is_parallel_resumable_and_uses_canonical_timeframe_helper():
+    from ai_trading_lab import main as main_mod
+    import inspect
+
+    source = inspect.getsource(main_mod.main)
+    assert "ThreadPoolExecutor" in source
+    assert "thread_name_prefix='bootstrap'" in source
+    assert "timeframe_offset(" in source
+    assert ".tmp" in source
+    assert ".replace(path)" in source
+    assert "--workers" in source
