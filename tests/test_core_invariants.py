@@ -254,3 +254,12 @@ def test_meta_learning_core_mask_purges_calibration_boundary():
     mask = _pre_calibration_core_mask(idx, idx[15], 3)
     assert mask.iloc[:12].all()
     assert not mask.iloc[12:].any()
+
+
+def test_cross_asset_snapshot_is_bounded_by_anchor_time():
+    from ai_trading_lab.cross_asset import cross_asset_snapshot
+    idx = pd.date_range("2026-01-01", periods=12, freq="15min", tz="UTC")
+    anchor = pd.DataFrame({"open":100.0,"high":101.0,"low":99.0,"close":np.arange(12)+100.0,"volume":1000.0}, index=idx[:10])
+    other = pd.DataFrame({"open":100.0,"high":101.0,"low":99.0,"close":np.arange(12)+100.0,"volume":1000.0}, index=idx)
+    out = cross_asset_snapshot({"BTC/USDT":anchor,"ETH/USDT":other},"BTC/USDT")
+    assert "cross_asset_mean_return" in out
