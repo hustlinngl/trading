@@ -128,6 +128,7 @@ class SignalTerminal:
         self._assessment_cache = {}
         self._scan_thread = None
         self._scan_started_at = 0.0
+        self._scan_progress: dict[str, object] = {}
         self.state_root.joinpath("logs").mkdir(parents=True, exist_ok=True)
         self.state_root.joinpath("data", "history").mkdir(parents=True, exist_ok=True)
 
@@ -373,6 +374,7 @@ class SignalTerminal:
             "refresh_seconds": self.refresh_seconds,
             "scan_in_progress": True,
             "scan_started_at": None,
+            "scan_progress": dict(self._scan_progress),
             "config": {
                 "exchange": self.settings.exchange,
                 "timeframe": self.settings.timeframe,
@@ -421,9 +423,11 @@ class SignalTerminal:
                         if self._scan_started_at else None
                     )
                     base["scan_seconds"] = round(max(0.0, now - self._scan_started_at), 1)
+                    base["scan_progress"] = dict(self._scan_progress)
                     return base
 
                 self._scan_started_at = now
+                self._scan_progress = {"stage": "discovering", "evaluated": 0, "total": 0, "reused": 0, "refreshed": 0, "signals": 0, "waits": 0, "failures": 0}
                 self._scan_thread = threading.Thread(
                     target=self._terminal_state,
                     kwargs={"force": True},
@@ -448,12 +452,18 @@ class SignalTerminal:
                         or (self.settings.symbol,)
                     )
                 )
+                def report_progress(progress):
+                    if isinstance(progress, dict):
+                        with self._lock:
+                            self._scan_progress = dict(progress)
+
                 scan_result = scan_top5(
                     self.settings,
                     str(self.root),
                     exchange=self._get_exchange(),
                     cache=self._assessment_cache,
                     return_meta=True,
+                    progress_callback=report_progress,
                 )
                 if isinstance(scan_result, tuple):
                     assessments, universe_meta = scan_result
@@ -562,6 +572,16 @@ class SignalTerminal:
                         time.monotonic() - started, 3
                     ),
                     "refresh_seconds": self.refresh_seconds,
+                    "scan_progress": {
+                        "stage": "complete",
+                        "evaluated": int(universe_meta.get("scan_completed", universe_meta.get("universe_evaluated", len(signals)))),
+                        "total": int(universe_meta.get("scan_total", universe_meta.get("universe_evaluated", len(signals)))),
+                        "reused": int(universe_meta.get("assessments_reused", 0)),
+                        "refreshed": int(universe_meta.get("assessments_refreshed", 0)),
+                        "signals": int(universe_meta.get("universe_signals", len(signals))),
+                        "waits": int(universe_meta.get("universe_waits", 0)),
+                        "failures": int(universe_meta.get("assessment_failures", 0)),
+                    },
                     "config": {
                         "exchange": self.settings.exchange,
                         "timeframe": self.settings.timeframe,
@@ -648,6 +668,7 @@ class SignalTerminal:
             with self._lock:
                 self._cached_state = cached_state
                 self._cached_at = time.time()
+                self._scan_progress = dict(cached_state.get("scan_progress") or {})
                 self._scan_thread = None
             return cached_state
 
@@ -958,7 +979,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
 .pick-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:0 18px 12px}.pick-stat{padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.025)}
 .pick-stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.pick-stat .v{margin-top:3px;font-weight:700}.pick-chart{height:220px;padding:0 8px 8px}.pick-chart canvas{display:block;width:100%;height:100%}
 .pick-foot{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 18px 15px;border-top:1px solid rgba(255,255,255,.05);font-size:11px;color:var(--muted)}
-.history-badge{padding:4px 8px;border-radius:999px;background:rgba(125,232,255,.06);border:1px solid rgba(125,232,255,.12);color:#9eeeff}.top5-empty{padding:48px 24px;text-align:center;border:1px dashed rgba(255,120,200,.18);border-radius:18px;background:rgba(255,255,255,.015)}
+.history-badge{padding:4px 8px;border-radius:999px;background:rgba(125,232,255,.06);border:1px solid rgba(125,232,255,.12);color:#9eeeff}.scan-progress{height:3px;max-width:420px;margin:18px auto 0;background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden}.scan-progress span{display:block;height:100%;background:linear-gradient(90deg,var(--pink),var(--cyan));box-shadow:0 0 12px rgba(255,120,200,.35);transition:width .24s ease}.top5-empty{padding:48px 24px;text-align:center;border:1px dashed rgba(255,120,200,.18);border-radius:18px;background:rgba(255,255,255,.015)}
 .legacy-hidden{display:none!important}@media(max-width:980px){.top5-grid{grid-template-columns:1fr}.pick-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:640px){.wrap{padding:16px 12px 40px}.focus-only .top5-title{font-size:23px}.pick-chart{height:190px}}@media(prefers-reduced-motion:reduce){.pick-card{transition:none}}
 </style>
 <style>
@@ -1476,7 +1497,13 @@ function renderFocus(data){
       coverage.textContent=total ? "Universe "+total+" · models "+backed+" · eligible "+eligible+" · evaluated "+evaluated+" · wait "+waits : "Discovering markets…";
     }
     box.innerHTML='<div class="top5-empty"><div class="eyebrow">Scanning</div><h2 style="margin:8px 0 6px">Analisi dell\'universo in corso</h2><div class="small">Il motore sta valutando i mercati con bundle verificati. La superficie si aggiorna appena il ranking è pronto.</div></div>';
-    status.textContent="scanning";status.className="pill warn";
+    const p=data.scan_progress||{};
+    const done=Number(p.evaluated??0), total=Number(p.total??summary.assets_scanned??0), signals=Number(p.signals??0);
+    const pctDone=total>0?Math.round(done/total*100):0;
+    status.textContent=(total?done+"/"+total+" · ":"")+"scanning";status.className="pill warn";
+    if(done>0){
+      box.innerHTML='<div class="top5-empty"><div class="eyebrow">Scanning · '+pctDone+'%</div><h2 style="margin:8px 0 6px">Analisi dell\'universo in corso</h2><div class="small">Valutati '+done+' / '+total+' mercati · '+signals+' segnali candidati · '+Number(p.waits??0)+' WAIT.</div><div class="scan-progress"><span style="width:'+pctDone+'%"></span></div></div>';
+    }
     return;
   }
   if(!data.ok){
