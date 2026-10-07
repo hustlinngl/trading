@@ -29,6 +29,9 @@ def test_dashboard_responsive_ui_and_chart_edge_case():
     assert 'data-target="focusDashboard"' in html
     assert 'class="nav" id="nav"' in html
     assert "const reveal=id=>" in html
+    assert "section-reveal" in html
+    assert "statusBreath" in html
+    assert "prefers-reduced-motion:reduce" in html
 
 
 def test_dashboard_market_explorer_ui():
