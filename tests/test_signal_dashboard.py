@@ -598,3 +598,15 @@ def test_signal_terminal_interactive_rows_use_canonical_market_list():
     assert 'new Set(state.marketSymbols||[])' in html
     assert 'role="button" aria-label="Apri '+ in html
     assert 'row.onkeydown=e=>' in html
+
+def test_signal_terminal_frontend_races_are_latest_request_wins():
+    import signal_dashboard as terminal_mod
+
+    html = terminal_mod.HTML
+    assert "let quoteRequest=0;" in html
+    assert "request!==quoteRequest" in html
+    assert "let refreshBusy=false;" in html
+    assert "if(refreshBusy)return;" in html
+    assert "clearTimeout(refreshTimer)" in html
+    assert 'aria-current="page"' in html
+    assert "scroll-margin-top:82px" in html
