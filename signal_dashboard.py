@@ -421,6 +421,8 @@ class SignalTerminal:
                         "expected_return": row.get("expected_return"),
                         "expected_return_lcb": details.get("expected_return_lcb"),
                         "expected_return_ucb": details.get("expected_return_ucb"),
+                        "robust_directional_edge": details.get("robust_directional_edge"),
+                        "selection_score": details.get("selection_score"),
                         "score": details.get("score"),
                         "meta_success": details.get("meta_success"),
                         "model_disagreement": details.get("model_disagreement"),
@@ -442,11 +444,9 @@ class SignalTerminal:
                 signals.sort(
                     key=lambda x: (
                         _signal_rank(str(x.get("signal", "WAIT"))),
+                        float((x.get("decision") or {}).get("selection_score", 0.0) or 0.0),
+                        float((x.get("decision") or {}).get("robust_directional_edge", 0.0) or 0.0),
                         float(x.get("confidence", 0.0) or 0.0),
-                        float(
-                            (x.get("decision") or {}).get("score", -9.0)
-                            or -9.0
-                        ),
                     ),
                     reverse=True,
                 )
@@ -512,7 +512,7 @@ class SignalTerminal:
                     "outcome_update": _json_safe(outcome_update),
                     "notes": [
                         "Sola lettura: il terminale non espone API per ordini.",
-                        "Ogni scan usa il gate live/paper del motore addestrato.",
+                        "Ogni scan valuta l'universo attivo scoperto dall'exchange, limitandosi ai bundle verificati per la Top 5.",
                         "WAIT è l'esito predefinito quando dati, provenienza o evidenze non sono sufficienti.",
                     ],
                 }
