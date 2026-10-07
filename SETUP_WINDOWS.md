@@ -41,3 +41,14 @@ python signal_dashboard.py
 
 The dashboard refreshes realtime quotes through the configured public exchange adapter. The `bootstrap-live-data` command creates `data/historical/<SYMBOL>_<TIMEFRAME>.csv`; live model inference still requires a compatible trained bundle under `models/assets/<SYMBOL>/`.
 
+### All symbols
+
+With no `--symbols` argument, the bootstrap command discovers the full active exchange universe eligible for OHLCV and downloads it. For example:
+
+```powershell
+python -m ai_trading_lab.main bootstrap-live-data --live-bars 600
+```
+
+Use `--market-types spot,swap,future` to make the scope explicit, or `--symbols BTC/USDT,ETH/USDT` to limit the run. The command is resumable and reuses sufficiently fresh CSVs.
+
+

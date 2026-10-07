@@ -161,6 +161,69 @@ def test_signal_terminal_publishes_market_data_without_model_signals(tmp_path, m
     assert state["market_data"]["quotes"]["ETH/USDT"]["ask"] == 5.1
 
 
+
+def test_signal_terminal_uses_discovered_market_universe_for_realtime_quotes(tmp_path, monkeypatch):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    settings.live_symbols = ("BTC/USDT",)
+    seen = {}
+
+    class FakeExchange:
+        def fetch_tickers(self):
+            seen["called_without_symbols"] = True
+            return {
+                "BTC/USDT": {"last": 100.0, "bid": 99.9, "ask": 100.1, "timestamp": 1},
+                "ETH/USDT": {"last": 5.0, "bid": 4.9, "ask": 5.1, "timestamp": 1},
+                "SOL/USDT": {"last": 2.0, "bid": 1.9, "ask": 2.1, "timestamp": 1},
+            }
+
+        def fetch_ticker(self, symbol):
+            raise AssertionError("exchange-wide ticker path should cover discovered universe")
+
+    monkeypatch.setattr(
+        terminal_mod, "exchange_client", lambda *args, **kwargs: FakeExchange()
+    )
+    monkeypatch.setattr(
+        terminal_mod,
+        "scan_top5",
+        lambda *args, **kwargs: ([], {
+            "universe_total": 150,
+            "universe_model_backed": 0,
+            "universe_model_eligible": 0,
+            "universe_evaluated": 0,
+            "universe_signals": 0,
+            "universe_waits": 0,
+            "assessment_failures": 0,
+            "market_symbols": ["BTC/USDT", "ETH/USDT", "SOL/USDT"] + [f"COIN{i}/USDT" for i in range(147)],
+            "market_counts": {"spot": 150},
+        }),
+    )
+    monkeypatch.setattr(
+        terminal_mod,
+        "update_live_signal_outcomes",
+        lambda *args, **kwargs: {"updated": 0, "open": 0, "closed": 0},
+    )
+
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path, refresh_seconds=30)
+    state = terminal._terminal_state(force=True)
+
+    assert seen["called_without_symbols"] is True
+    assert len(state["market_data"]["symbols"]) == 150
+    assert state["market_data"]["quotes"]["ETH/USDT"]["price"] == 5.0
+
+
+def test_bootstrap_command_is_available():
+    from ai_trading_lab import main as main_mod
+
+    # argparse is built inside main(), so inspect the source-level command contract.
+    import inspect
+    source = inspect.getsource(main_mod.main)
+    assert "bootstrap-live-data" in source
+    assert "--all-symbols" in source
+    assert "--market-types" in source
+
+
 def test_signal_terminal_reuses_exchange_for_outcome_tracking(tmp_path, monkeypatch):
     import signal_dashboard as terminal_mod
 

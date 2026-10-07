@@ -232,7 +232,9 @@ class SignalTerminal:
         bulk = getattr(exchange, "fetch_tickers", None)
         if missing and callable(bulk):
             try:
-                tickers = bulk(missing)
+                # Large universes are cheaper and safer to fetch as the exchange-wide ticker map
+                # when the adapter supports that form (Binance does); small lists stay targeted.
+                tickers = bulk() if len(missing) > 100 else bulk(missing)
                 if isinstance(tickers, dict):
                     for symbol in missing:
                         ticker = tickers.get(symbol)
@@ -509,9 +511,15 @@ class SignalTerminal:
                     "universe_evaluated": len(assessments),
                     "universe_mode": "compatibility_fallback",
                 }
-            # Tickers are presentation-only; never poll the entire scan universe.
+            # Realtime quotes follow the discovered exchange universe when available,
+            # while model inference remains limited to compatible model-backed markets.
+            market_symbols = sorted({
+                str(symbol).strip()
+                for symbol in (universe_meta.get("market_symbols") or [])
+                if str(symbol).strip()
+            })
             symbols = list(dict.fromkeys(
-                configured_symbols + [x.symbol for x in assessments]
+                market_symbols or configured_symbols or [x.symbol for x in assessments]
             ))
             write_live_snapshot(assessments, str(self.state_root))
             append_live_signal_history(assessments, str(self.state_root))
@@ -528,11 +536,6 @@ class SignalTerminal:
                     "error": f"{type(exc).__name__}:{exc}",
                 }
 
-            market_symbols = sorted({
-                str(symbol).strip()
-                for symbol in (universe_meta.get("market_symbols") or [])
-                if str(symbol).strip()
-            })
             quotes = self._quotes(symbols)
             market_data = {
                 "generated_at": datetime.now(timezone.utc).isoformat(),
