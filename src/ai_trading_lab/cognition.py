@@ -85,8 +85,10 @@ class CognitionEngine:
 
     def evolve_strategies(self,df):
         try:
-            out=evolve(df,self.settings); return out if isinstance(out,list) else []
-        except Exception: return []
+            from .research import strategy_discovery
+            return strategy_discovery(df,self.settings)
+        except Exception:
+            return []
 
     def observe_external(self,query,budget):
         """Collect optional external intelligence without giving it execution authority."""
