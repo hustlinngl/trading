@@ -267,17 +267,18 @@ def test_efficiency_is_explicit_when_execution_telemetry_is_missing():
     assert payload["configured_slippage_bps"] == 5.0
 
 
-def test_dashboard_contains_delta_kpis_cognition_and_live_endpoint():
+def test_dashboard_exposes_only_the_direct_signal_surface():
     import signal_dashboard as terminal_mod
 
     html = terminal_mod.HTML
-    assert 'id="kpiPrice"' in html
-    assert 'id="kpiRegime"' in html
-    assert 'id="kpiRisk"' in html
-    assert 'id="kpiEfficiency"' in html
-    assert "Live AI Cognition" in html
-    assert "function applyLiveDelta" in html
-    assert "/api/live?symbol=" in html
+    assert 'id="top5Grid"' in html
+    assert 'id="kpiPrice"' not in html
+    assert 'id="kpiRegime"' not in html
+    assert 'id="kpiRisk"' not in html
+    assert 'id="kpiEfficiency"' not in html
+    assert "Live AI Cognition" not in html
+    assert "function applyLiveDelta" not in html
+    assert "/api/live?symbol=" not in html
 
 
 def test_settings_still_construct():
