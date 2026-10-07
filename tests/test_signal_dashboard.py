@@ -23,15 +23,15 @@ def test_dashboard_responsive_ui_and_chart_edge_case():
     assert "pick-primary" in html
     assert "bindFocusCards" in html
     assert 'role="button"' in html
-    assert "connection-stamp" in html
+    assert "connection-stamp" not in html
     assert 'aria-busy="true"' in html
     assert "scan-progress" in html
     assert 'data-target="focusDashboard"' in html
     assert 'class="nav" id="nav"' in html
     assert "const reveal=id=>" in html
     assert "section-reveal" in html
-    assert "statusBreath" in html
     assert "prefers-reduced-motion:reduce" in html
+    assert 'id="sakuraMusic"' in html
 
 
 def test_dashboard_market_explorer_ui():
@@ -611,13 +611,23 @@ def test_signal_terminal_frontend_races_are_latest_request_wins():
     assert 'aria-current="page"' in html
     assert "scroll-margin-top:82px" in html
 
-def test_signal_terminal_offline_state_does_not_claim_realtime():
+def test_signal_terminal_primary_surface_is_result_first():
     import signal_dashboard as terminal_mod
 
     html = terminal_mod.HTML
-    assert 'aria-current="page"' in html
-    assert 'REALTIME offline' in html
-    assert 'STATE · OFFLINE' in html
+    assert 'id="focusDashboard"' in html
+    assert 'id="top5Grid"' in html
+    assert 'id="focusCoverage"' not in html
+    assert 'id="focusStatus"' not in html
+    assert 'id="stamp"' not in html
+    assert 'id="deckBundle"' not in html
+    assert 'history-badge' not in html
+    assert 'function pill(' not in html
+    assert 'Price' in html
+    assert 'Confidence' in html
+    assert 'Edge' in html
+    assert 'Score' in html
+
 
 def test_signal_terminal_frontend_music_and_click_effect_are_bounded():
     import signal_dashboard as terminal_mod
@@ -631,4 +641,4 @@ def test_signal_terminal_frontend_music_and_click_effect_are_bounded():
     assert 'e.isPrimary || e.button!==0 || e.clientX<0 || e.clientY<0' in html
     assert 'document.addEventListener("click",e=>' not in html
     assert 'history-badge' not in html
-    assert 'class="focus-status"' in html
+    assert 'class="focus-status"' not in html
