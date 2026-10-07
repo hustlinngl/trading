@@ -751,7 +751,7 @@ class SignalTerminal:
                 },
                 "signals": signals,
                 "market_data": market_data,
-                "outcome_update": _json_safe(outcome_update),
+                "feedback": _json_safe(outcome_update),
                 "notes": [
                     "Sola lettura: il terminale non espone API per ordini.",
                     "Ogni scan valuta l'universo attivo scoperto dall'exchange, limitandosi ai bundle verificati per la Top 5.",
@@ -797,7 +797,7 @@ class SignalTerminal:
                     "source": "persisted_universe",
                 },
                 "journal": self._journal(),
-                "outcome_update": {},
+                "feedback": {},
                 "error": f"{type(exc).__name__}:{exc}",
                 "notes": [
                     "Il terminale ha eseguito un fail-closed.",
@@ -1647,10 +1647,12 @@ function renderSignalSummary(data){
   const quotes=Number(m.quote_count||0);
   const source=m.source==="exchange"?"LIVE":"CACHE";
   const quoteLabel=quotes?source+" · "+quotes+" quote":"DATA —";
+  const closed=Number((data.feedback||{}).closed||0);
   el.innerHTML=
     '<span class="summary-pill '+(active?'hot':'')+'"><strong>'+active+'</strong> active</span>'+
     '<span class="summary-pill"><strong>'+markets+'</strong> markets</span>'+
-    '<span class="summary-pill"><strong>'+esc(quoteLabel)+'</strong></span>';
+    '<span class="summary-pill"><strong>'+esc(quoteLabel)+'</strong></span>'+
+    (closed?'<span class="summary-pill"><strong>'+closed+'</strong> resolved</span>':"");
 }
 function renderFocus(data){
   state.data=data;
