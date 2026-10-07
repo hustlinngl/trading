@@ -1132,6 +1132,12 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
 
 /* Focus mode: only verified Top 5 picks and their historical charts. */
 .focus-only .top5-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;margin:10px 0 18px}
+.signal-summary{display:flex;gap:7px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+.summary-pill{display:inline-flex;align-items:center;gap:4px;padding:6px 9px;border:1px solid rgba(255,255,255,.08);border-radius:999px;background:rgba(255,255,255,.025);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.summary-pill strong{color:var(--text);font-weight:800}
+.summary-pill.hot{border-color:rgba(255,120,200,.28);box-shadow:0 0 16px rgba(255,120,200,.08)}
+@media(max-width:720px){.signal-summary{justify-content:flex-start;margin-top:8px}.top5-head{align-items:flex-start;flex-direction:column}}
+
 .focus-only .top5-title{font-size:28px;font-weight:800;letter-spacing:-.03em}
 .top5-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
 .pick-card{position:relative;overflow:hidden;border:1px solid rgba(255,120,200,.14);border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.015)),var(--panel);box-shadow:var(--shadow);cursor:pointer;transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}\n.pick-card{animation:signalCardIn .42s cubic-bezier(.2,.7,.2,1) both;animation-delay:var(--pick-delay,0ms);will-change:transform,opacity}\n@keyframes signalCardIn{from{opacity:0;transform:translateY(9px) scale(.992)}to{opacity:1;transform:none}}
