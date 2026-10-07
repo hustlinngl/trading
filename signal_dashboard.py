@@ -927,6 +927,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
         </div>
         <div class="chart-tools">
           <span id="livePrice" class="pill good">REALTIME —</span>
+          <span id="historySource" class="pill">HISTORY —</span>
           <select id="asset"></select>
           <select id="range"><option value="120">120</option><option value="240" selected>240</option><option value="480">480</option></select>
         </div>
@@ -1534,6 +1535,12 @@ async function loadHistory(symbol){
     const history=await res.json();
     if(request!==state.historyRequest || state.selected!==symbol)return;
     state.history=history;
+    const source=$("historySource");
+    if(source){
+      const label=history.source==="network"?"HISTORY · LIVE":history.source==="local_cache"?"HISTORY · CACHE":history.source==="bundled"?"HISTORY · BUNDLED":"HISTORY · OFFLINE";
+      source.textContent=label;
+      source.className="pill "+(history.bars?.length ? "good" : "warn");
+    }
     const signals=(state.data&&state.data.signals)||[];
     drawChart(history,signals,(state.data&&state.data.journal)||[],signals.find(x=>x.symbol===symbol)?.realtime_price);
     await loadQuote(symbol);
