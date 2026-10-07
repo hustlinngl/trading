@@ -148,3 +148,21 @@ def test_signal_terminal_bulk_ticker_path_and_browser_escape(tmp_path, monkeypat
     out = terminal._quotes(["BTC/USDT"])
     assert out["BTC/USDT"]["price"] == 321.0
     assert 'function esc(v){return String(v??"").replace(/[&<>"]/g,c=>c==="&"?"&amp;":c==="<"?"&lt;":c===">"?"&gt;":"&quot;");}' in terminal_mod.HTML
+
+
+def test_signal_terminal_alpha_ui_keeps_visual_layer_separate_from_execution():
+    import signal_dashboard as terminal_mod
+
+    html = terminal_mod.HTML
+    assert "anime-cursor" in html
+    assert "click-ripple" in html
+    assert "initAlphaMotion" in html
+    assert "initNavigation" in html
+    assert 'data-target="market"' in html
+    assert 'data-target="detail"' in html
+    assert 'data-target="journal"' in html
+    assert 'data-target="evidencePanel"' in html
+    assert 'id="detail"' in html
+    assert "body.alpha-pointer" in html
+    assert "prefers-reduced-motion:reduce" in html
+    assert "do_POST" not in html
