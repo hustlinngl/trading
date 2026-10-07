@@ -1014,9 +1014,6 @@ h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
 .nav-btn:not(.active):hover{background:#141a21;border-color:#29323d}
 .pick-card:hover{transform:translateY(-2px);border-color:#3a4654;box-shadow:0 12px 30px rgba(0,0,0,.20)}
 .actions button::after{display:none}
-.connection-stamp{display:inline-flex;align-items:center;gap:7px;color:#77818e;font-size:10px;letter-spacing:.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
-.connection-stamp::before{content:"";width:6px;height:6px;border-radius:50%;background:#66717d;box-shadow:0 0 0 3px rgba(102,113,125,.08)}
-.connection-stamp.online::before{background:#55d79a;box-shadow:0 0 0 3px rgba(85,215,154,.08),0 0 10px rgba(85,215,154,.22);animation:statusBreath 2.4s ease-in-out infinite}
 .music-toggle{background:transparent!important;border-color:transparent!important;box-shadow:none!important;color:#737e8b;font-size:10px;letter-spacing:.04em;padding:8px 7px;min-height:38px}
 .music-toggle:hover{color:#d8a7c2;border-color:rgba(229,138,184,.18)!important;background:rgba(229,138,184,.045)!important}
 .music-toggle[aria-pressed="true"]{color:#e58ab8;text-shadow:0 0 10px rgba(229,138,184,.2)}
@@ -1169,7 +1166,6 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   .metric,.pick-card{transition:none!important}
   .nav{scroll-behavior:auto}
   .section-reveal{animation:none!important}
-  .connection-stamp.online::before{animation:none!important}
 }
 </style>
 
@@ -1845,7 +1841,7 @@ function renderDecisionDeck(signals){
     ["Duration",!!d.trade_window_ready,d.trade_window_ready?"ready":"wait"],
     ["Deployment",!!b.compatible&&!!b.manifest_ready,b.compatible&&b.manifest_ready?"compatible":"wait"]
   ];
-  trace.innerHTML=nodes.map(n=>'<div class="trace-node '+(n[1]?"ready":"wait")+'"><i class="trace-dot"></i><strong>'+n[0]+'</strong><span>'+n[2]+'</span></div>').join("");
+  trace.innerHTML=nodes.map(n=>'<div class="trace-node"><strong>'+n[0]+'</strong><span>'+n[2]+'</span></div>').join("");
 }
 
 
@@ -1856,10 +1852,6 @@ function timeLabel(v){
 function signalOutcomeClass(outcome){
   return outcome==="WIN"?"good":outcome==="LOSS"?"bad":outcome==="TIMEOUT"?"warn":"";
 }
-function traceState(ok,label){
-  return '<span class="trace-state">'+esc(label)+'</span>';
-}
-
 function renderTimeline(signals,journal){
   const box=$("signalTimeline");
   if(!box)return;
@@ -1948,7 +1940,7 @@ function openInspector(symbol){
         (active.reason_codes||[]).slice(0,12).map(x=>'<span class="reason">'+esc(x)+'</span>').join("")+
       '</div></div>'+
       '<div class="inspector-section"><h3>Decision trace</h3><div class="inspector-trace">'+
-        trace.map(t=>'<div class="inspector-trace-row"><strong>'+t[0]+'</strong><span>'+t[2]+'</span>'+traceState(t[1],t[1]?"READY":"WAIT")+'</div>').join("")+
+        trace.map(t=>'<div class="inspector-trace-row"><strong>'+t[0]+'</strong><span>'+t[2]+'</span></div>').join("")+
       '</div></div>'+
       '<div class="inspector-section"><h3>Provenance</h3>'+
         '<div class="inspector-card"><div class="k">Training</div><div class="v">'+esc(b.training_rows??"—")+' rows</div><div class="small">'+esc(b.training_end??"—")+'</div></div>'+
