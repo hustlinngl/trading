@@ -65,6 +65,10 @@ def live_signal_gate(row, settings):
 
     if action not in {"LONG", "SHORT"}:
         reasons.append("base_policy")
+    if bool(row.get("funding_data_missing", False)):
+        reasons.append("funding_data_missing")
+    if direction < 0 and bool(getattr(settings, "require_short_borrow_cost", True)) and float(getattr(settings, "short_borrow_bps_per_bar", 0.0)) <= 0.0:
+        reasons.append("short_borrow_cost_missing")
 
     if bool(getattr(settings, "signal_only_mode", True)):
         probability_floor = max(
