@@ -605,7 +605,6 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
     <path d="M43 50c3 1 6 4 7 7" stroke="#ff78c8" stroke-width="2" stroke-linecap="round"/>
   </svg>
 </div>
-<div id="click-layer" aria-hidden="true"></div>
 <div class="wrap">
   <div class="top">
     <div>
@@ -721,7 +720,8 @@ const state = { data:null, history:null, selected:null, historyRequest:0 };
 
 function initAlphaMotion(){
   const fine=window.matchMedia&&window.matchMedia("(pointer:fine)").matches;
-  if(!fine)return;
+  const reduced=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(!fine || reduced)return;
   document.body.classList.add("alpha-pointer");
   const cursor=$("anime-cursor"), aura=$("pointer-aura");
   let px=-100,py=-100,tx=px,ty=py,pending=false;
