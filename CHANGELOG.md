@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.23
+- Hardened frontend refresh scheduling to prevent overlapping state requests.
+- Made realtime quote updates latest-request-wins when the selected asset changes quickly.
+- Added active-navigation semantics and scroll offsets that respect the sticky section bar.
+
 ## 0.9.22
 - Fixed Radar/Intelligence row activation by using the canonical market list instead of the input element's nonexistent options collection.
 - Added Enter/Space activation and focus treatment for interactive market rows.
