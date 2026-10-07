@@ -43,7 +43,6 @@ MANAGED_BUNDLE_FILES = ENGINE_ARTIFACTS + (
     "base_training_meta.json",
     "base_holdout_report.json",
     "deployment_manifest.json",
-    "promotion_state.json",
 )
 
 def bundle_artifact_fingerprint(bundle: str | Path) -> str:
