@@ -1001,6 +1001,7 @@ h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
 
 <style>
 /* UI polish: restrained Sakura identity + responsive safety */
+.pick-card:hover{box-shadow:0 0 0 1px rgba(229,138,184,.10),0 0 34px rgba(229,138,184,.16),0 16px 40px rgba(0,0,0,.22)}.pick-card::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;background:radial-gradient(280px 90px at 50% 0,rgba(229,138,184,.10),transparent 72%);opacity:.55;animation:cardGlow 4s ease-in-out infinite}.pick-card.pick-long::after{background:radial-gradient(280px 90px at 50% 0,rgba(85,215,154,.11),transparent 72%)}.pick-card.pick-short::after{background:radial-gradient(280px 90px at 50% 0,rgba(242,118,142,.11),transparent 72%)}@keyframes cardGlow{0%,100%{opacity:.28;filter:blur(0)}50%{opacity:.72;filter:blur(2px)}}.actions button:hover,.asset-picker button:hover{box-shadow:0 0 0 1px rgba(229,138,184,.12),0 0 24px rgba(229,138,184,.18),0 8px 24px rgba(0,0,0,.2)}
 .asset-picker{display:flex;align-items:center;gap:6px;min-width:220px;max-width:330px}.asset-picker input{width:100%;min-width:0;height:38px;padding:0 11px;border:1px solid var(--line);border-radius:10px;background:#0e1218;color:var(--text);font:inherit;outline:none}.asset-picker input:focus{border-color:rgba(229,138,184,.55);box-shadow:0 0 0 3px rgba(229,138,184,.08),0 0 22px rgba(229,138,184,.10)}.asset-picker button{height:38px;padding-inline:12px;flex:0 0 auto}@media(max-width:760px){.asset-picker{width:100%;max-width:none;order:2}.chart-tools{width:100%}}
 :root{
   --ui-radius:14px;
