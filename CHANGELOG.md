@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.27
+- Fixed a packaging-blocking dashboard indentation regression.
+- Replaced primary scan-progress copy with lightweight skeleton results so the main screen stays signal-focused while data is loading.
+
+
 ## 0.9.26
 - Reworked the primary dashboard as a signal-only results surface: no visible system metrics, connection status, universe coverage or deployment badges.
 - Simplified the decision inspector to show only signal outputs, supporting metrics and machine reasons.
