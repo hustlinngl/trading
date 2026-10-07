@@ -61,5 +61,5 @@ python signal_dashboard.py
 
 Signals are deliberately fail-closed: live prices can be displayed without a model, but LONG/SHORT results require compatible trained and validated model bundles.
 
-By default, `bootstrap-live-data` now discovers the full active exchange universe instead of only BTC/ETH/SOL. Use `--symbols` for a smaller subset, or `--market-types spot,swap,future` to control the market types downloaded. The dashboard's live quote universe follows the exchange-discovered markets; model signals still require compatible bundles.
+By default, `bootstrap-live-data` discovers the full active OHLCV exchange universe. It is resumable, writes each CSV atomically, and uses the configured public-data worker pool (capped for safety). Use `--symbols` for a smaller subset, `--market-types spot,swap,future` to control the scope, or `--workers 1` for a conservative sequential run. The dashboard's live quote universe follows the exchange-discovered markets; model signals still require compatible bundles.
 
