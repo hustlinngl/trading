@@ -232,7 +232,9 @@ class SignalTerminal:
         bulk = getattr(exchange, "fetch_tickers", None)
         if missing and callable(bulk):
             try:
-                tickers = bulk(missing)
+                # Large universes are cheaper and safer to fetch as the exchange-wide ticker map
+                # when the adapter supports that form (Binance does); small lists stay targeted.
+                tickers = bulk() if len(missing) > 100 else bulk(missing)
                 if isinstance(tickers, dict):
                     for symbol in missing:
                         ticker = tickers.get(symbol)
