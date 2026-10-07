@@ -983,7 +983,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
 .pick-card{cursor:pointer;position:relative;isolation:isolate}
 .pick-card::after{content:"↗";position:absolute;right:14px;top:11px;font-size:12px;color:#596473;opacity:0;transform:translate(-2px,2px);transition:opacity .16s ease,transform .16s ease}
 .pick-card:hover::after,.pick-card:focus-visible::after{opacity:1;transform:none}
-.pick-card:focus-visible{outline:none;border-color:#586474;box-shadow:0 0 0 2px rgba(229,138,184,.12),0 10px 28px rgba(0,0,0,.22)}\n.interactive-row[role="button"]{cursor:pointer;transition:background .14s ease,box-shadow .14s ease}\n.interactive-row[role="button"]:hover{background:rgba(255,255,255,.018)}\n.interactive-row[role="button"]:focus-visible{outline:none;box-shadow:inset 0 0 0 1px rgba(229,138,184,.32);background:rgba(229,138,184,.045)}
+.pick-card:focus-visible{outline:none;border-color:#586474;box-shadow:0 0 0 2px rgba(229,138,184,.12),0 10px 28px rgba(0,0,0,.22)}\n.interactive-row[role="button"]{cursor:pointer;transition:background .14s ease,box-shadow .14s ease}\n.interactive-row[role="button"]:hover{background:rgba(255,255,255,.018)}\n.interactive-row[role="button"]:focus-visible{outline:none;box-shadow:inset 0 0 0 1px rgba(229,138,184,.32);background:rgba(229,138,184,.045)}\n#focusDashboard,#market,#detail,#journal,#timeline,#evidencePanel{scroll-margin-top:82px}
 .pick-primary{grid-column:span 2;background:linear-gradient(180deg,#121820,#0f1319);border-color:#2d3946}
 .pick-primary .pick-symbol{font-size:20px;letter-spacing:-.02em}
 .pick-primary .pick-chart{height:210px}
@@ -1467,7 +1467,7 @@ function initAlphaMotion(){
 function initNavigation(){
   const buttons=Array.from(document.querySelectorAll(".nav-btn"));
   const ids=buttons.map(b=>b.dataset.target).filter(Boolean);
-  const setActive=id=>buttons.forEach(b=>b.classList.toggle("active",b.dataset.target===id));
+  const setActive=id=>buttons.forEach(b=>{const active=b.dataset.target===id;b.classList.toggle("active",active);if(active)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");});
   const reveal=id=>{
     const el=$(id);
     if(!el)return null;
@@ -2051,14 +2051,14 @@ function drawChart(history, signals, journal, realtimePrice){
   };
 }
 
-let quoteBusy=false;
+let quoteRequest=0;
 async function loadQuote(symbol){
-  if(!symbol || quoteBusy)return;
-  quoteBusy=true;
+  if(!symbol)return;
+  const request=++quoteRequest;
   try{
     const res=await fetch("/api/quote?symbol="+encodeURIComponent(symbol),{cache:"no-store"});
     const q=await res.json();
-    if(state.selected!==symbol)return;
+    if(request!==quoteRequest || state.selected!==symbol)return;
     if(q.price!=null){
       $("livePrice").textContent="REALTIME "+num(q.price,2);
       $("livePrice").className="pill good";
@@ -2068,12 +2068,10 @@ async function loadQuote(symbol){
       $("livePrice").className="pill warn";
     }
   }catch(e){
-    if(state.selected===symbol){
+    if(request===quoteRequest && state.selected===symbol){
       $("livePrice").textContent="REALTIME offline";
       $("livePrice").className="pill warn";
     }
-  }finally{
-    quoteBusy=false;
   }
 }
 
@@ -2103,7 +2101,11 @@ async function loadHistory(symbol){
   }
 }
 
+let refreshBusy=false;
+let refreshTimer=null;
 async function refresh(force=false){
+  if(refreshBusy)return;
+  refreshBusy=true;
   const button=$("refresh");
   if(button){
     button.disabled=true;
@@ -2122,16 +2124,16 @@ async function refresh(force=false){
     renderFocus(fallback);
     scheduleRefresh(20);
   }finally{
+    refreshBusy=false;
     if(button){
       button.disabled=false;
       button.setAttribute("aria-busy","false");
     }
   }
 }
-let refreshTimer=null;
 function scheduleRefresh(seconds){
-  if(refreshTimer)clearInterval(refreshTimer);
-  refreshTimer=setInterval(()=>refresh(false),Math.max(10,Number(seconds||20))*1000);
+  if(refreshTimer)clearTimeout(refreshTimer);
+  refreshTimer=setTimeout(()=>refresh(false),Math.max(10,Number(seconds||20))*1000);
 }
 $("refresh").addEventListener("click",()=>refresh(true));
 function openSelectedAsset(){const value=String($("asset").value||"").trim();if(!value)return;const allowed=new Set(state.marketSymbols||[]);if(!allowed.has(value)){ $("asset").setCustomValidity("Simbolo non presente nei mercati attivi.");$("asset").reportValidity();return;}$("asset").setCustomValidity("");state.selected=value;loadHistory(value);renderTimeline((state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[]);}$("asset").addEventListener("change",openSelectedAsset);$("asset").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();openSelectedAsset();}});$("loadAsset").addEventListener("click",openSelectedAsset);$("range").addEventListener("change",()=>loadHistory(state.selected));
