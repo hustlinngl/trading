@@ -188,7 +188,17 @@ def discover_live_universe(settings, root=".", exchange=None, symbols=None):
             if stem.endswith(("_USDT", "_USDC", "_FDUSD")):
                 local.append(stem.replace("_", "/"))
 
-    universe_sources = discovered if exchange_ready else (configured + local)
+    # An explicit symbol list is a true scope override. Online scans intersect it
+    # with the authoritative active exchange universe; offline scans use it directly.
+    if symbols is not None:
+        requested = set(configured)
+        universe_sources = (
+            [symbol for symbol in discovered if symbol in requested]
+            if exchange_ready
+            else configured
+        )
+    else:
+        universe_sources = discovered if exchange_ready else (configured + local)
     universe = list(dict.fromkeys(universe_sources))
     model_backed = []
     eligible = []
