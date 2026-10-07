@@ -3,11 +3,11 @@
 Install Python 3.11+ 64-bit, then:
 
 ```powershell
-python -m pip install -e ".[full]"
-python -m streamlit run app.py
+python -m pip install -e .
+python signal_dashboard.py
 ```
 
-Recommended flow: Data → Train & Test → Live Radar. The project is paper/sandbox by default. The adaptive specialist targets 3–24h, with a soft preference for 3–4h; it is not a hard duration constraint.
+Recommended pre-alpha flow: train/validate the model bundle, then launch `signal_dashboard.py` for read-only signals and outcome tracking. The project is paper/sandbox by default. The adaptive specialist targets 3–24h, with a soft preference for 3–4h; it is not a hard duration constraint.
 
 Run validation with:
 
