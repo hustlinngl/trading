@@ -381,7 +381,7 @@ def test_signal_terminal_alpha_decision_deck_is_wired():
     assert 'id="traceGrid"' in html
     assert "renderDecisionDeck" in html
     assert "Decision trace" in html
-    assert "data-target=\"detail\"" in html
+    assert "data-target=\"detail\"" not in html
 
 
 def test_signal_terminal_alpha_art_direction_layer_is_wired():
@@ -706,7 +706,7 @@ def test_scan_top5_reports_incremental_progress(monkeypatch, tmp_path):
     assert progress[-1]["waits"] == 2
 
 
-def test_scan_top5_prefers_stronger_robust_selection_score(monkeypatch, tmp_path):
+def test_scan_top5_orders_direct_signals_by_confidence(monkeypatch, tmp_path):
     import ai_trading_lab.live as live_mod
 
     settings = load_settings("config.yaml")
@@ -722,11 +722,10 @@ def test_scan_top5_prefers_stronger_robust_selection_score(monkeypatch, tmp_path
         },
     )
     def fake_assess(settings, root, symbol, exchange=None, skip_network=False):
-        score = 0.8 if symbol == "A/USDT" else 0.3
+        confidence = 0.95 if symbol == "A/USDT" else 0.84
         return LiveAssessment(
             symbol, "2026-10-07T00:00:00+00:00", "SIGNAL", "LONG",
-            0.85, 0.01, 1.0, [], "fp",
-            {"selection_score": score, "robust_directional_edge": score / 20.0},
+            confidence, 0.01, 1.0, [], "fp",
         )
 
     monkeypatch.setattr(live_mod, "assess_symbol", fake_assess)
