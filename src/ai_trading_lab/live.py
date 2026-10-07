@@ -1,7 +1,9 @@
 from __future__ import annotations
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
-import json, numpy as np, pandas as pd
+import json, threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import numpy as np, pandas as pd
 
 from .data import exchange_client, fetch_ohlcv, timeframe_offset
 from .data_quality import audit_market_data
@@ -248,65 +250,117 @@ def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, re
     if callable(progress_callback):
         try:
             progress_callback({
-                "stage": "scanning",
-                "evaluated": 0,
-                "total": total_candidates,
-                "reused": 0,
-                "refreshed": 0,
-                "signals": 0,
-                "waits": 0,
+                "stage": "scanning", "evaluated": 0, "total": total_candidates,
+                "reused": 0, "refreshed": 0, "signals": 0, "waits": 0,
                 "failures": 0,
             })
         except Exception:
             pass
-    for symbol in candidates:
-        try:
-            cached = cache.get(symbol)
-            assessment = None
-            if cached is not None and bar_delta > pd.Timedelta(0):
-                try:
-                    stamp = pd.Timestamp(cached.timestamp)
-                    if stamp.tzinfo is None:
-                        stamp = stamp.tz_localize("UTC")
-                    if stamp + bar_delta > now:
-                        assessment = cached
-                        reused += 1
-                except Exception:
-                    assessment = None
 
-            if assessment is None:
-                assessment = assess_symbol(
-                    settings, root, symbol, exchange=ex, skip_network=network_unavailable
+    # CCXT clients are kept thread-local. The discovery client is never shared
+    # across workers, avoiding races while still allowing the model-backed
+    # universe to be evaluated concurrently.
+    requested_workers = int(getattr(settings, "live_scan_workers", 4) or 4)
+    workers = max(1, min(8, requested_workers, total_candidates or 1))
+    local_exchange = threading.local()
+
+    def worker_exchange():
+        if network_unavailable:
+            return None
+        instance = getattr(local_exchange, "exchange", None)
+        if instance is None:
+            try:
+                instance = exchange_client(
+                    getattr(settings, "exchange", "binance"), sandbox=False
                 )
-                cache[symbol] = assessment
-                refreshed += 1
+            except Exception:
+                instance = None
+            local_exchange.exchange = instance
+        return instance
 
-            if assessment.signal in {"LONG", "SHORT"} and assessment.status == "SIGNAL":
-                out.append(assessment)
-            else:
-                waits += 1
-                if any(str(reason).startswith(("runtime:", "data_fetch:")) for reason in assessment.reason_codes):
-                    failures += 1
-        except Exception:
-            waits += 1
-            failures += 1
-        finally:
-            evaluated += 1
-            if callable(progress_callback):
+    def evaluate(symbol):
+        cached = cache.get(symbol)
+        assessment = None
+        reused_local = 0
+        refreshed_local = 0
+        if cached is not None and bar_delta > pd.Timedelta(0):
+            try:
+                stamp = pd.Timestamp(cached.timestamp)
+                if stamp.tzinfo is None:
+                    stamp = stamp.tz_localize("UTC")
+                if stamp + bar_delta > now:
+                    assessment = cached
+                    reused_local = 1
+            except Exception:
+                assessment = None
+
+        if assessment is None:
+            worker_ex = worker_exchange()
+            assessment = assess_symbol(
+                settings,
+                root,
+                symbol,
+                exchange=worker_ex,
+                skip_network=network_unavailable,
+            )
+            refreshed_local = 1
+        return symbol, assessment, reused_local, refreshed_local
+
+    if not candidates:
+        scan_results = []
+    elif workers == 1:
+        scan_results = [evaluate(symbol) for symbol in candidates]
+    else:
+        scan_results = []
+        with ThreadPoolExecutor(
+            max_workers=workers,
+            thread_name_prefix="live-scan",
+        ) as pool:
+            futures = {pool.submit(evaluate, symbol): symbol for symbol in candidates}
+            for future in as_completed(futures):
+                symbol = futures[future]
                 try:
-                    progress_callback({
-                        "stage": "scanning",
-                        "evaluated": evaluated,
-                        "total": total_candidates,
-                        "reused": reused,
-                        "refreshed": refreshed,
-                        "signals": len(out),
-                        "waits": waits,
-                        "failures": failures,
-                        "symbol": symbol,
-                    })
-                except Exception:
-                    pass
+                    scan_results.append(future.result())
+                except Exception as exc:
+                    scan_results.append((
+                        symbol,
+                        LiveAssessment(
+                            symbol, "", "WAIT", "FLAT", 0.0, 0.0, 0.0,
+                            [f"runtime:{type(exc).__name__}:{exc}"], "",
+                        ),
+                        0,
+                        1,
+                    ))
+
+    # Apply cache mutations and progress accounting on the caller thread.
+    for symbol, assessment, reused_local, refreshed_local in scan_results:
+        cache[symbol] = assessment
+        reused += reused_local
+        refreshed += refreshed_local
+        if assessment.signal in {"LONG", "SHORT"} and assessment.status == "SIGNAL":
+            out.append(assessment)
+        else:
+            waits += 1
+            if any(str(reason).startswith(("runtime:", "data_fetch:"))
+                   for reason in assessment.reason_codes):
+                failures += 1
+        evaluated += 1
+        if callable(progress_callback):
+            try:
+                progress_callback({
+                    "stage": "scanning",
+                    "evaluated": evaluated,
+                    "total": total_candidates,
+                    "reused": reused,
+                    "refreshed": refreshed,
+                    "signals": len(out),
+                    "waits": waits,
+                    "failures": failures,
+                    "symbol": symbol,
+                    "workers": workers,
+                })
+            except Exception:
+                pass
 
     out.sort(
         key=lambda x: (
@@ -337,6 +391,7 @@ def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, re
             "assessments_refreshed": int(refreshed),
             "scan_completed": int(evaluated),
             "scan_total": int(total_candidates),
+            "scan_workers": int(workers),
         }
     return picks
 
