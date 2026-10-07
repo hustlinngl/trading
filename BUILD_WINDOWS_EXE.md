@@ -1,6 +1,6 @@
 # Windows EXE packaging
 
-The canonical Windows build is produced by GitHub Actions with PyInstaller.
+The canonical Windows build is produced by GitHub Actions with PyInstaller from the frozen 0.9.17 release tree.
 
 ## Output
 
@@ -20,3 +20,6 @@ Model and deployment bundles are not embedded in the executable. They stay exter
 ## Rebuild
 
 Push a tag such as `v0.9.17` or manually start the **Build Windows EXE** workflow from GitHub Actions.
+
+
+Build target: Windows x64 / Python 3.11.
