@@ -11,3 +11,5 @@ ADAPTIVE AI TRADING LAB V6
 Safety defaults: paper_only=true, sandbox=true.
 A failed evidence gate must remain WAIT/research-only.
 Never commit secrets; use .env locally or GitHub Actions Secrets.
+
+Dashboard-only install: python -m pip install -e ".[dashboard]"
