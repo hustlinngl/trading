@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Adaptive AI Segnale Terminale.
+Adaptive AI Signal Terminal.
 
 Single-entry local dashboard for trained signal bundles.
 It has no order endpoints, no exchange write API and no trading execution path.
@@ -19,6 +19,10 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+
+ROOT = Path(__file__).resolve().parent
+if str(ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT / "src"))
 
 from ai_trading_lab import __version__
 from ai_trading_lab.config import Settings, load_settings
