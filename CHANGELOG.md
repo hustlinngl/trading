@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.17
+- Expanded Alpha art direction with a dedicated anime operator stage, visual signal timeline, and non-blocking decision inspector drawer.
+- Upgraded the market cockpit with volume context, subtle close-path bloom, regime HUD labeling and DOM crosshair overlays while preserving closed-candle model semantics.
+- Added keyboard-accessible timeline/inspector interactions and maintained reduced-motion fallbacks; no new frontend dependencies were introduced.
+
 ## 0.9.16
 - Alpha visual foundation added on top of the frozen read-only terminal.
 - Expanded the visual layer with ambient Sakura particles, animated decision-state bloom and richer navigation/interaction feedback.
