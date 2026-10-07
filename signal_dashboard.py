@@ -28,7 +28,8 @@ from ai_trading_lab.deployment import (
     bundle_artifact_fingerprint,
     resolve_signal_bundle,
 )
-from ai_trading_lab.live import LiveAssessment, scan_top5, write_live_snapshot
+from ai_trading_lab.live import LiveAssessment, append_live_signal_history, scan_top5, write_live_snapshot
+from ai_trading_lab.live_tracker import update_live_signal_outcomes
 
 
 APP_TITLE = "Adaptive AI Signal Terminal"
@@ -164,6 +165,11 @@ class SignalTerminal:
                 configured = configured[: int(getattr(self.settings, "live_max_symbols", 15))]
                 assessments = scan_top5(self.settings, str(self.root), symbols=configured)
                 write_live_snapshot(assessments, str(self.root))
+                append_live_signal_history(assessments, str(self.root))
+                try:
+                    outcome_update = update_live_signal_outcomes(self.settings, str(self.root))
+                except Exception as exc:
+                    outcome_update = {"updated": 0, "open": None, "closed": None, "error": f"{type(exc).__name__}:{exc}"}
                 signals = []
                 for assessment in assessments:
                     payload = self._assessment_payload(assessment)
@@ -208,6 +214,16 @@ class SignalTerminal:
                     if (row.get("decision") or {}).get("data_age_minutes") is not None
                 ]
                 self._scan_error = None
+                history_path = self.root / "logs" / "live_signal_history.jsonl"
+                journal = []
+                if history_path.exists():
+                    for line in history_path.read_text(encoding="utf-8", errors="replace").splitlines()[-20:]:
+                        try:
+                            obj = json.loads(line)
+                            if isinstance(obj, dict):
+                                journal.append(obj)
+                        except json.JSONDecodeError:
+                            continue
                 state = {
                     "ok": True,
                     "app": APP_TITLE,
@@ -237,6 +253,8 @@ class SignalTerminal:
                         "terminal_ready": bool(signals) and ready_bundles > 0,
                     },
                     "signals": signals,
+                    "journal": journal,
+                    "outcome_update": _json_safe(outcome_update),
                     "notes": [
                         "Signals are read-only. This terminal has no order-placement endpoint.",
                         "WAIT is the default outcome whenever data, provenance, model consensus or quality gates fail.",
@@ -267,6 +285,8 @@ class SignalTerminal:
                         "terminal_ready": False,
                     },
                     "signals": [],
+                    "journal": [],
+                    "outcome_update": {},
                     "error": self._scan_error,
                     "notes": [
                         "No signal was produced because the terminal failed closed.",
@@ -382,6 +402,16 @@ pre{white-space:pre-wrap;word-break:break-word;color:#aeb9c8;font-size:12px;marg
     </div>
   </div>
 
+  <div class="panel">
+    <div class="panel-head"><div><div class="panel-title">Signal Journal</div><div class="small">Feedback only: completed signals are resolved from subsequent public candles. No orders are sent.</div></div><div class="small" id="journalStatus"></div></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Time</th><th>Asset</th><th>Signal</th><th>Confidence</th><th>Expected</th><th>Outcome</th><th>Realized</th><th>Holding</th></tr></thead>
+        <tbody id="journalRows"></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="two">
     <div class="panel">
       <div class="panel-head"><div><div class="panel-title">Training & deployment evidence</div><div class="small">Signals are tied to asset-local trained artifacts; stale evidence fails closed.</div></div></div>
@@ -406,6 +436,7 @@ function num(v,d=3){ return v==null || Number.isNaN(Number(v)) ? "—" : Number(
 function age(v){ return v==null || Number.isNaN(Number(v)) ? "—" : Number(v).toFixed(1)+"m"; }
 function esc(v){ return String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
 function badge(ok,label){ return '<span class="tag '+(ok?'status-ready':'status-wait')+'"><span class="dot"></span>'+esc(label)+'</span>'; }
+function _signalClass(signal){ return signal==="LONG"?"signal-long":signal==="SHORT"?"signal-short":signal==="WAIT"?"signal-wait":"signal-flat"; }
 
 function render(data){
   const s=data.summary||{};
@@ -449,6 +480,24 @@ function render(data){
     '</tr>';
   }).join("");
 
+  const journal=data.journal||[];
+  $("journalRows").innerHTML=journal.length ? journal.slice().reverse().map(r=>{
+    const outcome=r.outcome||"OPEN";
+    const outcomeClass=outcome==="WIN"?"signal-long":outcome==="LOSS"?"signal-short":outcome==="AMBIGUOUS"?"signal-wait":"signal-flat";
+    return '<tr>'+
+      '<td class="small">'+esc(r.data_timestamp?new Date(r.data_timestamp).toLocaleString():"—")+'</td>'+
+      '<td><strong>'+esc(r.symbol||"—")+'</strong></td>'+
+      '<td><span class="sig '+esc(_signalClass(r.signal||"WAIT"))+'">'+esc(r.signal||"WAIT")+'</span></td>'+
+      '<td class="num">'+pct(r.confidence,1)+'</td>'+
+      '<td class="num">'+pct(r.expected_return,2)+'</td>'+
+      '<td><span class="sig '+outcomeClass+'">'+esc(outcome)+'</span></td>'+
+      '<td class="num">'+pct(r.realized_return,2)+'</td>'+
+      '<td class="num">'+(r.holding_hours==null?"—":num(r.holding_hours,1)+"h")+'</td>'+
+    '</tr>';
+  }).join("") : '<tr><td colspan="8"><span class="small">Nessun segnale registrato.</span></td></tr>';
+  const ou=data.outcome_update||{};
+  $("journalStatus").textContent=ou.error ? "feedback non disponibile" : "aggiornati "+(ou.updated??0)+" · aperti "+(ou.open??0)+" · chiusi "+(ou.closed??0);
+
   $("evidence").innerHTML=(data.signals||[]).map(r=>{
     const b=r.bundle||{}, h=b.holdout||{};
     return '<div class="info">'+
@@ -465,12 +514,19 @@ function render(data){
   $("footer").textContent=(data.notes||[]).join(" · ")+" · refresh "+data.refresh_seconds+"s";
 }
 
+let refreshHandle=null;
+function scheduleRefresh(seconds){
+  if(refreshHandle) clearInterval(refreshHandle);
+  refreshHandle=setInterval(()=>refresh(false),Math.max(10,Number(seconds||45))*1000);
+}
+
 async function refresh(force=false){
   $("stamp").textContent="scanning…";
   try{
     const res=await fetch("/api/state?force="+(force?"1":"0"),{cache:"no-store"});
     const data=await res.json();
     render(data);
+    scheduleRefresh(data.refresh_seconds||45);
   }catch(e){
     render({ok:false,error:String(e),summary:{},notes:["Browser could not reach the local signal terminal."]});
   }
@@ -531,6 +587,7 @@ def parse_args():
     parser.add_argument("--refresh", type=int, default=DEFAULT_REFRESH, help="Signal refresh TTL in seconds")
     parser.add_argument("--symbols", default=None, help="Comma-separated symbol override")
     parser.add_argument("--no-browser", action="store_true", help="Do not open the dashboard automatically")
+    parser.add_argument("--once", action="store_true", help="Print one JSON snapshot and exit")
     return parser.parse_args()
 
 
@@ -541,6 +598,9 @@ def main():
         settings.live_symbols = tuple(x.strip() for x in args.symbols.split(",") if x.strip())
 
     terminal = SignalTerminal(settings, ".", refresh_seconds=args.refresh)
+    if args.once:
+        print(json.dumps(terminal._terminal_state(force=True), indent=2, ensure_ascii=False))
+        return
     server = ThreadingHTTPServer((args.host, args.port), make_handler(terminal))
     url = f"http://{args.host if args.host not in {'0.0.0.0','::'} else '127.0.0.1'}:{args.port}/"
     print(f"{APP_TITLE} v{__version__}")
