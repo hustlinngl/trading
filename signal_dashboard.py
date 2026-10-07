@@ -446,47 +446,47 @@ class SignalTerminal:
         # Never hold the request/cache lock while network, model or disk work runs.
         started = time.monotonic()
         try:
-                configured_symbols = list(
-                    dict.fromkeys(
-                        getattr(self.settings, "live_symbols", ())
-                        or (self.settings.symbol,)
-                    )
+            configured_symbols = list(
+                dict.fromkeys(
+                    getattr(self.settings, "live_symbols", ())
+                    or (self.settings.symbol,)
                 )
-                def report_progress(progress):
-                    if isinstance(progress, dict):
-                        with self._lock:
-                            self._scan_progress = dict(progress)
+            )
+            def report_progress(progress):
+                if isinstance(progress, dict):
+                    with self._lock:
+                        self._scan_progress = dict(progress)
 
-                scan_result = scan_top5(
-                    self.settings,
-                    str(self.root),
-                    exchange=self._get_exchange(),
-                    cache=self._assessment_cache,
-                    return_meta=True,
-                    progress_callback=report_progress,
+            scan_result = scan_top5(
+                self.settings,
+                str(self.root),
+                exchange=self._get_exchange(),
+                cache=self._assessment_cache,
+                return_meta=True,
+                progress_callback=report_progress,
+            )
+            if isinstance(scan_result, tuple):
+                assessments, universe_meta = scan_result
+            else:
+                assessments = scan_result
+                universe_meta = {
+                    "universe_total": len(assessments),
+                    "universe_model_backed": len(assessments),
+                    "universe_evaluated": len(assessments),
+                    "universe_mode": "compatibility_fallback",
+                }
+            # Tickers are presentation-only; never poll the entire scan universe.
+            symbols = list(dict.fromkeys(
+                configured_symbols + [x.symbol for x in assessments]
+            ))
+            write_live_snapshot(assessments, str(self.state_root))
+            append_live_signal_history(assessments, str(self.state_root))
+
+            try:
+                outcome_update = update_live_signal_outcomes(
+                    self.settings, str(self.state_root), exchange=self._get_exchange()
                 )
-                if isinstance(scan_result, tuple):
-                    assessments, universe_meta = scan_result
-                else:
-                    assessments = scan_result
-                    universe_meta = {
-                        "universe_total": len(assessments),
-                        "universe_model_backed": len(assessments),
-                        "universe_evaluated": len(assessments),
-                        "universe_mode": "compatibility_fallback",
-                    }
-                # Tickers are presentation-only; never poll the entire scan universe.
-                symbols = list(dict.fromkeys(
-                    configured_symbols + [x.symbol for x in assessments]
-                ))
-                write_live_snapshot(assessments, str(self.state_root))
-                append_live_signal_history(assessments, str(self.state_root))
-
-                try:
-                    outcome_update = update_live_signal_outcomes(
-                        self.settings, str(self.state_root), exchange=self._get_exchange()
-                    )
-                except Exception as exc:
+        except Exception as exc:
                     outcome_update = {
                         "updated": 0,
                         "open": None,
@@ -992,8 +992,8 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
 .pick-card.pick-short{--signal-accent:var(--red)}
 .pick-card .pick-head{position:relative}
 .pick-card .pick-signal{box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
-.scan-progress{height:3px;max-width:420px;margin:18px auto 0;background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden}.scan-progress span{display:block;height:100%;background:linear-gradient(90deg,var(--pink),var(--cyan));box-shadow:0 0 12px rgba(255,120,200,.35);transition:width .24s ease}.top5-empty{padding:48px 24px;text-align:center;border:1px dashed rgba(255,120,200,.18);border-radius:18px;background:rgba(255,255,255,.015)}
-.legacy-hidden{display:none!important}@media(max-width:980px){.top5-grid{grid-template-columns:1fr}.pick-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:640px){.wrap{padding:16px 12px 40px}.focus-only .top5-title{font-size:23px}.pick-chart{height:190px}}@media(prefers-reduced-motion:reduce){.pick-card{transition:none}}
+.signal-skeleton-grid{display:grid;grid-template-columns:repeat(3,minmax(280px,1fr));gap:12px}.signal-skeleton-card{min-height:248px;padding:18px;border:1px solid #202833;border-radius:12px;background:#0f1319;overflow:hidden;position:relative}.signal-skeleton-card::after{content:"";position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(229,138,184,.045),transparent);animation:skeletonSweep 1.35s ease-in-out infinite}.signal-skeleton-line,.signal-skeleton-stats span,.signal-skeleton-chart{display:block;background:#1b222c;border-radius:8px;position:relative;overflow:hidden}.signal-skeleton-rank{width:26px;height:10px;margin-bottom:11px}.signal-skeleton-symbol{width:46%;height:22px}.signal-skeleton-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:24px}.signal-skeleton-stats span{height:42px}.signal-skeleton-chart{height:88px;margin-top:14px}@keyframes skeletonSweep{to{transform:translateX(100%)}}.scan-progress{height:3px;max-width:420px;margin:18px auto 0;background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden}.scan-progress span{display:block;height:100%;background:linear-gradient(90deg,var(--pink),var(--cyan));box-shadow:0 0 12px rgba(255,120,200,.35);transition:width .24s ease}.top5-empty{padding:48px 24px;text-align:center;border:1px dashed rgba(255,120,200,.18);border-radius:18px;background:rgba(255,255,255,.015)}
+.legacy-hidden{display:none!important}@media(max-width:980px){.top5-grid,.signal-skeleton-grid{grid-template-columns:1fr}.pick-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:640px){.wrap{padding:16px 12px 40px}.focus-only .top5-title{font-size:23px}.pick-chart{height:190px}}@media(prefers-reduced-motion:reduce){.pick-card{transition:none}.signal-skeleton-card::after{animation:none;display:none}}
 </style>
 <style>
 /* Product-clean pass */
@@ -1607,13 +1607,7 @@ function renderFocus(data){
   const box=$("top5Grid");
   if(!box)return;
   if(data.scan_in_progress){
-    box.innerHTML='<div class="top5-empty"><div class="eyebrow">Signal feed</div><h2 style="margin:8px 0 6px">Sto cercando i prossimi segnali</h2><div class="small">Il feed si aggiorna automaticamente appena il ranking è disponibile.</div></div>';
-    const p=data.scan_progress||{};
-    const done=Number(p.evaluated??0), total=Number(p.total??0), signals=Number(p.signals??0);
-    const pctDone=total>0?Math.round(done/total*100):0;
-    if(done>0){
-      box.innerHTML='<div class="top5-empty"><div class="eyebrow">Signal feed · '+pctDone+'%</div><h2 style="margin:8px 0 6px">Sto cercando i prossimi segnali</h2><div class="small">'+signals+' risultati individuati finora · '+done+' / '+total+' mercati analizzati.</div><div class="scan-progress"><span style="width:'+pctDone+'%"></span></div></div>';
-    }
+    box.innerHTML='<div class="signal-skeleton-grid" aria-hidden="true">'+Array.from({length:5},()=>'<article class="signal-skeleton-card"><span class="signal-skeleton-line signal-skeleton-rank"></span><span class="signal-skeleton-line signal-skeleton-symbol"></span><div class="signal-skeleton-stats"><span></span><span></span><span></span><span></span></div><span class="signal-skeleton-chart"></span></article>').join("")+'</div>';
     return;
   }
   if(!data.ok){
