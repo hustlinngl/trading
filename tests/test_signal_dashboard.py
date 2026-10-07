@@ -20,6 +20,9 @@ def test_dashboard_responsive_ui_and_chart_edge_case():
     assert "bars.length===1?pad.l+cw/2" in html
     assert "table-wrap{border-radius" in html
     assert "focus-visible" in html
+    assert "pick-primary" in html
+    assert "bindFocusCards" in html
+    assert 'role="button"' in html
 
 
 def test_dashboard_market_explorer_ui():
