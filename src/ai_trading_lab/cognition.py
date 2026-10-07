@@ -156,7 +156,19 @@ class CognitionEngine:
         if cached is not None: return {**cached,"skipped":True,"skip_reason":"dataset_unchanged"}
         x,y,ret=make_features(df,self.settings.horizon_bars,external_feature_lag_bars=getattr(self.settings,"external_feature_lag_bars",1))
         regime=RegimeDetector(self.settings.seed).fit(x).transform(x) if not x.empty else pd.Series(index=x.index,dtype=str)
-        graph_features=x.select_dtypes(include=[np.number]) if not x.empty else x; actions=pd.Series("FLAT",index=x.index)
+        graph_features=x.select_dtypes(include=[np.number]) if not x.empty else x
+        actions=pd.Series("FLAT",index=x.index,dtype=object)
+        if len(x):
+            try:
+                from .deployment import resolve_signal_bundle
+                bundle=resolve_signal_bundle(self.settings,self.root,getattr(self.settings,"symbol","UNKNOWN"))
+                if (bundle/"signal_model.joblib").exists():
+                    policy_engine=__import__("ai_trading_lab.engine",fromlist=["AdaptiveEngine"]).AdaptiveEngine(self.settings).load(bundle)
+                    policy_predictions=policy_engine.predict_frame(x)
+                    if "action" in policy_predictions:
+                        actions=policy_predictions["action"].astype(str)
+            except Exception:
+                pass
         added=self.graph.learn_episode(df,graph_features,actions,ret,symbol=getattr(self.settings,"symbol","UNKNOWN"),horizon_bars=self.settings.horizon_bars,regime=regime) if len(x) else 0
         online=PrequentialLearner(self.settings.seed,int(getattr(self.settings,"online_warmup_rows",64)))
         if self.online_path.exists():
