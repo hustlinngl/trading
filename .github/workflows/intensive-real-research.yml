@@ -9,7 +9,7 @@ on:
       end:
         description: UTC end date
         required: false
-        default: '2026-10-07'
+        default: ''
       trials:
         description: Master tuning trials per asset
         required: false
@@ -55,9 +55,20 @@ jobs:
 
       - name: Run intensive real-data research
         run: |
-          python run_intensive_real_research.py             --symbols BTC/USDT,ETH/USDT,SOL/USDT             --timeframe 15m             --start '${{ inputs.start || '2022-01-01' }}'             --end '${{ inputs.end || '2026-10-07' }}'             --trials '${{ inputs.trials || '60' }}'             --holdout-frac 0.15 \
+          START_DATE='${{ inputs.start }}'
+          END_DATE='${{ inputs.end }}'
+          TRIALS='${{ inputs.trials }}'
+          START_DATE=${START_DATE:-2022-01-01}
+          END_DATE=${END_DATE:-$(date -u +%F)}
+          TRIALS=${TRIALS:-60}
+          python run_intensive_real_research.py \
+            --symbols BTC/USDT,ETH/USDT,SOL/USDT \
+            --timeframe 15m \
+            --start "$START_DATE" \
+            --end "$END_DATE" \
+            --trials "$TRIALS" \
+            --holdout-frac 0.15 \
             --require-all-assets
-
       - name: Run cross-exchange transfer validation
         run: |
           python run_cross_exchange_validation.py --trials 24 --holdout-frac 0.15
