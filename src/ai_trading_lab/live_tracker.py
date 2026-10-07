@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 from .data import exchange_client, fetch_ohlcv
-from .streaming import BinancePublicStream, StreamEvent
+from .streaming import BinancePublicStream, StreamEvent, UnsupportedStreamSymbolError
 from .trade_window import _atr, timeframe_minutes
 
 HISTORY_NAME = "live_signal_history.jsonl"
@@ -218,6 +218,13 @@ class LiveTracker:
                     backoff = self._reconnect_seconds
             except asyncio.CancelledError:
                 raise
+            except UnsupportedStreamSymbolError as exc:
+                self._logger.warning(
+                    "live stream unsupported for %s: %s",
+                    symbol,
+                    exc,
+                )
+                return
             except Exception as exc:
                 self._logger.warning(
                     "live stream failed for %s: %s",
