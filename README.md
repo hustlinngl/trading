@@ -22,6 +22,7 @@ Live order placement is not implemented as an autonomous capability. The default
 
 ```bash
 pip install -r requirements.txt
+# Dashboard only: pip install -e ".[dashboard]"
 python -m ai_trading_lab.main doctor
 python -m ai_trading_lab.main demo
 python -m ai_trading_lab.main benchmark --benchmark-bars 1200
