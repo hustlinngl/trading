@@ -128,6 +128,36 @@ def test_live_universe_honors_explicit_online_scope(monkeypatch, tmp_path):
     assert meta["symbols"] == ["ETH/USDT"]
 
     
+def test_live_tracker_rejects_out_of_order_quotes():
+    tracker = LiveTracker(symbols=())
+    t0 = int(pd.Timestamp("2026-10-07T16:00:00+00:00").timestamp() * 1000)
+    newest = StreamEvent(
+        received_at="2026-10-07T16:00:01+00:00",
+        stream="btcusdt@bookTicker",
+        event_time_ms=t0 + 1000,
+        symbol="BTC/USDT",
+        event_type="bookTicker",
+        payload={"s": "BTCUSDT", "b": "110.0", "a": "110.2", "E": t0 + 1000},
+    )
+    stale = StreamEvent(
+        received_at="2026-10-07T16:00:02+00:00",
+        stream="btcusdt@bookTicker",
+        event_time_ms=t0 + 500,
+        symbol="BTC/USDT",
+        event_type="bookTicker",
+        payload={"s": "BTCUSDT", "b": "90.0", "a": "90.2", "E": t0 + 500},
+    )
+    tracker._merge_event(newest)
+    tracker._merge_event(stale)
+
+    state = dict(tracker.get_current_state("BTC/USDT"))
+    assert state["bid"] == 110.0
+    assert state["ask"] == 110.2
+    assert state["mid"] == 110.1
+    assert state["price"] == 110.1
+    assert state["stale_event_count"] == 1
+
+
 def test_live_scan_uses_bounded_parallel_workers(monkeypatch, tmp_path):
     import ai_trading_lab.live as live_mod
 
