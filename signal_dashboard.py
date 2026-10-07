@@ -372,6 +372,7 @@ class SignalTerminal:
             "scan_seconds": 0.0,
             "refresh_seconds": self.refresh_seconds,
             "scan_in_progress": True,
+            "scan_started_at": None,
             "config": {
                 "exchange": self.settings.exchange,
                 "timeframe": self.settings.timeframe,
@@ -402,8 +403,8 @@ class SignalTerminal:
         }
 
     def _terminal_state(self, force: bool = False, *, background: bool = False) -> dict:
+        now = time.time()
         with self._lock:
-            now = time.time()
             if (
                 not force
                 and self._cached_state is not None
@@ -438,8 +439,9 @@ class SignalTerminal:
                 base["scan_seconds"] = 0.0
                 return base
 
-            started = time.monotonic()
-            try:
+        # Never hold the request/cache lock while network, model or disk work runs.
+        started = time.monotonic()
+        try:
                 configured_symbols = list(
                     dict.fromkeys(
                         getattr(self.settings, "live_symbols", ())
@@ -485,7 +487,13 @@ class SignalTerminal:
                 market_symbols = []
                 try:
                     markets = getattr(self._exchange, "markets", {}) or {}
-                    market_symbols = sorted({str(m.get("symbol")).strip() for m in markets.values() if isinstance(m, dict) and m.get("active") is not False and str(m.get("symbol") or "").strip()})
+                    market_symbols = sorted({
+                        str(m.get("symbol")).strip()
+                        for m in markets.values()
+                        if isinstance(m, dict)
+                        and m.get("active") is not False
+                        and str(m.get("symbol") or "").strip()
+                    })
                 except Exception:
                     market_symbols = []
                 quotes = self._quotes(symbols)
@@ -568,7 +576,9 @@ class SignalTerminal:
                         "timeframe": self.settings.timeframe,
                         "primary_symbol": self.settings.symbol,
                         "live_symbols": configured_symbols,
+                        "market_symbols": market_symbols,
                         "scan_scope": universe_meta.get("universe_mode", "all_active_markets"),
+                        "scan_source": "exchange" if market_symbols else "local_fallback",
                         "signal_only_mode": bool(
                             self.settings.signal_only_mode
                         ),
@@ -639,10 +649,12 @@ class SignalTerminal:
                     ],
                 }
 
-            self._cached_state = _json_safe(state)
-            self._cached_at = time.time()
-            self._scan_thread = None
-            return self._cached_state
+            cached_state = _json_safe(state)
+            with self._lock:
+                self._cached_state = cached_state
+                self._cached_at = time.time()
+                self._scan_thread = None
+            return cached_state
 
     def health(self) -> dict:
         return {
@@ -1465,8 +1477,8 @@ function renderFocus(data){
     const summary=data.summary||{};
     const coverage=$("focusCoverage");
     if(coverage){
-      const total=Number(summary.universe_total??0), eligible=Number(summary.model_eligible_assets??summary.model_backed_assets??0), evaluated=Number(summary.assets_scanned??0);
-      coverage.textContent=total ? "Universe "+total+" · models "+backed+" · evaluated "+evaluated : "Discovering markets…";
+      const total=Number(summary.universe_total??0), backed=Number(summary.model_backed_assets??0), eligible=Number(summary.model_eligible_assets??backed), evaluated=Number(summary.assets_scanned??0);
+      coverage.textContent=total ? "Universe "+total+" · models "+backed+" · eligible "+eligible+" · evaluated "+evaluated : "Discovering markets…";
     }
     box.innerHTML='<div class="top5-empty"><div class="eyebrow">Scanning</div><h2 style="margin:8px 0 6px">Analisi dell\'universo in corso</h2><div class="small">Il motore sta valutando i mercati con bundle verificati. La superficie si aggiorna appena il ranking è pronto.</div></div>';
     status.textContent="scanning";status.className="pill warn";
@@ -1533,7 +1545,22 @@ async function loadFocusHistories(picks){
   });
 }
 
-function populateAssets(signals){const input=$("asset");const cfg=(state.data&&state.data.config)||{};const discovered=Array.isArray(cfg.market_symbols)?cfg.market_symbols:[];const active=signals.map(x=>x.symbol).filter(Boolean);state.marketSymbols=Array.from(new Set([...discovered,...active])).sort();const list=$("marketSymbols");if(list){list.innerHTML=state.marketSymbols.map(s=>'<option value="'+esc(s)+'"></option>').join("");}if(!state.selected||!state.marketSymbols.includes(state.selected)){state.selected=active[0]||cfg.primary_symbol||state.marketSymbols[0]||null;}if(input)input.value=state.selected||"";}
+function populateAssets(signals){
+  const input=$("asset");
+  const cfg=(state.data&&state.data.config)||{};
+  const discovered=Array.isArray(cfg.market_symbols)?cfg.market_symbols:[];
+  const active=signals.map(x=>x.symbol).filter(Boolean);
+  state.marketSymbols=Array.from(new Set([...discovered,...active])).sort();
+  const list=$("marketSymbols");
+  if(list){
+    list.innerHTML=state.marketSymbols.map(s=>'<option value="'+esc(s)+'"></option>').join("");
+    list.setAttribute("aria-label",state.marketSymbols.length+" active markets");
+  }
+  if(!state.selected||!state.marketSymbols.includes(state.selected)){
+    state.selected=active[0]||cfg.primary_symbol||state.marketSymbols[0]||null;
+  }
+  if(input)input.value=state.selected||"";
+}
 
 function renderMetrics(data){
   const s=data.summary||{};
@@ -1542,11 +1569,12 @@ function renderMetrics(data){
     ["Terminal",data.ok?"READY":"WAIT",data.ok?"good":"bad"],
     ["Segnali",s.active_signals??0,s.active_signals>0?"good":""],
     ["WAIT",s.waits??0,s.waits>0?"warn":""],
-    ["Bundle compatibili",s.compatible_bundles??0,s.compatible_bundles>0?"good":"warn"],
-    ["Dati freschi",s.fresh_data_assets??0,s.fresh_data_assets>0?"good":"warn"],
-    ["Timeframe",q.timeframe||"—",""]
+    ["Universe",s.universe_total??0,s.universe_total>0?"":"warn"],
+    ["Eligible models",s.model_eligible_assets??s.model_backed_assets??0,s.model_eligible_assets>0?"":"warn"],
+    ["Dati freschi",s.fresh_data_assets??0,s.fresh_data_assets>0?"good":"warn"]
   ].map(x=>'<div class="card"><div class="metric-label">'+x[0]+'</div><div class="metric-value '+x[2]+'">'+esc(x[1])+'</div></div>').join("");
-  $("stamp").textContent=(data.generated_at?new Date(data.generated_at).toLocaleTimeString():"—")+" · "+(q.exchange||"—");
+  const source=q.scan_source==="exchange"?"market map live":q.scan_source==="local_fallback"?"local fallback":"—";
+  $("stamp").textContent=(data.generated_at?new Date(data.generated_at).toLocaleTimeString():"—")+" · "+(q.exchange||"—")+" · "+source;
 }
 
 function renderRadar(signals){
