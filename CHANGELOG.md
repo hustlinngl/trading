@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.9.28
-- Final dashboard polish: result-first Top 5 cards now use restrained motion, a compact confidence meter and cleaner empty/loading presentation.
-- Removed stale primary-state CSS and legacy metric styling that no longer had visible consumers.
+## 0.9.31
+- Final dashboard polish: the primary Top 5 surface is result-first, with restrained card entrance motion, compact confidence visualization and cleaner empty/loading states.
+- Removed stale primary-state and legacy metric CSS so the visible dashboard stays compact and quiet.
 
 
 ## 0.9.30
