@@ -203,3 +203,31 @@ def test_signal_terminal_alpha_ambient_fx_is_wired():
     assert "click-ripple" in html
     assert "signal-live-" in html
     assert "prefers-reduced-motion:reduce" in html
+
+
+def test_signal_terminal_history_falls_back_to_bundled_cache(tmp_path, monkeypatch):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    settings.symbol = "BTC/USDT"
+    history_dir = tmp_path / "data" / "historical"
+    history_dir.mkdir(parents=True)
+    (history_dir / "BTC_USDT_15m.csv").write_text(
+        "timestamp,open,high,low,close,volume\n"
+        "2026-10-06T00:00:00+00:00,100,101,99,100.5,1000\n"
+        "2026-10-06T00:15:00+00:00,100.5,102,100,101.5,1100\n",
+        encoding="utf-8",
+    )
+
+    def fail_network(*args, **kwargs):
+        raise OSError("offline")
+
+    monkeypatch.setattr(terminal_mod, "exchange_client", fail_network)
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path, history_bars=240)
+
+    result = terminal._history("BTC/USDT", 240)
+
+    assert result["source"] == "bundled"
+    assert result["network_error"] == "OSError:offline"
+    assert len(result["bars"]) == 2
+    assert result["bars"][1]["c"] == 101.5
