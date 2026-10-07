@@ -140,3 +140,26 @@ def test_refresh_deployment_manifest_requires_matching_evidence(tmp_path):
     assert manifest["ready"] is True
     assert manifest["data_fingerprint"] == fp
     assert manifest["model_semantics_fingerprint"] == sem
+
+
+def test_bundle_compatibility_without_metadata_fails_cleanly_in_non_strict_mode(tmp_path):
+    import json
+    settings = load_settings("config.yaml")
+    settings.signal_only_mode = False
+    settings.require_deployment_manifest_for_signal = True
+    bundle = asset_bundle_dir(tmp_path, "BTC/USDT")
+    bundle.mkdir(parents=True)
+    (bundle / "deployment_manifest.json").write_text(
+        json.dumps({"ready":True,"symbol":"BTC/USDT","timeframe":"15m"}),
+        encoding="utf-8",
+    )
+    ok, reason = bundle_compatibility(settings, bundle, "BTC/USDT")
+    assert not ok
+    assert reason == "deployment_manifest_data_mismatch"
+
+
+def test_asset_deployment_manifest_respects_root(tmp_path):
+    from ai_trading_lab.main import asset_deployment_manifest
+    settings = load_settings("config.yaml")
+    settings.symbol = "BTC/USDT"
+    assert asset_deployment_manifest(settings, tmp_path) == asset_bundle_dir(tmp_path, "BTC/USDT") / "deployment_manifest.json"
