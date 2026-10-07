@@ -15,6 +15,7 @@ This repository is a research-first adaptive trading platform for real market da
 - Deployment evidence is bound to model, runtime/economic semantics, dataset fingerprint and executable artifact hashes; stale or mixed-generation evidence fails closed.
 - Deterministic benchmark controls and CI checks for compile, tests, CLI startup and benchmark execution.
 - Single-file `signal_dashboard.py` signal terminal with automatic public-data refresh, provenance-aware bundle checks and prequential signal journal.
+- Alpha visual foundation with Sakura Tactical glow, anime cursor, animated navigation, click feedback, decision trace and lightweight ambient effects.
 
 ## Single signal terminal
 
