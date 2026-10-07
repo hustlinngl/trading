@@ -500,6 +500,42 @@ def test_signal_terminal_background_state_does_not_hold_lock_during_scan(tmp_pat
     assert second["elapsed"] < 0.45
 
 
+def test_scan_top5_reports_incremental_progress(monkeypatch, tmp_path):
+    import ai_trading_lab.live as live_mod
+
+    settings = load_settings("config.yaml")
+    monkeypatch.setattr(
+        live_mod,
+        "discover_live_universe",
+        lambda *args, **kwargs: {
+            "symbols": ["A/USDT", "B/USDT"],
+            "discovered_markets": 2,
+            "model_backed_markets": 2,
+            "model_eligible_markets": 2,
+            "market_counts": {"spot": 2},
+        },
+    )
+    monkeypatch.setattr(
+        live_mod,
+        "assess_symbol",
+        lambda settings, root, symbol, exchange=None, skip_network=False:
+            LiveAssessment(symbol, "2026-10-07T00:00:00+00:00", "WAIT", "FLAT", 0.5, 0.0, 1.0, ["gate"], "fp"),
+    )
+
+    progress = []
+    live_mod.scan_top5(
+        settings,
+        tmp_path,
+        exchange=object(),
+        progress_callback=progress.append,
+    )
+
+    assert progress[0]["evaluated"] == 0
+    assert progress[-1]["evaluated"] == 2
+    assert progress[-1]["total"] == 2
+    assert progress[-1]["waits"] == 2
+
+
 def test_scan_top5_prefers_stronger_robust_selection_score(monkeypatch, tmp_path):
     import ai_trading_lab.live as live_mod
 
