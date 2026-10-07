@@ -1148,6 +1148,90 @@ function age(v){return v==null||Number.isNaN(Number(v))?"—":Number(v).toFixed(
 function cls(sig){return sig==="LONG"?"signal-long":sig==="SHORT"?"signal-short":sig==="WAIT"?"signal-wait":"signal-flat";}
 function pill(ok,label){return '<span class="pill '+(ok?'good':'warn')+'"><span class="dot"></span>'+esc(label)+'</span>';}
 
+function drawPickChart(canvas,history,signal){
+  const bars=(history&&history.bars)||[];
+  if(!canvas||bars.length<2)return;
+  const rect=canvas.getBoundingClientRect(), dpr=Math.max(1,window.devicePixelRatio||1);
+  canvas.width=Math.max(1,Math.floor(rect.width*dpr)); canvas.height=Math.max(1,Math.floor(rect.height*dpr));
+  const ctx=canvas.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0);
+  const W=rect.width,H=rect.height,pad={l:8,r:8,t:14,b:20},cw=W-pad.l-pad.r,ch=H-pad.t-pad.b;
+  let lo=Math.min(...bars.map(b=>Number(b.l))),hi=Math.max(...bars.map(b=>Number(b.h)));
+  const span=Math.max(hi-lo,1e-9);lo-=span*.06;hi+=span*.06;
+  const xAt=i=>pad.l+(i/(bars.length-1))*cw,yAt=v=>pad.t+(1-(v-lo)/(hi-lo))*ch;
+  ctx.clearRect(0,0,W,H);ctx.lineWidth=1;ctx.strokeStyle="rgba(255,255,255,.055)";
+  for(let i=0;i<4;i++){const y=pad.t+(i/3)*ch;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();}
+  const candleW=Math.max(1,cw/bars.length*.62);
+  bars.forEach((b,i)=>{
+    const x=xAt(i),yo=yAt(b.o),yc=yAt(b.c),yh=yAt(b.h),yl=yAt(b.l),up=b.c>=b.o;
+    ctx.strokeStyle=up?"rgba(69,227,154,.52)":"rgba(255,111,136,.52)";
+    ctx.fillStyle=up?"rgba(69,227,154,.34)":"rgba(255,111,136,.34)";
+    ctx.beginPath();ctx.moveTo(x,yh);ctx.lineTo(x,yl);ctx.stroke();
+    ctx.fillRect(x-candleW/2,Math.min(yo,yc),candleW,Math.max(1,Math.abs(yc-yo)));
+  });
+  ctx.beginPath();bars.forEach((b,i)=>{const x=xAt(i),y=yAt(b.c);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});
+  ctx.lineTo(xAt(bars.length-1),pad.t+ch);ctx.lineTo(xAt(0),pad.t+ch);ctx.closePath();
+  const grad=ctx.createLinearGradient(0,pad.t,0,pad.t+ch);grad.addColorStop(0,"rgba(120,184,255,.10)");grad.addColorStop(1,"rgba(120,184,255,0)");ctx.fillStyle=grad;ctx.fill();
+  ctx.beginPath();bars.forEach((b,i)=>{const x=xAt(i),y=yAt(b.c);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});
+  ctx.strokeStyle=signal==="LONG"?"#45e39a":"#ff6f88";ctx.lineWidth=1.8;ctx.stroke();
+  ctx.fillStyle="rgba(148,138,164,.65)";ctx.font="10px system-ui";ctx.textAlign="left";ctx.fillText(new Date(bars[0].t).toLocaleDateString(),pad.l,H-5);
+  ctx.textAlign="right";ctx.fillText(new Date(bars[bars.length-1].t).toLocaleDateString(),W-pad.r,H-5);
+}
+
+function renderFocus(data){
+  state.data=data;
+  const box=$("top5Grid"),status=$("focusStatus");
+  if(!box)return;
+  if(!data.ok){
+    box.innerHTML='<div class="top5-empty"><div class="eyebrow">TERMINAL ERROR</div><h2 style="margin:8px 0 6px">Nessun dato disponibile</h2><div class="small">'+esc(data.error||"Errore nel terminale locale")+'</div></div>';
+    status.textContent="OFFLINE";status.className="pill warn";return;
+  }
+  const picks=(data.signals||[]).filter(x=>x.signal==="LONG"||x.signal==="SHORT").slice(0,5);
+  if(!picks.length){
+    box.innerHTML='<div class="top5-empty"><div class="eyebrow">NO VERIFIED PICK</div><h2 style="margin:8px 0 6px">Nessuna pick qualificata</h2><div class="small">Il gate non ha prodotto un LONG/SHORT sufficientemente validato. Non mostro WAIT o dati tecnici come se fossero opportunità.</div></div>';
+    status.textContent="0 VERIFIED PICKS";status.className="pill warn";return;
+  }
+  status.textContent=picks.length+" VERIFIED PICKS";status.className="pill good";
+  box.innerHTML=picks.map((r,i)=>{
+    const d=r.decision||{};
+    return '<article class="pick-card pick-'+(r.signal==="LONG"?"long":"short")+'" data-focus-symbol="'+esc(r.symbol)+'">'+
+      '<div class="pick-head"><div><div class="pick-rank">PICK #'+(i+1)+'</div><div class="pick-symbol">'+esc(r.symbol)+'</div></div><span class="pick-signal '+cls(r.signal)+'">'+esc(r.signal)+'</span></div>'+
+      '<div class="pick-stats">'+
+      '<div class="pick-stat"><div class="k">Prezzo</div><div class="v">'+num(r.realtime_price??r.price,2)+'</div></div>'+
+      '<div class="pick-stat"><div class="k">Confidence</div><div class="v">'+pct(r.confidence,1)+'</div></div>'+
+      '<div class="pick-stat"><div class="k">Expected</div><div class="v">'+pct(r.expected_return,2)+'</div></div>'+
+      '<div class="pick-stat"><div class="k">Data</div><div class="v">'+age(d.data_age_minutes)+'</div></div>'+
+      '</div>'+
+      '<div class="pick-chart"><canvas data-pick-chart="'+esc(r.symbol)+'"></canvas></div>'+
+      '<div class="pick-foot"><span>15m · close confermati</span><span class="history-badge" data-history-badge="'+esc(r.symbol)+'">storico…</span></div>'+
+      '</article>';
+  }).join("");
+  loadFocusHistories(picks);
+}
+
+async function loadFocusHistories(picks){
+  const request=++state.focusRequest;
+  const results=await Promise.all(picks.map(async r=>{
+    try{
+      const res=await fetch("/api/history?symbol="+encodeURIComponent(r.symbol)+"&limit=240",{cache:"no-store"});
+      return [r.symbol,await res.json()];
+    }catch(e){
+      return [r.symbol,{symbol:r.symbol,bars:[],source:"unavailable",error:String(e)}];
+    }
+  }));
+  if(request!==state.focusRequest)return;
+  state.focusHistories=Object.fromEntries(results);
+  picks.forEach(r=>{
+    const h=state.focusHistories[r.symbol]||{};
+    const canvas=document.querySelector('[data-pick-chart="'+CSS.escape(r.symbol)+'"]');
+    const badge=document.querySelector('[data-history-badge="'+CSS.escape(r.symbol)+'"]');
+    if(canvas)drawPickChart(canvas,h,r.signal);
+    if(badge){
+      const labels={network:"LIVE",local_cache:"CACHE",bundled:"BUNDLED",unavailable:"OFFLINE"};
+      badge.textContent=labels[h.source]||"—";
+    }
+  });
+}
+
 function populateAssets(signals){
   const sel=$("asset");
   const existing=Array.from(sel.options).map(x=>x.value);
@@ -1581,11 +1665,11 @@ async function refresh(force=false){
   $("stamp").textContent="scansione…";
   try{
     const res=await fetch("/api/state?force="+(force?"1":"0"),{cache:"no-store"});
-    const data=await res.json(); render(data);
-    await loadHistory(state.selected);
+    const data=await res.json();
+    renderFocus(data);
     scheduleRefresh(data.refresh_seconds||20);
   }catch(e){
-    render({ok:false,error:String(e),summary:{},notes:["Impossibile raggiungere il terminale locale."]});
+    renderFocus({ok:false,error:String(e),config:{},refresh_seconds:20});
     scheduleRefresh(20);
   }
 }
@@ -1600,10 +1684,7 @@ $("range").addEventListener("change",()=>loadHistory(state.selected));
 window.addEventListener("resize",()=>{if(state.history)drawChart(state.history,(state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[],(state.data&&state.data.signals||[]).find(x=>x.symbol===state.selected)?.realtime_price);});
 initAmbientFX();
 initAlphaMotion();
-initNavigation();
-initInspector();
 refresh(true);
-setInterval(()=>loadQuote(state.selected),5000);
 </script>
 </body>
 </html>
