@@ -211,6 +211,7 @@ def test_bundle_compatibility_rejects_tampered_artifact(tmp_path):
         json.dumps({"ready":True,"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem,"bundle_artifact_fingerprint":artifact_fp}),
         encoding="utf-8",
     )
+    (bundle / "trade_window_specialist.joblib").write_bytes(b"original-trade-window")
     (bundle / "signal_model.joblib").write_bytes(b"tampered-model")
     ok, reason = bundle_compatibility(settings, bundle, "BTC/USDT")
     assert not ok
