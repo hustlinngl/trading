@@ -1221,9 +1221,8 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
         </div>
         <div class="operator-copy"><strong>SAKURA</strong><span>WATCHER // ONLINE</span></div>
       </div>
-      <span id="stamp" class="connection-stamp" aria-live="polite">Connessione…</span>
       <button id="sakuraMusic" class="music-toggle" type="button" aria-label="Attiva musica Sakura lo-fi" aria-pressed="false">♪ Sakura</button>
-      <button id="refresh" type="button" aria-label="Aggiorna stato e segnali">Refresh</button>
+      <button id="refresh" type="button" aria-label="Aggiorna segnali">Refresh</button>
     </div>
   </div>
 
@@ -1254,7 +1253,6 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
           <div id="deckSignal" class="decision-signal signal-wait">WAIT</div>
           <div id="deckMeta" class="decision-meta">Seleziona un asset per ispezionare il verdetto.</div>
         </div>
-        <span id="deckBundle" class="pill warn"><span class="dot"></span>WAIT</span>
       </div>
       <div class="decision-stats">
         <div class="mini-stat"><div class="k">Prezzo</div><div class="v num" id="deckPrice">—</div></div>
@@ -1621,20 +1619,13 @@ function drawPickChart(canvas,history,signal){
 
 function renderFocus(data){
   state.data=data;
-  const box=$("top5Grid"),status=$("focusStatus");
+  const box=$("top5Grid");
   if(!box)return;
   if(data.scan_in_progress){
-    const summary=data.summary||{};
-    const coverage=$("focusCoverage");
-    if(coverage){
-      const total=Number(summary.universe_total??0), backed=Number(summary.model_backed_assets??0), eligible=Number(summary.model_eligible_assets??backed), evaluated=Number(summary.assets_scanned??0), waits=Number(summary.waits??0);
-      coverage.textContent=total ? "Universe "+total+" · models "+backed+" · eligible "+eligible+" · evaluated "+evaluated+" · wait "+waits : "Discovering markets…";
-    }
     box.innerHTML='<div class="top5-empty"><div class="eyebrow">Scanning</div><h2 style="margin:8px 0 6px">Analisi dell\'universo in corso</h2><div class="small">Il motore sta valutando i mercati con bundle verificati. La superficie si aggiorna appena il ranking è pronto.</div></div>';
     const p=data.scan_progress||{};
     const done=Number(p.evaluated??0), total=Number(p.total??summary.assets_scanned??0), signals=Number(p.signals??0);
     const pctDone=total>0?Math.round(done/total*100):0;
-    status.textContent=(total?done+"/"+total+" · ":"")+"scanning";status.className="focus-status warn";
     if(done>0){
       box.innerHTML='<div class="top5-empty"><div class="eyebrow">Scanning · '+pctDone+'%</div><h2 style="margin:8px 0 6px">Analisi dell\'universo in corso</h2><div class="small">Valutati '+done+' / '+total+' mercati · '+signals+' segnali candidati · '+Number(p.waits??0)+' WAIT.</div><div class="scan-progress"><span style="width:'+pctDone+'%"></span></div></div>';
     }
@@ -1642,24 +1633,13 @@ function renderFocus(data){
   }
   if(!data.ok){
     box.innerHTML='<div class="top5-empty"><div class="eyebrow">Offline</div><h2 style="margin:8px 0 6px">Market data unavailable</h2><div class="small">'+esc(data.error||"Il terminale locale non è disponibile.")+'</div></div>';
-    const coverage=$("focusCoverage"); if(coverage) coverage.textContent="Universe unavailable";
-    status.textContent="offline";status.className="focus-status warn";return;
+return;
   }
   const picks=(data.signals||[]).filter(x=>x.signal==="LONG"||x.signal==="SHORT").slice(0,5);
   if(!picks.length){
     box.innerHTML='<div class="top5-empty"><div class="eyebrow">No active signals</div><h2 style="margin:8px 0 6px">Nessun segnale</h2><div class="small">Il gate corrente non trova un LONG o SHORT abbastanza solido da mostrare.</div></div>';
-    const summary=data.summary||{};
-    const coverage=$("focusCoverage");
-    if(coverage) coverage.textContent="Universe "+(summary.universe_total??0)+" · eligible "+(summary.model_eligible_assets??summary.model_backed_assets??0)+" · evaluated "+(summary.assets_scanned??0)+" · wait "+(summary.waits??0);
-    status.textContent="0 signals";status.className="focus-status warn";return;
+return;
   }
-  const summary=data.summary||{};
-  const coverage=$("focusCoverage");
-  if(coverage){
-    const total=Number(summary.universe_total??0), eligible=Number(summary.model_eligible_assets??summary.model_backed_assets??0), evaluated=Number(summary.assets_scanned??0);
-    coverage.textContent="Universe "+total+" · eligible "+eligible+" · evaluated "+evaluated;
-  }
-  status.textContent=picks.length+" signal"+(picks.length===1?"":"s");status.className="focus-status good";
   box.innerHTML=picks.map((r,i)=>{
     const d=r.decision||{};
     return '<article class="pick-card pick-'+(r.signal==="LONG"?"long":"short")+(i===0?' pick-primary':'')+'" data-focus-symbol="'+esc(r.symbol)+'" tabindex="0" role="button" aria-label="Apri '+esc(r.symbol)+' nel market inspector">'+
@@ -1787,9 +1767,9 @@ function renderDetail(signals){
       '<td class="num">'+pct(d.meta_success,0)+'</td>'+
       '<td class="num">'+(d.analog_n==null?"—":esc(d.analog_n))+" · "+pct(d.analog_agreement,0)+'</td>'+
       '<td>'+esc(d.regime||"—")+'</td>'+
-      '<td>'+duration+" "+pill(!!d.trade_window_ready,d.trade_window_ready?"READY":"WAIT")+'</td>'+
+      '<td>'+duration+'</td>'+
       '<td class="num">'+age(d.data_age_minutes)+'</td>'+
-      '<td>'+pill(!!b.compatible&&!!b.manifest_ready, b.compatible&&b.manifest_ready?"PROVEN":"WAIT")+why+'</td>'+
+      '<td>'+why+'</td>'+
     '</tr>';
   }).join("")||'<tr><td colspan="11" class="small">Nessun dato.</td></tr>';
 }
@@ -1819,7 +1799,7 @@ function renderEvidence(signals){
     const b=r.bundle||{}, h=b.holdout||{};
     return '<div class="info">'+
       '<div class="label">'+esc(r.symbol)+'</div>'+
-      '<div style="margin:7px 0">'+pill(!!b.compatible&&!!b.manifest_ready,b.compatible&&b.manifest_ready?"PROVEN":"WAIT")+'</div>'+
+
       '<div class="small">training: '+esc(b.training_rows??"—")+' · holdout: '+pct(h.total_return??h.net_compounded_return,2)+'</div>'+
       '<div class="small">dataset: '+esc((b.data_fingerprint||"—").slice(0,12))+'</div>'+
       '<div class="small">artefatti: '+esc((b.artifact_fingerprint||"—").slice(0,12))+'</div>'+
@@ -1855,7 +1835,7 @@ function bindInteractiveRows(){
 
 function renderDecisionDeck(signals){
   const active=signals.find(x=>x.symbol===state.selected)||signals[0];
-  const deckSignal=$("deckSignal"), deckMeta=$("deckMeta"), deckBundle=$("deckBundle"), deck=$("decisionDeck");
+  const deckSignal=$("deckSignal"), deckMeta=$("deckMeta"), deck=$("decisionDeck");
   const trace=$("traceGrid"), reasons=$("deckReasons");
   if(!active){
     deckSignal.textContent="WAIT";deckSignal.className="decision-signal signal-wait";
@@ -1869,9 +1849,7 @@ function renderDecisionDeck(signals){
   deckSignal.textContent=sig;deckSignal.className="decision-signal "+cls(sig);
   deck.className="decision-deck signal-live-"+sig.toLowerCase();
   deck.classList.remove("decision-flash");void deck.offsetWidth;deck.classList.add("decision-flash");
-  deckMeta.textContent=sig==="LONG"?"Il gate corrente ammette un bias LONG.":sig==="SHORT"?"Il gate corrente ammette un bias SHORT.":"Nessun edge sufficientemente robusto per un segnale attivo.";
-  deckBundle.className="pill "+(b.compatible&&b.manifest_ready?"good":"warn");
-  deckBundle.innerHTML='<span class="dot"></span>'+esc(b.compatible&&b.manifest_ready?"PROVEN":"WAIT");
+  deckMeta.textContent=sig==="LONG"?"Bias LONG · risultato del modello":sig==="SHORT"?"Bias SHORT · risultato del modello":"Nessun segnale attivo";
   $("deckAsset").textContent=active.symbol||"—";
   $("deckPrice").textContent=num(active.realtime_price??active.price,2);
   $("deckConfidence").textContent=pct(active.confidence,1);
@@ -1897,7 +1875,7 @@ function signalOutcomeClass(outcome){
   return outcome==="WIN"?"good":outcome==="LOSS"?"bad":outcome==="TIMEOUT"?"warn":"";
 }
 function traceState(ok,label){
-  return '<span class="trace-state '+(ok?'ready':'wait')+'"><i class="trace-mini-dot"></i>'+esc(label)+'</span>';
+  return '<span class="trace-state">'+esc(label)+'</span>';
 }
 
 function renderTimeline(signals,journal){
