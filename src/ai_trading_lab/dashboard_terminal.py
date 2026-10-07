@@ -560,7 +560,15 @@ class SignalTerminal:
 
     def _assessment_payload(self, assessment: LiveAssessment) -> dict:
         payload = _json_safe(assessment.to_dict())
-        payload["signal_class"] = _signal_class(str(payload.get("signal", "WAIT")))
+        payload["signal_class"] = _signal_class(str(payload.get("signal", "FLAT")))
+        payload["decision"] = {
+            "signal": payload.get("signal"),
+            "confidence": payload.get("confidence"),
+            "expected_return": payload.get("expected_return"),
+            "price": payload.get("price"),
+            "horizon_bars": payload.get("horizon_bars"),
+            "actionable": payload.get("actionable"),
+        }
         return payload
 
     def _bootstrap_state(self) -> dict:
@@ -720,38 +728,21 @@ class SignalTerminal:
                     row["realtime_price"] = realtime["price"]
                 row["quote"] = realtime
 
-                details = row.get("details") or {}
                 row["decision"] = {
-                    "p_up": details.get("p_up"),
+                    "signal": row.get("signal"),
+                    "confidence": row.get("confidence"),
                     "expected_return": row.get("expected_return"),
-                    "expected_return_lcb": details.get("expected_return_lcb"),
-                    "expected_return_ucb": details.get("expected_return_ucb"),
-                    "robust_directional_edge": details.get("robust_directional_edge"),
-                    "selection_score": details.get("selection_score"),
-                    "score": details.get("score"),
-                    "meta_success": details.get("meta_success"),
-                    "model_disagreement": details.get("model_disagreement"),
-                    "return_disagreement": details.get("return_disagreement"),
-                    "regime": details.get("regime"),
-                    "analog_n": details.get("analog_n"),
-                    "analog_agreement": details.get("analog_agreement"),
-                    "trade_window_ready": details.get("trade_window_ready"),
-                    "trade_window_direction": details.get(
-                        "trade_window_direction"
-                    ),
-                    "trade_window_confidence": details.get(
-                        "trade_window_confidence"
-                    ),
-                    "data_age_minutes": details.get("data_age_minutes"),
+                    "price": row.get("price"),
+                    "horizon_bars": row.get("horizon_bars"),
+                    "actionable": row.get("actionable"),
                 }
                 signals.append(row)
 
             signals.sort(
                 key=lambda x: (
                     _signal_rank(str(x.get("signal", "WAIT"))),
-                    float((x.get("decision") or {}).get("selection_score", 0.0) or 0.0),
-                    float((x.get("decision") or {}).get("robust_directional_edge", 0.0) or 0.0),
                     float(x.get("confidence", 0.0) or 0.0),
+                    abs(float(x.get("expected_return", 0.0) or 0.0)),
                 ),
                 reverse=True,
             )
@@ -2181,16 +2172,12 @@ function openInspector(symbol){
     const d=active.decision||{};
     const signal=active.signal||"WAIT";
     const trace=[
-      ["p(up)",d.p_up==null?"—":pct(d.p_up,1)],
-      ["Confidence",active.confidence==null?"—":pct(active.confidence,1)],
-      ["Robust edge",d.robust_directional_edge==null?"—":pct(d.robust_directional_edge,2)],
+      ["Signal",d.signal||signal],
+      ["Confidence",d.confidence==null?"—":pct(d.confidence,1)],
       ["Expected return",d.expected_return==null?"—":pct(d.expected_return,2)],
-      ["Score",d.score==null?"—":num(d.score,3)],
-      ["Meta success",d.meta_success==null?"—":pct(d.meta_success,0)],
-      ["Memory",d.analog_n==null?"—":String(d.analog_n)+" · "+pct(d.analog_agreement,0)],
-      ["Duration",d.trade_window_confidence==null?"—":pct(d.trade_window_confidence,0)+" · "+String(d.trade_window_direction||"—")],
-      ["Regime",d.regime||"—"],
-      ["Data age",d.data_age_minutes==null?"—":age(d.data_age_minutes)]
+      ["Price",d.price==null?"—":num(d.price,2)],
+      ["Horizon",d.horizon_bars==null?"—":String(d.horizon_bars)+" bars"],
+      ["Actionable",d.actionable?"YES":"NO"]
     ];
     content.innerHTML=
       '<div class="inspector-hero signal-live-'+signal.toLowerCase()+'">'+
@@ -2200,8 +2187,8 @@ function openInspector(symbol){
         '<div class="inspector-grid">'+
           '<div class="inspector-card"><div class="k">Prezzo</div><div class="v num">'+num(active.realtime_price??active.price,2)+'</div></div>'+
           '<div class="inspector-card"><div class="k">Confidence</div><div class="v">'+pct(active.confidence,1)+'</div></div>'+
-          '<div class="inspector-card"><div class="k">Robust edge</div><div class="v">'+(d.robust_directional_edge==null?"—":pct(d.robust_directional_edge,2))+'</div></div>'+
-          '<div class="inspector-card"><div class="k">Score</div><div class="v">'+num(d.score,3)+'</div></div>'+
+          '<div class="inspector-card"><div class="k">Expected</div><div class="v">'+pct(active.expected_return,2)+'</div></div>'+
+          '<div class="inspector-card"><div class="k">Horizon</div><div class="v">'+esc(String(active.horizon_bars||"—"))+' bars</div></div>'+
         '</div>'+
       '</div>'+
       '<div class="inspector-section"><h3>Signal data</h3><div class="inspector-trace">'+
@@ -2398,7 +2385,7 @@ function drawChart(history, signals, journal, realtimePrice){
 
   const regimeBadge=$("chartRegime");
   const activeSignal=(signals||[]).find(x=>x.symbol===state.selected);
-  if(regimeBadge)regimeBadge.textContent="REGIME · "+esc((activeSignal&&activeSignal.decision&&activeSignal.decision.regime)||"—");
+  if(regimeBadge)regimeBadge.textContent="SIGNAL · "+esc((activeSignal&&activeSignal.signal)||"—");
   canvas.onmousemove=(ev)=>{
     const r=canvas.getBoundingClientRect(), mx=ev.clientX-r.left;
     const idx=Math.max(0,Math.min(bars.length-1,Math.round((mx-pad.l)/cw*(bars.length-1))));
