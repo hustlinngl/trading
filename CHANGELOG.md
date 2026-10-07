@@ -7,6 +7,7 @@
 - Added live scan progress presentation with evaluated/total coverage and a lightweight progress bar.
 - Added regression coverage for the polished interaction and status states.
 - Restored a functional sticky navigation with an explicit Overview entry; secondary sections reveal on demand instead of remaining decorative/hidden.
+- Added restrained section-open transitions and connection-state feedback, with reduced-motion fallbacks.
 
 ## 0.9.19
 - Full-universe discovery now treats active exchange metadata as authoritative and avoids inventing coverage from stale configured/local symbols when the exchange map is available.
