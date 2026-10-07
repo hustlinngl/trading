@@ -315,6 +315,8 @@ class LiveTracker:
                     merged["mid"] = (
                         float(merged["bid"]) + float(merged["ask"])
                     ) / 2.0
+                    if merged.get("price") is None:
+                        merged["price"] = merged["mid"]
                 except (TypeError, ValueError):
                     pass
 
