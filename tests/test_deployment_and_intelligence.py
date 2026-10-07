@@ -90,7 +90,7 @@ def test_bundle_compatibility_rejects_training_semantics_mismatch(tmp_path):
 
 def test_bundle_compatibility_rejects_stale_manifest_provenance(tmp_path):
     import json
-    from ai_trading_lab.deployment import model_semantics_fingerprint
+    from ai_trading_lab.deployment import model_semantics_fingerprint, deployment_semantics_fingerprint
     settings = load_settings("config.yaml")
     bundle = asset_bundle_dir(tmp_path, "BTC/USDT")
     bundle.mkdir(parents=True)
@@ -112,7 +112,7 @@ def test_bundle_compatibility_rejects_stale_manifest_provenance(tmp_path):
 
 def test_refresh_deployment_manifest_requires_matching_evidence(tmp_path):
     import json
-    from ai_trading_lab.deployment import model_semantics_fingerprint, refresh_deployment_manifest
+    from ai_trading_lab.deployment import model_semantics_fingerprint, deployment_semantics_fingerprint, refresh_deployment_manifest
     settings = load_settings("config.yaml")
     bundle = asset_bundle_dir(tmp_path, "BTC/USDT")
     bundle.mkdir(parents=True)
