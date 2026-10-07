@@ -107,52 +107,24 @@ jobs:
           if (-not (Test-Path $exe)) {
             throw "Frozen executable was not produced: $exe"
           }
-
-          # The primary binary is intentionally windowed, so startup stderr is hidden in CI.
-          # Build a temporary console twin to expose any frozen-import/startup failure.
-          pyinstaller `
-            --noconfirm `
-            --clean `
-            --onefile `
-            --console `
-            --name SakuraSignalTerminalSmoke `
-            --paths src `
-            --collect-submodules ai_trading_lab `
-            --collect-data xgboost `
-            --collect-binaries xgboost `
-            --collect-all lightgbm `
-            signal_dashboard.py
-
-          $output = & .\dist\SakuraSignalTerminalSmoke.exe --smoke-test 2>&1
-          $exitCode = $LASTEXITCODE
-          $output | Out-String | Write-Host
-          if ($exitCode -ne 0) {
-            throw "Frozen executable startup failed with exit code $exitCode. Output:`n$output"
+          $sizeMb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
+          if ($sizeMb -lt 20) {
+            throw "Frozen executable looks unexpectedly small: $sizeMb MB"
           }
 
-          Write-Host "Primary windowed executable produced successfully: $exe"
+          # Validate the exact windowed binary that users receive.
+          $smoke = Start-Process -FilePath $exe -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($smoke.ExitCode -ne 0) {
+            throw "Frozen executable smoke test failed with exit code $($smoke.ExitCode)"
+          }
+          Write-Host "Frozen executable smoke test passed: $sizeMb MB"
 
       - name: Functional packaged dashboard smoke test
         shell: pwsh
         run: |
-          # Confirm the primary windowed binary stays alive when launched.
+          # Validate the exact primary windowed binary over its local HTTP surface.
+          $port = 8875
           $primary = Start-Process -FilePath .\dist\SakuraSignalTerminal.exe `
-            -ArgumentList "--no-browser --host 127.0.0.1 --port 8875" `
-            -PassThru
-          try {
-            Start-Sleep -Seconds 8
-            if ($primary.HasExited) {
-              throw "Primary windowed executable exited during startup with code $($primary.ExitCode)"
-            }
-            Write-Host "Primary windowed executable startup process is alive."
-          } finally {
-            Stop-Process -Id $primary.Id -Force -ErrorAction SilentlyContinue
-          }
-
-          # The console twin uses the same application code with a visible console
-          # subsystem, so use it for deterministic HTTP/route validation.
-          $port = 8876
-          $proc = Start-Process -FilePath .\dist\SakuraSignalTerminalSmoke.exe `
             -ArgumentList "--no-browser --host 127.0.0.1 --port $port" `
             -PassThru
           try {
@@ -167,9 +139,11 @@ jobs:
                 Start-Sleep -Seconds 1
               }
             }
-            if (-not $ready) { throw "Packaged console twin did not start on port $port" }
-            if (-not $page.Content.Contains("Top 5")) { throw "Packaged dashboard does not contain the focused Top 5 surface" }
+            if (-not $ready) { throw "Packaged primary executable did not start on port $port" }
+            if (-not $page.Content.Contains("Top 5 signals")) { throw "Packaged dashboard does not contain the focused Top 5 signals surface" }
+            if (-not $page.Content.Contains("pick-stat-meter")) { throw "Packaged dashboard is missing the confidence result meter" }
             if (-not $health.ok) { throw "Packaged health endpoint did not report ok=true" }
+
             $symbols = @("BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT")
             foreach ($symbol in $symbols) {
               $encoded = [System.Uri]::EscapeDataString($symbol)
@@ -178,7 +152,7 @@ jobs:
             }
             Write-Host "Functional packaged dashboard smoke test passed for all five historical assets."
           } finally {
-            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Stop-Process -Id $primary.Id -Force -ErrorAction SilentlyContinue
           }
       - name: Assemble portable package
         shell: pwsh
@@ -191,7 +165,7 @@ jobs:
           Copy-Item .\SETUP_WINDOWS.md .\release\SETUP_WINDOWS.md
           Copy-Item .\README.md .\release\README.md
           @"
-          Sakura Signal Terminal 0.9.28
+          Sakura Signal Terminal 0.9.29
           
           Launch SakuraSignalTerminal.exe.
           The executable is read-only: it exposes no order endpoints.
