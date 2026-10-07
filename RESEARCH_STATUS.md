@@ -1,4 +1,4 @@
-# Research status — 0.9.17
+# Research status — 0.9.18
 
 ## Current state
 
