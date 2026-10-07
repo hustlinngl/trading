@@ -49,6 +49,6 @@ With no `--symbols` argument, the bootstrap command discovers the full active ex
 python -m ai_trading_lab.main bootstrap-live-data --live-bars 600
 ```
 
-Use `--market-types spot,swap,future` to make the scope explicit, or `--symbols BTC/USDT,ETH/USDT` to limit the run. The command is resumable and reuses sufficiently fresh CSVs.
+Use `--market-types spot,swap,future` to make the scope explicit, `--symbols BTC/USDT,ETH/USDT` to limit the run, or `--workers 1` for a fully sequential bootstrap. The command is resumable, reuses sufficiently fresh CSVs, and writes files atomically so an interrupted run can be resumed safely.
 
 
