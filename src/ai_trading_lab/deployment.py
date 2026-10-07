@@ -29,6 +29,33 @@ def model_semantics_fingerprint(settings) -> str:
     }
     return hashlib.sha256(json.dumps(fields, sort_keys=True).encode("utf-8")).hexdigest()[:24]
 
+def bundle_artifact_fingerprint(bundle: str | Path) -> str:
+    """Hash executable model artifacts so a manifest cannot bless a tampered bundle."""
+    import hashlib
+    bundle=Path(bundle)
+    names=(
+        "signal_model.joblib",
+        "analog_memory.joblib",
+        "regime_detector.joblib",
+        "meta_regime_detector.joblib",
+        "meta_policy.joblib",
+        "feature_efficiency.joblib",
+        "trade_window_specialist.joblib",
+    )
+    h=hashlib.sha256()
+    for name in names:
+        path=bundle/name
+        if not path.exists():
+            continue
+        h.update(name.encode("utf-8"))
+        h.update(b"\0")
+        with path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1024*1024), b""):
+                h.update(chunk)
+        h.update(b"\0")
+    return h.hexdigest()[:24]
+
+
 def deployment_semantics_fingerprint(settings) -> str:
     """Fingerprint every runtime/economic rule that can change signal eligibility."""
     import hashlib
@@ -66,6 +93,35 @@ def deployment_semantics_fingerprint(settings) -> str:
         "trade_window_min_holdout_trades": int(getattr(settings, "trade_window_min_holdout_trades", 12)),
         "trade_window_min_confidence": float(getattr(settings, "trade_window_min_confidence", 0.80)),
         "trade_window_min_net_return": float(getattr(settings, "trade_window_min_net_return", 0.0005)),
+        "trade_window_require_base_agreement": bool(getattr(settings, "trade_window_require_base_agreement", True)),
+        "trade_window_min_expected_return": float(getattr(settings, "trade_window_min_expected_return", 0.0015)),
+        "trade_window_min_hours": float(getattr(settings, "trade_window_min_hours", 3.0)),
+        "trade_window_max_hours": float(getattr(settings, "trade_window_max_hours", 24.0)),
+        "trade_window_preferred_min_hours": float(getattr(settings, "trade_window_preferred_min_hours", 3.0)),
+        "trade_window_preferred_max_hours": float(getattr(settings, "trade_window_preferred_max_hours", 4.0)),
+        "trade_window_preference_weight": float(getattr(settings, "trade_window_preference_weight", 0.10)),
+        "trade_window_pt_atr": float(getattr(settings, "trade_window_pt_atr", 1.25)),
+        "trade_window_sl_atr": float(getattr(settings, "trade_window_sl_atr", 0.90)),
+        "trade_window_min_oos_trades": int(getattr(settings, "trade_window_min_oos_trades", 25)),
+        "trade_window_min_oos_wilson": float(getattr(settings, "trade_window_min_oos_wilson", 0.60)),
+        "trade_window_holdout_frac": float(getattr(settings, "trade_window_holdout_frac", 0.15)),
+        "trade_window_require_positive_holdout_backtest": bool(getattr(settings, "trade_window_require_positive_holdout_backtest", True)),
+        "signal_confidence_threshold": float(getattr(settings, "signal_confidence_threshold", 0.82)),
+        "signal_probability_threshold": float(getattr(settings, "signal_probability_threshold", 0.72)),
+        "signal_min_expected_return": float(getattr(settings, "signal_min_expected_return", 0.003)),
+        "signal_meta_threshold": float(getattr(settings, "signal_meta_threshold", 0.62)),
+        "signal_min_score": float(getattr(settings, "signal_min_score", 0.22)),
+        "signal_max_disagreement": float(getattr(settings, "signal_max_disagreement", 0.05)),
+        "signal_memory_min_neighbors": int(getattr(settings, "signal_memory_min_neighbors", 16)),
+        "signal_memory_min_agreement": float(getattr(settings, "signal_memory_min_agreement", 0.70)),
+        "signal_graph_min_samples": int(getattr(settings, "signal_graph_min_samples", 8)),
+        "signal_graph_min_win_rate": float(getattr(settings, "signal_graph_min_win_rate", 0.62)),
+        "signal_analog_support_scale": int(getattr(settings, "signal_analog_support_scale", 24)),
+        "signal_graph_support_scale": int(getattr(settings, "signal_graph_support_scale", 16)),
+        "signal_rearm_below": float(getattr(settings, "signal_rearm_below", 0.68)),
+        "objective_min_edge": float(getattr(settings, "objective_min_edge", 0.003)),
+        "objective_max_data_age_minutes": float(getattr(settings, "objective_max_data_age_minutes", 30.0)),
+        "objective_duration_bonus": float(getattr(settings, "objective_duration_bonus", 0.04)),
         "trade_window_require_positive_holdout_backtest": bool(getattr(settings, "trade_window_require_positive_holdout_backtest", True)),
         "base_min_holdout_trades": int(getattr(settings, "base_min_holdout_trades", 20)),
         "base_require_positive_holdout_return": bool(getattr(settings, "base_require_positive_holdout_return", True)),
@@ -152,6 +208,9 @@ def bundle_compatibility(settings, bundle: str | Path, symbol: str) -> tuple[boo
                 return False, "deployment_manifest_semantics_mismatch"
             if str(manifest.get("deployment_semantics_fingerprint")) != deployment_semantics_fingerprint(settings):
                 return False, "deployment_manifest_runtime_mismatch"
+            recorded_artifacts=str(manifest.get("bundle_artifact_fingerprint") or "")
+            if recorded_artifacts != bundle_artifact_fingerprint(bundle):
+                return False, "deployment_manifest_artifact_mismatch"
         except Exception as exc:
             return False, f"deployment_manifest_error:{type(exc).__name__}"
     return True, "ok"
@@ -215,6 +274,7 @@ def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
         "data_fingerprint":meta.get("data_fingerprint") or base.get("data_fingerprint"),
         "model_semantics_fingerprint":meta.get("model_semantics_fingerprint"),
         "deployment_semantics_fingerprint":meta.get("deployment_semantics_fingerprint"),
+        "bundle_artifact_fingerprint":bundle_artifact_fingerprint(asset_dir),
         "checks":checks,
         "base_holdout_report":str(base_path),
         "duration_report":str(duration_path),
