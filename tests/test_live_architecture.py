@@ -3,6 +3,8 @@ from __future__ import annotations
 import threading
 import time
 
+import pytest
+
 import pandas as pd
 
 from ai_trading_lab.config import load_settings
