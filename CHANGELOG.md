@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.30
+- Fixed the packaged dashboard smoke test to stage `config.yaml` and bundled historical CSVs beside the exact frozen EXE before exercising its localhost history routes.
+- Kept packaging validation on the same user-facing one-file binary from build through functional verification.
+
 ## 0.9.29
 - Simplified the Windows release validation to test the exact user-facing windowed EXE instead of rebuilding a second console twin.
 - Functional packaging smoke test now validates the final EXE directly over localhost, including the Top 5 result surface, confidence meter and bundled history for the five packaged markets.
