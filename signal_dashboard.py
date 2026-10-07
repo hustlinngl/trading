@@ -2130,6 +2130,7 @@ function scheduleRefresh(seconds){
 $("refresh").addEventListener("click",()=>refresh(true));
 function openSelectedAsset(){const value=String($("asset").value||"").trim();if(!value)return;const allowed=new Set(state.marketSymbols||[]);if(!allowed.has(value)){ $("asset").setCustomValidity("Simbolo non presente nei mercati attivi.");$("asset").reportValidity();return;}$("asset").setCustomValidity("");state.selected=value;loadHistory(value);renderTimeline((state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[]);}$("asset").addEventListener("change",openSelectedAsset);$("asset").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();openSelectedAsset();}});$("loadAsset").addEventListener("click",openSelectedAsset);$("range").addEventListener("change",()=>loadHistory(state.selected));
 window.addEventListener("resize",()=>{if(state.history)drawChart(state.history,(state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[],(state.data&&state.data.signals||[]).find(x=>x.symbol===state.selected)?.realtime_price);});
+initInspector();
 initAmbientFX();
 initAlphaMotion();
 refresh(true);
@@ -2270,7 +2271,7 @@ def validate_dashboard_markup() -> None:
         '<div class="legacy-hidden panel" id="detail">',
         '<div class="legacy-hidden panel" id="journal">',
         '<div class="legacy-hidden panel" id="evidencePanel">',
-        '<aside id="inspectorDrawer" class="legacy-hidden inspector-drawer" aria-label="Decision inspector" aria-hidden="true">',
+        '<aside id="inspectorDrawer" class="legacy-hidden inspector-drawer" role="dialog" aria-modal="true" aria-labelledby="inspectorTitle" aria-describedby="inspectorSubtitle" aria-label="Decision inspector" aria-hidden="true">',
     )
     missing = [token for token in required if token not in HTML]
     if missing:
