@@ -17,7 +17,7 @@ from .optimizer import optimize_policy
 from .objectives import robust_performance_utility
 from .fingerprint import strong_dataset_fingerprint
 from .autonomous import autonomous_cycle, daemon
-from .deployment import model_semantics_fingerprint, deployment_semantics_fingerprint, refresh_deployment_manifest as _refresh_deployment_manifest
+from .deployment import model_semantics_fingerprint, deployment_semantics_fingerprint, MANAGED_BUNDLE_FILES, refresh_deployment_manifest as _refresh_deployment_manifest
 
 
 def synthetic_data(s, n=5000):
@@ -66,12 +66,7 @@ def _promote_asset_bundle(asset_dir: str | Path, champion_dir: str | Path = "mod
     src = Path(asset_dir)
     dst = Path(champion_dir)
     dst.mkdir(parents=True, exist_ok=True)
-    managed = (
-        "signal_model.joblib", "analog_memory.joblib", "regime_detector.joblib",
-        "meta_regime_detector.joblib", "meta_policy.joblib", "feature_efficiency.joblib",
-        "trade_window_specialist.joblib", "trade_window_training_report.json",
-        "base_training_meta.json", "base_holdout_report.json", "deployment_manifest.json",
-    )
+    managed = MANAGED_BUNDLE_FILES
     for name in managed:
         path = src / name
         target = dst / name
