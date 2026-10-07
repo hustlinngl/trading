@@ -97,6 +97,9 @@ def test_bundle_compatibility_rejects_stale_manifest_provenance(tmp_path):
     fp = "dataset-current"
     sem = model_semantics_fingerprint(settings)
     dep_sem = deployment_semantics_fingerprint(settings)
+    for name in ENGINE_ARTIFACTS:
+        (bundle / name).write_bytes(name.encode())
+    (bundle / "trade_window_specialist.joblib").write_bytes(b"window")
     (bundle / "base_training_meta.json").write_text(
         json.dumps({"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem}),
         encoding="utf-8",
@@ -107,7 +110,7 @@ def test_bundle_compatibility_rejects_stale_manifest_provenance(tmp_path):
     )
     ok, reason = bundle_compatibility(settings, bundle, "BTC/USDT")
     assert not ok
-    assert reason == "deployment_manifest_data_mismatch"
+    assert reason == "deployment_bundle_incomplete"
 
 
 def test_refresh_deployment_manifest_requires_matching_evidence(tmp_path):
@@ -146,7 +149,7 @@ def test_refresh_deployment_manifest_requires_matching_evidence(tmp_path):
     assert manifest["bundle_artifact_fingerprint"] == bundle_artifact_fingerprint(bundle)
 
 
-def test_bundle_compatibility_without_metadata_fails_cleanly_in_non_strict_mode(tmp_path):
+def test_incomplete_bundle_fails_cleanly_before_manifest_evaluation(tmp_path):
     import json
     settings = load_settings("config.yaml")
     settings.signal_only_mode = False
