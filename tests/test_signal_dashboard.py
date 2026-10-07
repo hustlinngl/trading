@@ -26,6 +26,9 @@ def test_dashboard_responsive_ui_and_chart_edge_case():
     assert "connection-stamp" in html
     assert 'aria-busy="true"' in html
     assert "scan-progress" in html
+    assert 'data-target="focusDashboard"' in html
+    assert 'class="nav" id="nav"' in html
+    assert "const reveal=id=>" in html
 
 
 def test_dashboard_market_explorer_ui():
