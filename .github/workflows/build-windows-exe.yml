@@ -50,9 +50,13 @@ jobs:
       - name: Smoke test frozen executable
         shell: pwsh
         run: |
-          & .\dist\SakuraSignalTerminal.exe --smoke-test
-          if ($LASTEXITCODE -ne 0) {
-            throw "SakuraSignalTerminal.exe smoke test failed with exit code $LASTEXITCODE"
+          $exe = Resolve-Path .\dist\SakuraSignalTerminal.exe
+          if (-not (Test-Path $exe)) {
+            throw "Frozen executable was not produced: $exe"
+          }
+          $process = Start-Process -FilePath $exe -ArgumentList "--smoke-test" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "SakuraSignalTerminal.exe smoke test failed with exit code $($process.ExitCode)"
           }
 
       - name: Assemble portable package
