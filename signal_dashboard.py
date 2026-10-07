@@ -551,6 +551,8 @@ th,td{padding:11px 12px;text-align:left;border-bottom:1px solid rgba(55,38,68,.6
 th{font-size:9px;text-transform:uppercase;letter-spacing:.11em;color:var(--muted);position:sticky;top:0;background:rgba(11,7,17,.96);backdrop-filter:blur(10px)}
 tbody tr{transition:background .16s ease,transform .16s ease}
 tbody tr:hover{background:rgba(255,120,200,.035)}
+.interactive-row{cursor:pointer}
+.interactive-row:active{transform:scale(.998)}
 .table-wrap{overflow:auto}
 .signal{font-weight:850;letter-spacing:.08em}
 .signal-long{color:var(--green)}.signal-short{color:var(--red)}.signal-wait{color:var(--amber)}.signal-flat{color:var(--muted)}
@@ -567,6 +569,7 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
 #pointer-aura,#anime-cursor{position:fixed;left:0;top:0;pointer-events:none;z-index:9999;opacity:0;transform:translate3d(-100px,-100px,0);will-change:transform,opacity}
 #pointer-aura{width:130px;height:130px;margin:-65px 0 0 -65px;border-radius:50%;background:radial-gradient(circle,rgba(255,120,200,.13),rgba(200,92,255,.045) 42%,transparent 72%);filter:blur(2px)}
 #anime-cursor{width:46px;height:46px;margin:-7px 0 0 -7px;filter:drop-shadow(0 0 10px rgba(255,120,200,.45));transition:filter .16s ease}
+#livePrice.good{animation:liveGlow 2.2s ease-in-out infinite}
 #anime-cursor.click{filter:drop-shadow(0 0 18px rgba(255,120,200,.95));animation:cursorHit .16s ease}
 .click-ripple{position:fixed;width:16px;height:16px;margin:-8px;border:1px solid rgba(255,120,200,.8);border-radius:50%;pointer-events:none;z-index:9998;animation:ripple .52s ease-out forwards;box-shadow:0 0 22px rgba(255,120,200,.34)}
 .reveal{animation:reveal .46s ease both}
@@ -577,6 +580,7 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
 @keyframes dotPulse{0%,100%{opacity:.55;transform:scale(.86)}50%{opacity:1;transform:scale(1.15)}}
 @keyframes ripple{from{opacity:.8;transform:scale(.4)}to{opacity:0;transform:scale(9)}}
 @keyframes cursorHit{0%{transform:scale(1)}50%{transform:scale(.82) rotate(-4deg)}100%{transform:scale(1)}}
+@keyframes liveGlow{0%,100%{box-shadow:0 0 0 rgba(69,227,154,0)}50%{box-shadow:0 0 24px rgba(69,227,154,.22)}}
 @keyframes ambientFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 @media(pointer:fine){body.alpha-pointer,body.alpha-pointer button,body.alpha-pointer select{cursor:none}}
 @media(pointer:coarse){#pointer-aura,#anime-cursor{display:none}}
@@ -800,7 +804,7 @@ function renderMetrics(data){
 function renderRadar(signals){
   $("radarRows").innerHTML=signals.map(r=>{
     const price=r.realtime_price??r.price;
-    return '<tr><td><strong>'+esc(r.symbol)+'</strong><div class="small">'+num(price,2)+'</div></td>'+
+    return '<tr class="interactive-row" data-symbol="'+esc(r.symbol)+'"><td><strong>'+esc(r.symbol)+'</strong><div class="small">'+num(price,2)+'</div></td>'+
       '<td><span class="signal '+cls(r.signal)+'">'+esc(r.signal||"WAIT")+'</span></td>'+
       '<td class="num">'+pct(r.confidence,1)+'</td></tr>';
   }).join("")||'<tr><td colspan="3" class="small">Nessun asset disponibile.</td></tr>';
@@ -812,7 +816,7 @@ function renderDetail(signals){
     const robust=(d.expected_return_lcb==null)?"—":num(d.expected_return_lcb,4)+" / "+num(d.expected_return_ucb,4);
     const duration=d.trade_window_direction?esc(d.trade_window_direction)+" · "+pct(d.trade_window_confidence,0):"—";
     const why=(r.reason_codes||[]).map(x=>'<span class="reason">'+esc(x)+'</span>').join("");
-    return '<tr>'+
+    return '<tr class="interactive-row" data-symbol="'+esc(r.symbol)+'">'+
       '<td><strong>'+esc(r.symbol)+'</strong></td>'+
       '<td><span class="signal '+cls(r.signal)+'">'+esc(r.signal||"WAIT")+'</span><div class="small">'+esc(r.status||"WAIT")+'</div></td>'+
       '<td class="num">'+num(r.realtime_price??r.price,2)+'</td>'+
@@ -862,6 +866,23 @@ function renderEvidence(signals){
   }).join("")||'<div class="info">Nessuna evidenza bundle disponibile.</div>';
 }
 
+function bindInteractiveRows(){
+  document.querySelectorAll(".interactive-row").forEach(row=>{
+    row.onclick=()=>{
+      const symbol=row.dataset.symbol;
+      if(!symbol)return;
+      const select=$("asset");
+      if(Array.from(select.options).some(o=>o.value===symbol)){
+        state.selected=symbol;
+        select.value=symbol;
+        loadHistory(symbol);
+        const market=$("market");
+        if(market)market.scrollIntoView({behavior:"smooth",block:"start"});
+      }
+    };
+  });
+}
+
 function render(data){
   state.data=data;
   renderMetrics(data);
@@ -873,7 +894,7 @@ function render(data){
   }
   const signals=data.signals||[];
   populateAssets(signals);
-  renderRadar(signals); renderDetail(signals); renderJournal(data); renderEvidence(signals);
+  renderRadar(signals); renderDetail(signals); renderJournal(data); renderEvidence(signals); bindInteractiveRows();
   const notes=(data.notes||[]).join(" · ");
   $("footer").textContent=notes+" · refresh "+data.refresh_seconds+"s · scan "+data.scan_seconds+"s";
 }
