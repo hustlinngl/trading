@@ -3,6 +3,7 @@ name: Build Windows EXE # final portable package build
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     tags:
       - "v*"
 
@@ -145,6 +146,5 @@ jobs:
         with:
           name: SakuraSignalTerminal-Windows-x64
           path: release/
-            data/historical/
           if-no-files-found: error
           retention-days: 14
