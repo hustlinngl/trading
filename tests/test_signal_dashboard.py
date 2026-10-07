@@ -15,6 +15,7 @@ def test_dashboard_responsive_ui_and_chart_edge_case():
 
     html = terminal_mod.HTML
     assert "UI polish: restrained Sakura identity" in html
+    assert "render(data);\n    renderFocus(data);" in html
     assert "@media(max-width:460px)" in html
     assert "bars.length===1?pad.l+cw/2" in html
     assert "table-wrap{border-radius" in html
