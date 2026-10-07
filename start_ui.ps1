@@ -1,3 +1,8 @@
 Set-Location $PSScriptRoot
-python -m pip install -e .
+
+if (Test-Path ".\SakuraSignalTerminal.exe") {
+    Start-Process ".\SakuraSignalTerminal.exe"
+    exit 0
+}
+
 python signal_dashboard.py
