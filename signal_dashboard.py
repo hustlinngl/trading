@@ -487,12 +487,12 @@ class SignalTerminal:
                     self.settings, str(self.state_root), exchange=self._get_exchange()
                 )
             except Exception as exc:
-                    outcome_update = {
-                        "updated": 0,
-                        "open": None,
-                        "closed": None,
-                        "error": f"{type(exc).__name__}:{exc}",
-                    }
+                outcome_update = {
+                    "updated": 0,
+                    "open": None,
+                    "closed": None,
+                    "error": f"{type(exc).__name__}:{exc}",
+                }
 
             market_symbols = sorted({
                 str(symbol).strip()
