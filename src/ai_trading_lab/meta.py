@@ -4,8 +4,10 @@ import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier
 
 def cost_aware_meta_target(future_ret,p_up,round_trip_cost):
+    """Label meta success only when directional realized return clears the supplied economic hurdle."""
     ret=np.asarray(future_ret,float); prob=np.asarray(p_up,float); direction=np.where(prob>=0.5,1.0,-1.0)
-    return ((ret*direction)>float(max(0.0,round_trip_cost))).astype(int)
+    hurdle=np.maximum(np.asarray(round_trip_cost,float),0.0)
+    return ((ret*direction)>hurdle).astype(int)
 
 class MetaPolicy:
     def __init__(self,seed=42):
