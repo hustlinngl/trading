@@ -38,8 +38,8 @@ def synthetic_data(s, n=5000):
     return pd.DataFrame({'open': open_, 'high': high, 'low': low, 'close': close, 'volume': volume}, index=idx)
 
 
-def asset_model_dir(symbol: str) -> Path:
-    return Path('models') / 'assets' / symbol.replace('/', '_').replace(':', '_')
+def asset_model_dir(symbol: str, root: str | Path = ".") -> Path:
+    return Path(root) / 'models' / 'assets' / symbol.replace('/', '_').replace(':', '_')
 
 
 def validate_research_data(df, settings):
@@ -53,7 +53,7 @@ def validate_research_data(df, settings):
 
 
 def asset_deployment_manifest(settings, root: str | Path = ".") -> Path:
-    return asset_model_dir(settings.symbol) / "deployment_manifest.json"
+    return asset_model_dir(settings.symbol, root) / "deployment_manifest.json"
 
 
 def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
@@ -76,13 +76,14 @@ def train_base_asset(df, settings, *, promote_champion: bool = False):
     """Train and persist one asset's base bundle in the canonical location."""
     eng = AdaptiveEngine(settings)
     art = eng.fit(df)
-    asset_dir = asset_model_dir(settings.symbol)
+    asset_dir = asset_model_dir(settings.symbol, root)
     asset_dir.mkdir(parents=True, exist_ok=True)
     eng.save(asset_dir)
     (asset_dir / "base_training_meta.json").write_text(json.dumps({
         "symbol": settings.symbol, "rows": int(len(df)),
         "start": str(df.index.min()), "end": str(df.index.max()),
         "timeframe": str(settings.timeframe),
+        "data_fingerprint": strong_dataset_fingerprint(df),
         "model_semantics_fingerprint": model_semantics_fingerprint(settings),
         "trained_at": datetime.now(timezone.utc).isoformat(),
     }, indent=2), encoding="utf-8")
