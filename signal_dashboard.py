@@ -1373,10 +1373,10 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   </div>
 
 
-<div id="inspectorBackdrop" class="legacy-hidden inspector-backdrop"></div>
-<aside id="inspectorDrawer" class="legacy-hidden inspector-drawer" aria-label="Decision inspector" aria-hidden="true">
+<div id="inspectorBackdrop" class="legacy-hidden inspector-backdrop" aria-hidden="true"></div>
+<aside id="inspectorDrawer" class="legacy-hidden inspector-drawer" role="dialog" aria-modal="true" aria-labelledby="inspectorTitle" aria-describedby="inspectorSubtitle" aria-label="Decision inspector" aria-hidden="true">
   <div class="inspector-head">
-    <div><div class="title">Decision inspector</div><div class="small" id="inspectorSubtitle">Asset —</div></div>
+    <div><div class="title" id="inspectorTitle">Decision inspector</div><div class="small" id="inspectorSubtitle">Asset —</div></div>
     <button class="inspector-close" id="inspectorClose" aria-label="Chiudi inspector">×</button>
   </div>
   <div class="inspector-scroll" id="inspectorContent">
@@ -1857,6 +1857,7 @@ function bindTimelineRows(){
 }
 
 function openInspector(symbol){
+  state.inspectorReturnFocus=document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const active=((state.data&&state.data.signals)||[]).find(x=>x.symbol===symbol);
   const content=$("inspectorContent"), drawer=$("inspectorDrawer");
   if(!content||!drawer)return;
@@ -1898,20 +1899,40 @@ function openInspector(symbol){
         '<div class="inspector-code" style="margin-top:8px">dataset: '+esc(b.data_fingerprint||"—")+'<br>artifact: '+esc(b.artifact_fingerprint||"—")+'</div>'+
       '</div>';
   }
+  const backdrop=$("inspectorBackdrop");
+  if(backdrop){backdrop.classList.remove("legacy-hidden");backdrop.setAttribute("aria-hidden","false");}
+  drawer.classList.remove("legacy-hidden");
   drawer.setAttribute("aria-hidden","false");
   document.body.classList.add("drawer-open");
+  const close=$("inspectorClose");
+  if(close)requestAnimationFrame(()=>close.focus());
 }
 
 function closeInspector(){
   const drawer=$("inspectorDrawer"); if(!drawer)return;
   drawer.setAttribute("aria-hidden","true");
+  const backdrop=$("inspectorBackdrop");
+  if(backdrop){backdrop.classList.add("legacy-hidden");backdrop.setAttribute("aria-hidden","true");}
+  drawer.classList.add("legacy-hidden");
   document.body.classList.remove("drawer-open");
+  const target=state.inspectorReturnFocus;
+  state.inspectorReturnFocus=null;
+  if(target && document.contains(target))requestAnimationFrame(()=>target.focus());
 }
 
 function initInspector(){
   $("inspectorClose")?.addEventListener("click",closeInspector);
   $("inspectorBackdrop")?.addEventListener("click",closeInspector);
-  document.addEventListener("keydown",e=>{if(e.key==="Escape")closeInspector();});
+  document.addEventListener("keydown",e=>{
+    if(e.key==="Escape"){closeInspector();return;}
+    if(e.key!=="Tab" || !document.body.classList.contains("drawer-open"))return;
+    const drawer=$("inspectorDrawer");
+    const focusable=Array.from(drawer.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')).filter(el=>!el.disabled && el.getAttribute("aria-hidden")!=="true");
+    if(!focusable.length)return;
+    const first=focusable[0], last=focusable[focusable.length-1];
+    if(e.shiftKey && document.activeElement===first){e.preventDefault();last.focus();}
+    else if(!e.shiftKey && document.activeElement===last){e.preventDefault();first.focus();}
+  });
 }
 
 function render(data){
