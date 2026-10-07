@@ -979,7 +979,20 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
 .pick-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:0 18px 12px}.pick-stat{padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.025)}
 .pick-stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.pick-stat .v{margin-top:3px;font-weight:700}.pick-chart{height:220px;padding:0 8px 8px}.pick-chart canvas{display:block;width:100%;height:100%}
 .pick-foot{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 18px 15px;border-top:1px solid rgba(255,255,255,.05);font-size:11px;color:var(--muted)}
-.history-badge{padding:4px 8px;border-radius:999px;background:rgba(125,232,255,.06);border:1px solid rgba(125,232,255,.12);color:#9eeeff}.scan-progress{height:3px;max-width:420px;margin:18px auto 0;background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden}.scan-progress span{display:block;height:100%;background:linear-gradient(90deg,var(--pink),var(--cyan));box-shadow:0 0 12px rgba(255,120,200,.35);transition:width .24s ease}.top5-empty{padding:48px 24px;text-align:center;border:1px dashed rgba(255,120,200,.18);border-radius:18px;background:rgba(255,255,255,.015)}
+.history-badge{padding:4px 8px;border-radius:999px;background:rgba(125,232,255,.06);border:1px solid rgba(125,232,255,.12);color:#9eeeff}
+.pick-card{cursor:pointer;position:relative;isolation:isolate}
+.pick-card::after{content:"↗";position:absolute;right:14px;top:11px;font-size:12px;color:#596473;opacity:0;transform:translate(-2px,2px);transition:opacity .16s ease,transform .16s ease}
+.pick-card:hover::after,.pick-card:focus-visible::after{opacity:1;transform:none}
+.pick-card:focus-visible{outline:none;border-color:#586474;box-shadow:0 0 0 2px rgba(229,138,184,.12),0 10px 28px rgba(0,0,0,.22)}
+.pick-primary{grid-column:span 2;background:linear-gradient(180deg,#121820,#0f1319);border-color:#2d3946}
+.pick-primary .pick-symbol{font-size:20px;letter-spacing:-.02em}
+.pick-primary .pick-chart{height:210px}
+.pick-primary .pick-stat .v{font-size:13px}
+.pick-card.pick-long{--signal-accent:var(--green)}
+.pick-card.pick-short{--signal-accent:var(--red)}
+.pick-card .pick-head{position:relative}
+.pick-card .pick-signal{box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.scan-progress{height:3px;max-width:420px;margin:18px auto 0;background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden}.scan-progress span{display:block;height:100%;background:linear-gradient(90deg,var(--pink),var(--cyan));box-shadow:0 0 12px rgba(255,120,200,.35);transition:width .24s ease}.top5-empty{padding:48px 24px;text-align:center;border:1px dashed rgba(255,120,200,.18);border-radius:18px;background:rgba(255,255,255,.015)}
 .legacy-hidden{display:none!important}@media(max-width:980px){.top5-grid{grid-template-columns:1fr}.pick-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:640px){.wrap{padding:16px 12px 40px}.focus-only .top5-title{font-size:23px}.pick-chart{height:190px}}@media(prefers-reduced-motion:reduce){.pick-card{transition:none}}
 </style>
 <style>
@@ -1019,8 +1032,8 @@ h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
 #pointer-aura{opacity:.38}
 #anime-cursor{filter:drop-shadow(0 0 6px rgba(229,138,184,.28));width:40px;height:40px}
 .click-ripple{border-color:rgba(229,138,184,.38);box-shadow:none}
-@media(max-width:1050px){.top5-grid{grid-template-columns:repeat(2,minmax(280px,1fr))}}
-@media(max-width:700px){.wrap{padding:20px 14px 34px}.top5-grid{grid-template-columns:1fr}.pick-chart{height:150px}}
+@media(max-width:1050px){.top5-grid{grid-template-columns:repeat(2,minmax(280px,1fr))}.pick-primary{grid-column:span 2}}
+@media(max-width:700px){.wrap{padding:20px 14px 34px}.top5-grid{grid-template-columns:1fr}.pick-primary{grid-column:span 1}.pick-chart,.pick-primary .pick-chart{height:150px}.focus-head-meta{justify-content:flex-start}.focus-coverage{white-space:normal}}
 <style>
 .focus-head-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:flex-end}
 .focus-coverage{font-size:10px;color:#66717f;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -1528,7 +1541,7 @@ function renderFocus(data){
   status.textContent=picks.length+" signal"+(picks.length===1?"":"s");status.className="pill good";
   box.innerHTML=picks.map((r,i)=>{
     const d=r.decision||{};
-    return '<article class="pick-card pick-'+(r.signal==="LONG"?"long":"short")+'" data-focus-symbol="'+esc(r.symbol)+'">'+
+    return '<article class="pick-card pick-'+(r.signal==="LONG"?"long":"short")+(i===0?' pick-primary':'')+'" data-focus-symbol="'+esc(r.symbol)+'" tabindex="0" role="button" aria-label="Apri '+esc(r.symbol)+' nel market inspector">'+
       '<div class="pick-head"><div><div class="pick-rank">#'+(i+1)+'</div><div class="pick-symbol">'+esc(r.symbol)+'</div></div><span class="pick-signal '+cls(r.signal)+'">'+esc(r.signal)+'</span></div>'+
       '<div class="pick-stats">'+
       '<div class="pick-stat"><div class="k">Price</div><div class="v">'+num(r.realtime_price??r.price,2)+'</div></div>'+
@@ -1540,7 +1553,29 @@ function renderFocus(data){
       '<div class="pick-foot"><span>15m · closed candles</span><span class="history-badge" data-history-badge="'+esc(r.symbol)+'">240 bars</span></div>'+
       '</article>';
   }).join("");
+  bindFocusCards();
   loadFocusHistories(picks);
+}
+
+function bindFocusCards(){
+  document.querySelectorAll(".pick-card[data-focus-symbol]").forEach(card=>{
+    const open=()=>{
+      const symbol=card.dataset.focusSymbol;
+      if(!symbol)return;
+      state.selected=symbol;
+      const input=$("asset");
+      if(input)input.value=symbol;
+      openInspector(symbol);
+      renderDecisionDeck((state.data&&state.data.signals)||[]);
+      const market=$("market");
+      if(market)market.scrollIntoView({behavior:"smooth",block:"start"});
+      loadHistory(symbol);
+    };
+    card.onclick=open;
+    card.onkeydown=e=>{
+      if(e.key==="Enter"||e.key===" "){e.preventDefault();open();}
+    };
+  });
 }
 
 async function loadFocusHistories(picks){
