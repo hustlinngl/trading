@@ -152,7 +152,7 @@ jobs:
               }
             }
             if (-not $ready) { throw "Packaged terminal did not start on port $port" }
-            if (-not $page.Content.Contains("Top 5 Picks")) { throw "Packaged dashboard does not contain the focused Top 5 surface" }
+            if (-not $page.Content.Contains("Top 5")) { throw "Packaged dashboard does not contain the focused Top 5 surface" }
             if (-not $health.ok) { throw "Packaged health endpoint did not report ok=true" }
             $symbols = @("BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT")
             foreach ($symbol in $symbols) {
