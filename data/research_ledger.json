@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-10-08T00:00:00+00:00",
+  "updated_at": "2026-10-08T00:00:00+00:00",
+  "total_trials": 0,
+  "trial_runs": [],
+  "holdout_accesses": []
+}
