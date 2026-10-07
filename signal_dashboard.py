@@ -630,6 +630,12 @@ class SignalTerminal:
             "ok": True,
             "version": __version__,
             "cached": self._cached_state is not None,
+            "scan_in_progress": bool(self._scan_thread is not None and self._scan_thread.is_alive()),
+            "scan_age_seconds": (
+                round(time.time() - self._scan_started_at, 1)
+                if self._scan_started_at
+                else None
+            ),
             "cache_age_seconds": (
                 round(time.time() - self._cached_at, 1)
                 if self._cached_state is not None
@@ -1323,6 +1329,17 @@ function renderFocus(data){
   state.data=data;
   const box=$("top5Grid"),status=$("focusStatus");
   if(!box)return;
+  if(data.scan_in_progress){
+    const summary=data.summary||{};
+    const coverage=$("focusCoverage");
+    if(coverage){
+      const total=Number(summary.universe_total??0), backed=Number(summary.model_backed_assets??0), evaluated=Number(summary.assets_scanned??0);
+      coverage.textContent=total ? "Universe "+total+" · models "+backed+" · evaluated "+evaluated : "Discovering markets…";
+    }
+    box.innerHTML='<div class="top5-empty"><div class="eyebrow">Scanning</div><h2 style="margin:8px 0 6px">Analisi dell\'universo in corso</h2><div class="small">Il motore sta valutando i mercati con bundle verificati. La superficie si aggiorna appena il ranking è pronto.</div></div>';
+    status.textContent="scanning";status.className="pill warn";
+    return;
+  }
   if(!data.ok){
     box.innerHTML='<div class="top5-empty"><div class="eyebrow">Offline</div><h2 style="margin:8px 0 6px">Market data unavailable</h2><div class="small">'+esc(data.error||"Il terminale locale non è disponibile.")+'</div></div>';
     const coverage=$("focusCoverage"); if(coverage) coverage.textContent="Universe unavailable";
@@ -1819,7 +1836,7 @@ async function refresh(force=false){
     const res=await fetch("/api/state?force="+(force?"1":"0"),{cache:"no-store"});
     const data=await res.json();
     renderFocus(data);
-    scheduleRefresh(data.refresh_seconds||20);
+    scheduleRefresh(data.scan_in_progress ? 3 : (data.refresh_seconds||20));
   }catch(e){
     renderFocus({ok:false,error:String(e),config:{},refresh_seconds:20});
     scheduleRefresh(20);
