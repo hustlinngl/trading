@@ -602,7 +602,7 @@ def test_signal_terminal_interactive_rows_use_canonical_market_list():
     html = terminal_mod.HTML
     assert 'input.options' not in html
     assert 'new Set(state.marketSymbols||[])' in html
-    assert 'role="button" aria-label="Apri '+ in html
+    assert 'role="button" aria-label="Apri ' in html
     assert 'row.onkeydown=e=>' in html
 
 def test_signal_terminal_frontend_races_are_latest_request_wins():
@@ -633,6 +633,8 @@ def test_signal_terminal_primary_surface_is_result_first():
     assert 'Confidence' in html
     assert 'Edge' in html
     assert 'Score' in html
+    assert '.signal-skeleton-grid' in html
+    assert 'Sto cercando i prossimi segnali' not in html
 
 
 def test_signal_terminal_frontend_music_and_click_effect_are_bounded():
