@@ -1643,11 +1643,18 @@ def parse_args():
     parser.add_argument(
         "--once", action="store_true", help="Print one JSON state and exit"
     )
+    parser.add_argument(
+        "--smoke-test",
+        action="store_true",
+        help="Validate frozen/source startup without contacting the market.",
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+    if args.smoke_test:
+        return
     settings = load_settings(args.config or ROOT / "config.yaml")
     if args.symbols:
         settings.live_symbols = tuple(
