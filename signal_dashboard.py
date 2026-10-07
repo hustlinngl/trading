@@ -817,11 +817,14 @@ function drawChart(history, signals, journal, realtimePrice){
   canvas.onmouseleave=()=>{$("cursor").style.display="none";};
 }
 
+let quoteBusy=false;
 async function loadQuote(symbol){
-  if(!symbol)return;
+  if(!symbol || quoteBusy)return;
+  quoteBusy=true;
   try{
     const res=await fetch("/api/quote?symbol="+encodeURIComponent(symbol),{cache:"no-store"});
     const q=await res.json();
+    if(state.selected!==symbol)return;
     if(q.price!=null){
       $("livePrice").textContent="REALTIME "+num(q.price,2);
       $("livePrice").className="pill good";
@@ -831,8 +834,12 @@ async function loadQuote(symbol){
       $("livePrice").className="pill warn";
     }
   }catch(e){
-    $("livePrice").textContent="REALTIME offline";
-    $("livePrice").className="pill warn";
+    if(state.selected===symbol){
+      $("livePrice").textContent="REALTIME offline";
+      $("livePrice").className="pill warn";
+    }
+  }finally{
+    quoteBusy=false;
   }
 }
 
