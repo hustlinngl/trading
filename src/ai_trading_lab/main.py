@@ -471,7 +471,7 @@ def main():
     if args.command == 'discover':
         result=strategy_discovery(df,s); Path('logs/strategy_candidates.json').write_text(json.dumps(result,indent=2),encoding='utf-8'); print(json.dumps(result[:5],indent=2)); return
     if args.command == 'optimize':
-        holdout_frac=float(np.clip(args.holdout_frac,0.05,0.30)) if 'np' in globals() else max(0.05,min(0.30,float(args.holdout_frac)))
+        holdout_frac=max(0.05,min(0.30,float(args.holdout_frac)))
         holdout_cut=int(len(df)*(1.0-holdout_frac))
         tuning_df=df.iloc[:holdout_cut].copy()
         holdout_df=df.iloc[holdout_cut:].copy()
