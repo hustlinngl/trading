@@ -877,14 +877,6 @@ button:hover::after,select:hover::after{transform:translateX(120%) rotate(10deg)
 button:hover,select:hover{border-color:rgba(255,120,200,.58);box-shadow:0 0 0 1px rgba(255,120,200,.08),0 0 28px rgba(255,120,200,.14);transform:translateY(-1px)}
 button:active,select:active{transform:translateY(1px) scale(.985)}
 button:focus-visible,select:focus-visible{outline:none;border-color:var(--pink);box-shadow:0 0 0 2px rgba(255,120,200,.17),0 0 28px rgba(255,120,200,.18)}
-.nav{position:sticky;top:10px;z-index:20;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px;margin:0 0 16px;border:1px solid rgba(255,120,200,.13);border-radius:14px;background:rgba(15,9,21,.72);backdrop-filter:blur(16px);box-shadow:var(--glow-pink)}
-.nav-btn{font-size:10px;letter-spacing:.14em;text-transform:uppercase;padding:8px 11px;color:var(--muted);background:transparent;border-color:transparent;box-shadow:none}
-.nav-btn:hover{color:var(--text);background:rgba(255,120,200,.07)}
-.nav-btn.active{color:#fff;border-color:rgba(255,120,200,.34);background:linear-gradient(180deg,rgba(255,120,200,.12),rgba(255,120,200,.04));box-shadow:inset 0 0 18px rgba(255,120,200,.06),0 0 18px rgba(255,120,200,.13)}
-.operator-badge{display:flex;align-items:center;gap:8px;padding:4px 8px 4px 5px;border-radius:999px;border:1px solid rgba(255,120,200,.2);background:rgba(255,120,200,.045);box-shadow:0 0 24px rgba(255,120,200,.08)}
-.operator-art{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 30% 25%,rgba(255,255,255,.18),transparent 32%),linear-gradient(135deg,rgba(255,120,200,.18),rgba(200,92,255,.08));box-shadow:inset 0 0 16px rgba(255,120,200,.15)}
-.operator-badge svg{width:30px;height:30px;filter:drop-shadow(0 0 8px rgba(255,120,200,.32))}
-.operator-copy{display:flex;flex-direction:column;line-height:1}.operator-copy strong{font-size:9px;letter-spacing:.16em}.operator-copy span{font-size:8px;color:var(--muted);margin-top:4px;letter-spacing:.12em}
 #stamp{font-size:12px;color:var(--muted);white-space:nowrap}
 
 .card,.panel{position:relative;background:linear-gradient(180deg,rgba(18,12,26,.96),rgba(10,8,16,.985));
@@ -1253,21 +1245,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
       <div class="sub">Closed-candle signals, live market quote e storico delle evidenze. Solo segnali che superano i controlli correnti.</div>
     </div>
     <div class="actions">
-      <div class="operator-badge" aria-hidden="true" style="display:none">
-        <div class="operator-art">
-          <svg viewBox="0 0 64 64" fill="none">
-            <path d="M8 52L54 13" stroke="#ff78c8" stroke-width="2.1" stroke-linecap="round"/>
-            <path d="M47 15l5 5" stroke="#7de8ff" stroke-width="1.6" stroke-linecap="round"/>
-            <circle cx="32" cy="34" r="16" fill="#f8d5cc"/>
-            <path d="M16 34c0-13 7-23 18-23 10 0 16 7 18 17l-7-4-4 8-5-9-6 8-7-5-7 8v0Z" fill="#ff78c8"/>
-            <path d="M19 42c2 7 7 11 13 11 7 0 12-4 14-11-4 2-9 3-14 3s-10-1-13-3Z" fill="#f7a8d7"/>
-            <circle cx="26" cy="36" r="2" fill="#342536"/><circle cx="38" cy="36" r="2" fill="#342536"/>
-            <path d="M29 43c2 2 4 2 6 0" stroke="#ad5b89" stroke-width="1.3" stroke-linecap="round"/>
-            <path d="M17 28c3-7 9-11 16-11 9 0 15 5 18 13" stroke="#fff" stroke-opacity=".28" stroke-width="1.1" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <div class="operator-copy"><strong>SAKURA</strong><span>WATCHER // ONLINE</span></div>
-      </div>
+div>
       <button id="sakuraMusic" class="music-toggle" type="button" aria-label="Attiva musica Sakura lo-fi" aria-pressed="false">♪ Sakura</button>
       <button id="refresh" type="button" aria-label="Aggiorna segnali">Refresh</button>
     </div>
