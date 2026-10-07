@@ -124,17 +124,23 @@ class SignalTerminal:
         self._cached_state: dict | None = None
         self._cached_at = 0.0
         self._exchange = None
+        self._exchange_error = None
         self._assessment_cache = {}
         self.state_root.joinpath("logs").mkdir(parents=True, exist_ok=True)
         self.state_root.joinpath("data", "history").mkdir(parents=True, exist_ok=True)
 
     def _get_exchange(self):
-        """Reuse one read-only CCXT client so full-universe refreshes do not reload markets."""
+        """Reuse one read-only CCXT client; offline failure falls back to bundled data."""
         if self._exchange is not None:
             return self._exchange
-        self._exchange = exchange_client(
-            getattr(self.settings, "exchange", "binance"), sandbox=False
-        )
+        try:
+            self._exchange = exchange_client(
+                getattr(self.settings, "exchange", "binance"), sandbox=False
+            )
+            self._exchange_error = None
+        except Exception as exc:
+            self._exchange = None
+            self._exchange_error = f"{type(exc).__name__}:{exc}"
         return self._exchange
 
     def _bundle_snapshot(self, symbol: str) -> dict:
@@ -490,6 +496,8 @@ class SignalTerminal:
                         ),
                     },
                     "summary": {
+                        "exchange_available": self._get_exchange() is not None,
+                        "exchange_error": self._exchange_error,
                         "assets_scanned": int(universe_meta.get("universe_evaluated", len(signals))),
                         "universe_total": int(universe_meta.get("universe_total", len(signals))),
                         "model_backed_assets": int(universe_meta.get("universe_model_backed", len(signals))),
