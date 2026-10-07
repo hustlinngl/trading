@@ -61,7 +61,9 @@ from ai_trading_lab.live import (
     scan_top5,
     write_live_snapshot,
 )
-from ai_trading_lab.live_tracker import update_live_signal_outcomes
+from ai_trading_lab.live_tracker import LiveTracker, update_live_signal_outcomes
+from ai_trading_lab.risk import RiskEngine
+from ai_trading_lab.state_fusion import fuse_live_dashboard_state
 
 
 APP_TITLE = "Adaptive AI Signal Terminal"
@@ -126,11 +128,172 @@ class SignalTerminal:
         self._exchange = None
         self._exchange_error = None
         self._assessment_cache = {}
+        stream_symbols = tuple(getattr(settings, "live_symbols", ()) or ())
+        self._live_tracker = LiveTracker(
+            stream_symbols,
+            max_queue=20_000,
+            max_symbols=64,
+        )
+        self._risk_engine = RiskEngine(
+            initial_cash=float(getattr(settings, "initial_cash", 10_000.0)),
+            risk_per_trade=float(getattr(settings, "risk_per_trade", 0.005)),
+            max_position_pct=float(getattr(settings, "max_position_pct", 0.25)),
+            max_daily_loss_pct=float(getattr(settings, "max_daily_loss_pct", 0.02)),
+            stop_atr_mult=float(getattr(settings, "stop_atr_mult", 1.8)),
+            rr=float(getattr(settings, "take_profit_rr", 2.2)),
+            fee_bps=float(getattr(settings, "fee_bps", 0.0)),
+            slippage_bps=float(getattr(settings, "slippage_bps", 0.0)),
+            max_participation_pct=float(getattr(settings, "max_participation_pct", 0.10)),
+            impact_bps_per_sqrt=float(getattr(settings, "impact_bps_per_sqrt", 0.0)),
+            short_borrow_bps_per_bar=float(getattr(settings, "short_borrow_bps_per_bar", 0.0)),
+            max_holding_bars=int(getattr(settings, "max_holding_bars", 96)),
+        )
         self._scan_thread = None
         self._scan_started_at = 0.0
         self._scan_progress: dict[str, object] = {}
         self.state_root.joinpath("logs").mkdir(parents=True, exist_ok=True)
         self.state_root.joinpath("data", "history").mkdir(parents=True, exist_ok=True)
+
+    def start_live_streams(self) -> None:
+        """Start the async market-data loop without blocking HTTP or model work."""
+        symbols = tuple(
+            dict.fromkeys(
+                list(getattr(self.settings, "live_symbols", ()) or ())
+                + [self.settings.symbol]
+            )
+        )
+        self._live_tracker.add_symbols(symbols)
+        self._live_tracker.start()
+
+    def close(self) -> None:
+        self._live_tracker.close()
+
+    def _risk_context(self) -> dict:
+        """Read published risk telemetry when available; never invent live exposure."""
+        for candidate in (
+            self.state_root / "logs" / "risk_state.json",
+            self.state_root / "data" / "risk_state.json",
+        ):
+            if candidate.exists():
+                value = _read_json(candidate)
+                if value:
+                    return value
+        return {}
+
+    def _cognition_snapshot(self, symbol: str) -> dict:
+        cached = self._cached_state or {}
+        row = next(
+            (
+                item for item in (cached.get("signals") or [])
+                if str(item.get("symbol")) == str(symbol)
+            ),
+            None,
+        )
+        if not isinstance(row, dict):
+            lines = [
+                "Policy gate → nessun verdetto modello disponibile per questo asset."
+            ]
+            return {
+                "source": "policy.live_signal_gate",
+                "symbol": symbol,
+                "lines": lines,
+                "signature": f"{symbol}:empty",
+            }
+
+        decision = row.get("decision") or {}
+        signal = str(row.get("signal") or "WAIT")
+        p_up = decision.get("p_up")
+        p_dir = None
+        try:
+            if p_up is not None:
+                p_dir = float(p_up) if signal != "SHORT" else 1.0 - float(p_up)
+        except (TypeError, ValueError):
+            p_dir = None
+
+        edge = decision.get("robust_directional_edge")
+        score = decision.get("score")
+        regime = decision.get("regime") or "unknown"
+        lines = []
+        if p_dir is not None and edge is not None and score is not None:
+            lines.append(
+                f"Policy gate → {signal} · p_dir={p_dir:.1%} · "
+                f"robust_edge={float(edge):+.3%} · score={float(score):.2f}"
+            )
+        else:
+            lines.append(f"Policy gate → {signal} · gate metrics parziali")
+        lines.append(f"Regime prior → {regime}")
+
+        analog_edge = decision.get("analog_edge")
+        analog_agreement = decision.get("analog_agreement")
+        if analog_edge is not None or analog_agreement is not None:
+            evidence = "Memory evidence → "
+            if analog_edge is not None:
+                evidence += f"edge={float(analog_edge):+.3%} "
+            if analog_agreement is not None:
+                evidence += f"agreement={float(analog_agreement):.1%}"
+            lines.append(evidence.rstrip())
+
+        reasons = row.get("reason_codes") or []
+        if reasons:
+            lines.append("Gate reasons → " + " · ".join(str(x) for x in reasons[:4]))
+
+        signature = "|".join(lines)
+        return {
+            "source": "policy.live_signal_gate",
+            "symbol": symbol,
+            "lines": lines,
+            "signature": signature,
+            "updated_at": cached.get("generated_at"),
+        }
+
+    def _live_dashboard_payload(self, symbol: str | None = None) -> dict:
+        """Return the latest fused state without coupling rendering to the stream."""
+        selected = str(symbol or self.settings.symbol).strip().upper()
+        self._live_tracker.add_symbols([selected])
+        self._live_tracker.start()
+        stream_state = dict(self._live_tracker.get_current_state(selected))
+
+        cached = self._cached_state or {}
+        row = next(
+            (
+                item for item in (cached.get("signals") or [])
+                if str(item.get("symbol")) == selected
+            ),
+            {},
+        )
+        decision = row.get("decision") or {}
+        if stream_state.get("price") is None:
+            stream_state["price"] = (
+                row.get("realtime_price")
+                if isinstance(row, dict)
+                else None
+            )
+        quote = row.get("quote") if isinstance(row, dict) else {}
+        if isinstance(quote, dict):
+            stream_state.setdefault("bid", quote.get("bid"))
+            stream_state.setdefault("ask", quote.get("ask"))
+
+        risk_context = self._risk_context()
+        if "configured_slippage_bps" not in risk_context:
+            risk_context["configured_slippage_bps"] = float(
+                getattr(self.settings, "slippage_bps", 0.0)
+            )
+
+        return fuse_live_dashboard_state(
+            symbol=selected,
+            price=stream_state.get("price"),
+            market_snapshot=stream_state,
+            regime_context={
+                "raw_label": decision.get("regime"),
+                "persistence": decision.get("regime_persistence"),
+                "confidence": decision.get("regime_confidence"),
+                "source": "engine.regimes",
+            },
+            risk_engine=self._risk_engine,
+            risk_context=risk_context,
+            execution_telemetry=None,
+            cognition=self._cognition_snapshot(selected),
+        )
 
     def _get_exchange(self):
         """Reuse one read-only CCXT client; offline failure falls back to bundled data."""
@@ -518,6 +681,9 @@ class SignalTerminal:
                 for symbol in (universe_meta.get("market_symbols") or [])
                 if str(symbol).strip()
             })
+            self._live_tracker.add_symbols(
+                list(dict.fromkeys(configured_symbols + [x.symbol for x in assessments[:5]]))
+            )
             symbols = list(dict.fromkeys(
                 market_symbols or configured_symbols or [x.symbol for x in assessments]
             ))
@@ -1211,6 +1377,22 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   .nav{scroll-behavior:auto}
   .section-reveal{animation:none!important}
 }
+
+.wrap{max-width:1700px}
+.live-intelligence{margin-top:14px}
+.live-kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.live-kpi{position:relative;min-height:92px;padding:14px 15px;border:1px solid rgba(255,120,200,.14);border-radius:14px;background:linear-gradient(180deg,rgba(18,12,26,.97),rgba(9,8,15,.99));overflow:hidden;contain:layout paint}
+.live-kpi::after{content:"";position:absolute;inset:auto -15% -55%;height:90px;background:radial-gradient(circle,rgba(255,120,200,.08),transparent 68%);pointer-events:none}
+.live-kpi .k{font-size:9px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted)}
+.live-kpi .v{margin-top:7px;font-size:22px;font-weight:850;letter-spacing:-.025em;white-space:nowrap}
+.live-kpi .meta{margin-top:5px;font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.live-kpi.changed .v{animation:kpiFlash .42s ease}
+.cognition-panel{margin-top:14px}
+.cognition-console{min-height:128px;max-height:220px;overflow:auto;padding:14px 16px;font:11px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;color:#cbd5e1;background:linear-gradient(180deg,rgba(6,8,12,.92),rgba(9,10,15,.98));white-space:pre-wrap}
+.live-telemetry-stamp{font-size:9px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+@keyframes kpiFlash{0%{filter:brightness(1)}45%{filter:brightness(1.35)}100%{filter:brightness(1)}}
+@media(max-width:900px){.live-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.live-kpi-grid{grid-template-columns:1fr}}
 </style>
 
 </head>
@@ -1272,6 +1454,16 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
     <div class="top5-head"><div><div class="top5-title">Top 5 signals</div></div></div>
     <div id="top5Grid" class="top5-grid"></div>
     <div id="liveDataFallback" class="live-data-grid" hidden></div>
+  </section>
+
+  <section class="live-intelligence" id="liveIntelligence" aria-live="polite">
+    <div class="live-kpi-grid">
+      <article class="live-kpi" id="liveKpiPrice"><div class="k">Prezzo</div><div class="v num" id="kpiPrice">—</div><div class="meta" id="kpiPriceMeta">stream · —</div></article>
+      <article class="live-kpi" id="liveKpiRegime"><div class="k">Market Regime</div><div class="v" id="kpiRegime">Unknown</div><div class="meta" id="kpiRegimeMeta">confidence · —</div></article>
+      <article class="live-kpi" id="liveKpiRisk"><div class="k">Risk Exposure</div><div class="v" id="kpiRisk">DD — · Lev —</div><div class="meta" id="kpiRiskMeta">RiskEngine · current unavailable</div></article>
+      <article class="live-kpi" id="liveKpiEfficiency"><div class="k">Execution Efficiency</div><div class="v" id="kpiEfficiency">SLIP — · LAT —</div><div class="meta" id="kpiEfficiencyMeta">telemetry · —</div></article>
+    </div>
+    <div class="live-telemetry-stamp" id="liveTelemetryStamp" style="margin-top:8px">LIVE DATA · —</div>
   </section>
 
   <section class="legacy-hidden decision-deck" id="decisionDeck" aria-live="polite">
@@ -1422,12 +1614,19 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   </div>
 </aside>
 
+  <section class="panel cognition-panel" id="liveCognitionPanel" aria-live="polite">
+    <div class="panel-head">
+      <div><div class="title">Live AI Cognition</div><div class="small">Trace operativa dei gate e delle evidenze disponibili; non rappresenta il ragionamento privato del modello.</div></div>
+      <div class="live-telemetry-stamp" id="cognitionStamp">—</div>
+    </div>
+    <div id="cognitionConsole" class="cognition-console">In attesa del primo stato live…</div>
+  </section>
   <div class="footer" id="footer"></div>
 </div>
 
 <script>
 const $ = (id) => document.getElementById(id);
-const state = { data:null, history:null, selected:null, historyRequest:0, focusRequest:0, focusHistories:{} };
+const state = { data:null, history:null, selected:null, historyRequest:0, focusRequest:0, focusHistories:{}, live:null, cognitionSignature:"" };
 
 function initAmbientFX(){
   const canvas=$("ambient-canvas");
@@ -1613,6 +1812,54 @@ function initNavigation(){
 function esc(v){return String(v??"").replace(/[&<>"]/g,c=>c==="&"?"&amp;":c==="<"?"&lt;":c===">"?"&gt;":"&quot;");}
 function pct(v,d=1){return v==null||Number.isNaN(Number(v))?"—":(Number(v)*100).toFixed(d)+"%";}
 function num(v,d=3){return v==null||Number.isNaN(Number(v))?"—":Number(v).toFixed(d);}
+function liveNum(v,d=2){return v==null||Number.isNaN(Number(v))?"—":Number(v).toFixed(d);}
+function livePct(v,d=1){return v==null||Number.isNaN(Number(v))?"—":(Number(v)*100).toFixed(d)+"%";}
+function patchLiveNode(id,textValue,semanticClass){
+  const node=$(id);if(!node)return false;
+  const next=String(textValue),changed=node.textContent!==next;
+  if(changed)node.textContent=next;
+  if(semanticClass!==undefined){
+    const nextClass=String(semanticClass||"");
+    if(node.dataset.liveClass!==nextClass){
+      node.dataset.liveClass=nextClass;
+      node.classList.remove("good","bad","warn");
+      if(nextClass)node.classList.add(nextClass);
+    }
+  }
+  if(changed){
+    const card=node.closest(".live-kpi");
+    if(card){card.classList.remove("changed");void card.offsetWidth;card.classList.add("changed");}
+  }
+  return changed;
+}
+function renderLiveCognition(cognition){
+  const lines=Array.isArray(cognition&&cognition.lines)?cognition.lines:[];
+  const signature=String((cognition&&cognition.signature)||lines.join("|"));
+  if(signature===state.cognitionSignature)return;
+  state.cognitionSignature=signature;
+  const consoleEl=$("cognitionConsole");
+  if(consoleEl)consoleEl.textContent=lines.join("\\n");
+  patchLiveNode("cognitionStamp",cognition&&cognition.updated_at?new Date(cognition.updated_at).toLocaleTimeString():"LIVE");
+}
+function applyLiveDelta(payload){
+  if(!payload||typeof payload!=="object")return;
+  state.live=payload;
+  const market=payload.market||{},regime=payload.regime||{},risk=payload.risk||{},efficiency=payload.efficiency||{};
+  const symbol=String(payload.symbol||state.selected||"—");
+  patchLiveNode("kpiPrice",liveNum(payload.price??market.price,2));
+  patchLiveNode("kpiPriceMeta","stream · "+symbol);
+  patchLiveNode("kpiRegime",String(regime.label||"Unknown"),regime.direction==="DOWN"?"bad":regime.direction==="UP"?"good":"warn");
+  patchLiveNode("kpiRegimeMeta","confidence · "+livePct(regime.confidence,1)+" · "+(regime.source||"—"));
+  patchLiveNode("kpiRisk","DD "+livePct(risk.drawdown,2)+" · Lev "+(risk.leverage==null?"—":liveNum(risk.leverage,2)+"x"));
+  patchLiveNode("kpiRiskMeta",risk.current_exposure_available?"RiskEngine · live exposure":"RiskEngine · telemetry unavailable");
+  const slip=efficiency.slippage_bps==null?"—":liveNum(efficiency.slippage_bps,2)+"bp";
+  const lat=efficiency.latency_ms==null?"—":liveNum(efficiency.latency_ms,0)+"ms";
+  patchLiveNode("kpiEfficiency","SLIP "+slip+" · LAT "+lat);
+  patchLiveNode("kpiEfficiencyMeta",efficiency.execution_available?("execution telemetry · n="+(efficiency.sample_count||0)):(efficiency.source||"telemetry unavailable"));
+  patchLiveNode("liveTelemetryStamp","LIVE DATA · "+symbol+" · seq "+(market.sequence||0));
+  renderLiveCognition(payload.cognition||{});
+}
+
 function age(v){return v==null||Number.isNaN(Number(v))?"—":Number(v).toFixed(1)+"m";}
 function cls(sig){return sig==="LONG"?"signal-long":sig==="SHORT"?"signal-short":sig==="WAIT"?"signal-wait":"signal-flat";}
 function drawPickChart(canvas,history,signal){
@@ -2219,6 +2466,25 @@ async function loadHistory(symbol){
 
 let refreshBusy=false;
 let refreshTimer=null;
+let livePollBusy=false;
+let livePollTimer=null;
+async function pollLiveDelta(){
+  if(livePollBusy){livePollTimer=setTimeout(pollLiveDelta,350);return;}
+  livePollBusy=true;
+  try{
+    const symbol=state.selected||((state.data&&state.data.config&&state.data.config.primary_symbol)||"");
+    const res=await fetch("/api/live?symbol="+encodeURIComponent(symbol),{cache:"no-store"});
+    if(!res.ok)throw new Error("live status "+res.status);
+    applyLiveDelta(await res.json());
+  }catch(_){
+    // Preserve the last known state; live telemetry is fail-soft.
+  }finally{
+    livePollBusy=false;
+    clearTimeout(livePollTimer);
+    livePollTimer=setTimeout(pollLiveDelta,350);
+  }
+}
+function startLiveDeltaLoop(){clearTimeout(livePollTimer);pollLiveDelta();}
 async function refresh(force=false){
   if(refreshBusy)return;
   refreshBusy=true;
@@ -2272,6 +2538,7 @@ initSakuraMusic();
 initAmbientFX();
 initAlphaMotion();
 refresh(true);
+startLiveDeltaLoop();
 </script>
 </body>
 </html>
@@ -2306,6 +2573,18 @@ def make_handler(terminal: SignalTerminal):
             if parsed.path == "/api/health":
                 body = json.dumps(
                     terminal.health(), separators=(",", ":")
+                ).encode("utf-8")
+                self._send(
+                    body, content_type="application/json; charset=utf-8"
+                )
+                return
+            if parsed.path == "/api/live":
+                query = parse_qs(parsed.query)
+                symbol = query.get("symbol", [terminal.settings.symbol])[0]
+                body = json.dumps(
+                    terminal._live_dashboard_payload(symbol),
+                    separators=(",", ":"),
+                    allow_nan=False,
                 ).encode("utf-8")
                 self._send(
                     body, content_type="application/json; charset=utf-8"
@@ -2481,6 +2760,7 @@ def main():
         refresh_seconds=args.refresh,
         history_bars=args.history_bars,
     )
+    terminal.start_live_streams()
     if args.once:
         print(
             json.dumps(
@@ -2526,6 +2806,7 @@ def main():
             print("\nStopping signal terminal.")
     finally:
         server.server_close()
+        terminal.close()
 
 
 if __name__ == "__main__":
