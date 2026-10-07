@@ -592,6 +592,7 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
 .num{font-variant-numeric:tabular-nums}
 .footer{margin-top:14px;color:var(--muted);font-size:11px}
 #cursor{position:absolute;pointer-events:none;display:none;background:#101822;border:1px solid #2b3949;border-radius:9px;padding:7px 9px;font-size:10px;box-shadow:var(--shadow)}
+#ambient-canvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:.62}
 #pointer-aura,#anime-cursor{position:fixed;left:0;top:0;pointer-events:none;z-index:9999;opacity:0;transform:translate3d(-100px,-100px,0);will-change:transform,opacity}
 #pointer-aura{width:130px;height:130px;margin:-65px 0 0 -65px;border-radius:50%;background:radial-gradient(circle,rgba(255,120,200,.13),rgba(200,92,255,.045) 42%,transparent 72%);filter:blur(2px)}
 #anime-cursor{width:46px;height:46px;margin:-7px 0 0 -7px;filter:drop-shadow(0 0 10px rgba(255,120,200,.45));transition:filter .16s ease}
@@ -607,6 +608,12 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
 @keyframes ripple{from{opacity:.8;transform:scale(.4)}to{opacity:0;transform:scale(9)}}
 @keyframes cursorHit{0%{transform:scale(1)}50%{transform:scale(.82) rotate(-4deg)}100%{transform:scale(1)}}
 @keyframes liveGlow{0%,100%{box-shadow:0 0 0 rgba(69,227,154,0)}50%{box-shadow:0 0 24px rgba(69,227,154,.22)}}
+.decision-flash{animation:decisionFlash .52s ease}
+.signal-live-long{box-shadow:var(--shadow),0 0 44px rgba(69,227,154,.08)}
+.signal-live-short{box-shadow:var(--shadow),0 0 44px rgba(255,111,136,.08)}
+.signal-live-wait{box-shadow:var(--shadow),0 0 44px rgba(255,209,102,.07)}
+@keyframes decisionFlash{0%{filter:brightness(1)}25%{filter:brightness(1.32)}100%{filter:brightness(1)}}
+
 @keyframes ambientFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 @media(pointer:fine){body.alpha-pointer,body.alpha-pointer button,body.alpha-pointer select{cursor:none}}
 @media(pointer:coarse){#pointer-aura,#anime-cursor{display:none}}
@@ -620,6 +627,7 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
 </style>
 </head>
 <body>
+<canvas id="ambient-canvas" aria-hidden="true"></canvas>
 <div id="pointer-aura" aria-hidden="true"></div>
 <div id="anime-cursor" aria-hidden="true">
   <svg viewBox="0 0 64 64" fill="none">
@@ -770,6 +778,49 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
 <script>
 const $ = (id) => document.getElementById(id);
 const state = { data:null, history:null, selected:null, historyRequest:0 };
+
+function initAmbientFX(){
+  const canvas=$("ambient-canvas");
+  if(!canvas || (window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches))return;
+  const ctx=canvas.getContext("2d");
+  const particles=[];
+  const count=Math.min(30,Math.max(14,Math.round(window.innerWidth/55)));
+  const resize=()=>{
+    const dpr=Math.min(2,window.devicePixelRatio||1);
+    canvas.width=Math.floor(window.innerWidth*dpr);
+    canvas.height=Math.floor(window.innerHeight*dpr);
+    canvas.style.width=window.innerWidth+"px";
+    canvas.style.height=window.innerHeight+"px";
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  };
+  resize();window.addEventListener("resize",resize,{passive:true});
+  for(let i=0;i<count;i++){
+    particles.push({
+      x:Math.random()*window.innerWidth,y:Math.random()*window.innerHeight,
+      r:1.2+Math.random()*2.3,vx:-.03+Math.random()*.06,vy:.10+Math.random()*.18,
+      a:.10+Math.random()*.18,rot:Math.random()*6.28,vr:-.004+Math.random()*.008
+    });
+  }
+  let last=performance.now(),raf=0;
+  const frame=now=>{
+    const dt=Math.min(32,now-last);last=now;
+    ctx.clearRect(0,0,window.innerWidth,window.innerHeight);
+    particles.forEach(p=>{
+      p.x+=p.vx*dt;p.y+=p.vy*dt;p.rot+=p.vr*dt;
+      if(p.y>window.innerHeight+20){p.y=-20;p.x=Math.random()*window.innerWidth}
+      if(p.x<-20)p.x=window.innerWidth+20;if(p.x>window.innerWidth+20)p.x=-20;
+      ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);
+      ctx.fillStyle="rgba(255,120,200,"+p.a.toFixed(3)+")";
+      ctx.beginPath();
+      ctx.moveTo(0,-p.r*1.8);ctx.quadraticCurveTo(p.r*1.9,-p.r*.2,0,p.r*1.8);
+      ctx.quadraticCurveTo(-p.r*1.9,-p.r*.2,0,-p.r*1.8);ctx.fill();
+      ctx.restore();
+    });
+    raf=requestAnimationFrame(frame);
+  };
+  raf=requestAnimationFrame(frame);
+  window.addEventListener("pagehide",()=>cancelAnimationFrame(raf),{once:true});
+}
 
 function initAlphaMotion(){
   const fine=window.matchMedia&&window.matchMedia("(pointer:fine)").matches;
@@ -934,7 +985,7 @@ function bindInteractiveRows(){
 
 function renderDecisionDeck(signals){
   const active=signals.find(x=>x.symbol===state.selected)||signals[0];
-  const deckSignal=$("deckSignal"), deckMeta=$("deckMeta"), deckBundle=$("deckBundle");
+  const deckSignal=$("deckSignal"), deckMeta=$("deckMeta"), deckBundle=$("deckBundle"), deck=$("decisionDeck");
   const trace=$("traceGrid"), reasons=$("deckReasons");
   if(!active){
     deckSignal.textContent="WAIT";deckSignal.className="decision-signal signal-wait";
@@ -946,6 +997,8 @@ function renderDecisionDeck(signals){
   const d=active.decision||{}, b=active.bundle||{};
   const sig=active.signal||"WAIT";
   deckSignal.textContent=sig;deckSignal.className="decision-signal "+cls(sig);
+  deck.className="decision-deck signal-live-"+sig.toLowerCase();
+  deck.classList.remove("decision-flash");void deck.offsetWidth;deck.classList.add("decision-flash");
   deckMeta.textContent=sig==="LONG"?"Il gate corrente ammette un bias LONG.":sig==="SHORT"?"Il gate corrente ammette un bias SHORT.":"Nessun edge sufficientemente robusto per un segnale attivo.";
   deckBundle.className="pill "+(b.compatible&&b.manifest_ready?"good":"warn");
   deckBundle.innerHTML='<span class="dot"></span>'+esc(b.compatible&&b.manifest_ready?"PROVEN":"WAIT");
@@ -1120,6 +1173,7 @@ $("refresh").addEventListener("click",()=>refresh(true));
 $("asset").addEventListener("change",()=>{state.selected=$("asset").value;loadHistory(state.selected);});
 $("range").addEventListener("change",()=>loadHistory(state.selected));
 window.addEventListener("resize",()=>{if(state.history)drawChart(state.history,(state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[],(state.data&&state.data.signals||[]).find(x=>x.symbol===state.selected)?.realtime_price);});
+initAmbientFX();
 initAlphaMotion();
 initNavigation();
 refresh(true);
