@@ -1799,8 +1799,13 @@ function openInspector(symbol){
       '<div class="inspector-section"><h3>Signal data</h3><div class="inspector-trace">'+
         trace.map(t=>'<div class="inspector-trace-row"><strong>'+esc(t[0])+'</strong><span>'+esc(t[1])+'</span></div>').join("")+
       '</div></div>'+
+      '<div class="inspector-section"><h3>Model evidence</h3><div class="inspector-trace">'+
+        '<div class="inspector-trace-row"><strong>Compatibility</strong><span>'+esc((active.bundle||{}).compatibility||"—")+'</span></div>'+
+        '<div class="inspector-trace-row"><strong>Training rows</strong><span>'+esc((active.bundle||{}).training_rows??"—")+'</span></div>'+
+        '<div class="inspector-trace-row"><strong>Holdout</strong><span>'+pct((active.bundle||{}).holdout?.total_return??(active.bundle||{}).holdout?.net_compounded_return,2)+'</span></div>'+
+      '</div></div>'+
       '<div class="inspector-section"><h3>Reasons</h3><div class="inspector-reasons">'+
-        (active.reason_codes||[]).slice(0,12).map(x=>'<span class="reason">'+esc(x)+'</span>').join("")+
+        (active.reason_codes||[]).slice(0,8).map(x=>'<span class="reason">'+esc(x)+'</span>').join("")+
       '</div></div>';
   }
   const backdrop=$("inspectorBackdrop");
