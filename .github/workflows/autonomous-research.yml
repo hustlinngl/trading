@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,6 +29,19 @@ jobs:
           PAPER_ONLY: 'true'
           SANDBOX: 'true'
         run: python -m ai_trading_lab.main autonomous --config config.yaml --cycles 1
+      - name: Persist research governance ledger
+        if: always()
+        run: |
+          if [ -f data/research_ledger.json ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data/research_ledger.json
+            if ! git diff --cached --quiet; then
+              git commit -m "Persist autonomous research governance ledger"
+              git push
+            fi
+          fi
+
       - name: Upload research artifacts
         uses: actions/upload-artifact@v4
         with:
