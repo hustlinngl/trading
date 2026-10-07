@@ -211,7 +211,9 @@ def system_doctor(settings, root: str | Path = ".") -> dict:
     ]}
     directories = {name: (root / name).exists() for name in ["data", "models", "logs"]}
     core_names = ["numpy", "pandas", "sklearn", "yaml", "joblib"]
-    ui_names = ["plotly", "streamlit", "ccxt"]
+    research_names = ["numpy", "pandas", "sklearn", "yaml", "joblib", "optuna", "scipy", "pyarrow"]
+    live_names = ["ccxt"]
+    ui_names = ["plotly", "streamlit"]
     return {
         "version": (Path(root) / "VERSION").read_text(encoding="utf-8").strip() if (Path(root) / "VERSION").exists() else "unknown",
         "python": platform.python_version(),
@@ -223,6 +225,8 @@ def system_doctor(settings, root: str | Path = ".") -> dict:
         "sandbox": bool(getattr(settings, "sandbox", True)),
         "live_symbols": list(getattr(settings, "live_symbols", ()) or ()),
         "core_ready": all(deps.get(x, False) for x in core_names),
+        "research_ready": all(deps.get(x, False) for x in research_names),
+        "live_data_ready": all(deps.get(x, False) for x in live_names),
         "ui_live_ready": all(deps.get(x, False) for x in ui_names),
         "all_required_dependencies": all(deps.values()),
     }
