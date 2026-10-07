@@ -69,3 +69,20 @@ def test_research_router_is_deterministic():
     router1 = ResearchRouter(seed=7)
     router2 = ResearchRouter(seed=7)
     assert [x.task_id for x in router1.rank(tasks, budget=10.0, top_k=3)] == [x.task_id for x in router2.rank(tasks, budget=10.0, top_k=3)]
+
+
+def test_bundle_compatibility_rejects_training_semantics_mismatch(tmp_path):
+    from ai_trading_lab.deployment import model_semantics_fingerprint
+    settings = load_settings("config.yaml")
+    settings.symbol = "BTC/USDT"
+    settings.timeframe = "15m"
+    bundle = asset_bundle_dir(tmp_path, "BTC/USDT")
+    bundle.mkdir(parents=True)
+    (bundle / "base_training_meta.json").write_text(
+        '{"symbol":"BTC/USDT","timeframe":"15m","model_semantics_fingerprint":"incompatible"}',
+        encoding="utf-8",
+    )
+    ok, reason = bundle_compatibility(settings, bundle, "BTC/USDT")
+    assert not ok
+    assert reason == "model_semantics_mismatch"
+    assert model_semantics_fingerprint(settings)
