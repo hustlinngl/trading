@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.18
+- Hardened the packaged dashboard with release-time markup validation so malformed critical HTML fails the frozen smoke test instead of reaching users.
+- Fixed frozen-mode journal persistence so signal outcomes are read from the same writable state root used to store them.
+- Added regression coverage for dashboard markup integrity and frozen journal restoration.
+
 ## 0.9.17
 - Expanded Alpha art direction with a dedicated anime operator stage, visual signal timeline, and non-blocking decision inspector drawer.
 - Upgraded the market cockpit with volume context, subtle close-path bloom, regime HUD labeling and DOM crosshair overlays while preserving closed-candle model semantics.
