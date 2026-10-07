@@ -107,7 +107,7 @@ class AdaptiveEngine:
         p=Path(out_dir)
         if not (p/'signal_model.joblib').exists(): raise FileNotFoundError(f'Missing signal_model.joblib in {p}')
         import joblib
-        obj=cls(settings); obj.model=SignalModel.load(p/'signal_model.joblib'); obj.memory=AnalogMemory.load(p/'analog_memory.joblib'); obj.regimes=joblib.load(p/'regime_detector.joblib')
+        obj=cls(settings); obj.model=SignalModel.load(p/'signal_model.joblib'); obj.memory=AnalogMemory.load(p/'analog_memory.joblib'); obj.memory.exclusion_bars=int(getattr(settings,'memory_exclusion_bars',max(1,getattr(settings,'validation_purge_bars',settings.horizon_bars)))); obj.regimes=joblib.load(p/'regime_detector.joblib')
         obj.meta_regimes=joblib.load(p/'meta_regime_detector.joblib') if (p/'meta_regime_detector.joblib').exists() else obj.regimes
         obj.meta=joblib.load(p/'meta_policy.joblib')
         try: obj.feature_efficiency=joblib.load(p/'feature_efficiency.joblib')
