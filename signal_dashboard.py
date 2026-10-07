@@ -813,6 +813,23 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
   .operator-stage{animation:none}.operator-stage .operator-scan{animation:none}
 }
 
+
+/* Focus mode: only verified Top 5 picks and their historical charts. */
+.focus-only .top5-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;margin:10px 0 18px}
+.focus-only .top5-title{font-size:28px;font-weight:800;letter-spacing:-.03em}
+.focus-only .top5-sub{color:var(--muted);max-width:780px;margin-top:5px}
+.top5-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.pick-card{position:relative;overflow:hidden;border:1px solid rgba(255,120,200,.14);border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.015)),var(--panel);box-shadow:var(--shadow);cursor:pointer;transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
+.pick-card:hover{transform:translateY(-3px);border-color:rgba(255,120,200,.34);box-shadow:var(--shadow),0 0 34px rgba(255,120,200,.12)}
+.pick-card.pick-long{--pick-glow:rgba(69,227,154,.18)}.pick-card.pick-short{--pick-glow:rgba(255,111,136,.18)}
+.pick-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:18px 18px 10px}
+.pick-rank{font-size:11px;color:var(--muted);letter-spacing:.16em}.pick-symbol{font-size:20px;font-weight:800}
+.pick-signal{font-size:13px;font-weight:800;letter-spacing:.12em;padding:7px 10px;border-radius:999px;border:1px solid currentColor;box-shadow:0 0 22px var(--pick-glow)}
+.pick-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:0 18px 12px}.pick-stat{padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.025)}
+.pick-stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.pick-stat .v{margin-top:3px;font-weight:700}.pick-chart{height:220px;padding:0 8px 8px}.pick-chart canvas{display:block;width:100%;height:100%}
+.pick-foot{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 18px 15px;border-top:1px solid rgba(255,255,255,.05);font-size:11px;color:var(--muted)}
+.history-badge{padding:4px 8px;border-radius:999px;background:rgba(125,232,255,.06);border:1px solid rgba(125,232,255,.12);color:#9eeeff}.top5-empty{padding:48px 24px;text-align:center;border:1px dashed rgba(255,120,200,.18);border-radius:18px;background:rgba(255,255,255,.015)}
+.legacy-hidden{display:none!important}@media(max-width:980px){.top5-grid{grid-template-columns:1fr}.pick-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:640px){.wrap{padding:16px 12px 40px}.focus-only .top5-title{font-size:23px}.pick-chart{height:190px}}@media(prefers-reduced-motion:reduce){.pick-card{transition:none}}
 </style>
 </head>
 <body>
@@ -860,7 +877,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
     </div>
   </div>
 
-  <nav class="nav" id="nav" aria-label="Sezioni dashboard">
+  <nav class="nav legacy-hidden" id="nav" aria-label="Sezioni dashboard">
     <button class="nav-btn active" data-target="market">Market</button>
     <button class="nav-btn" data-target="detail">Intelligence</button>
     <button class="nav-btn" data-target="journal">Journal</button>
@@ -868,9 +885,17 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
     <button class="nav-btn" data-target="evidencePanel">Evidence</button>
   </nav>
 
-  <div class="metrics" id="metrics"></div>
+  <div class="metrics legacy-hidden" id="metrics"></div>
 
-  <section class="decision-deck" id="decisionDeck" aria-live="polite">
+  <section class="focus-only" id="focusDashboard" aria-live="polite">
+    <div class="top5-head">
+      <div><div class="eyebrow">Live signal surface · verified only</div><div class="top5-title">Top 5 Picks</div><div class="top5-sub">Solo LONG/SHORT che superano il gate corrente. Ogni pick mostra il proprio storico; WAIT e asset senza evidenza valida non vengono presentati come pick.</div></div>
+      <span id="focusStatus" class="pill warn">SCANSIONE…</span>
+    </div>
+    <div id="top5Grid" class="top5-grid"></div>
+  </section>
+
+  <section class="legacy-hidden decision-deck" id="decisionDeck" aria-live="polite"
     <div class="decision-hero">
       <div class="decision-top">
         <div>
@@ -919,7 +944,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
   </section>
 
   <div class="layout">
-    <div class="panel chart-panel" id="market">
+    <div class="legacy-hidden panel chart-panel" id="market"
       <div class="panel-head">
         <div>
           <div class="title">Market cockpit</div>
@@ -962,7 +987,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
   </div>
 
 
-  <div class="panel" id="timeline">
+  <div class="legacy-hidden panel" id="timeline"
     <div class="panel-head">
       <div>
         <div class="title">Signal timeline</div>
@@ -975,7 +1000,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
     </div>
   </div>
 
-  <div class="panel" id="detail">
+  <div class="legacy-hidden panel" id="detail"
     <div class="panel-head">
       <div><div class="title">Signal detail</div><div class="small">Stessa decisione usata dal motore: robust edge, meta, memoria, regime e duration gate.</div></div>
     </div>
@@ -989,7 +1014,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
     </div>
   </div>
 
-  <div class="panel" id="journal">
+  <div class="legacy-hidden panel" id="journal"
     <div class="panel-head">
       <div><div class="title">Signal journal</div><div class="small">Ogni segnale resta osservabile fino alla maturazione del suo orizzonte; gli esiti sono risolti con candele successive.</div></div>
       <div class="small" id="journalStatus"></div>
@@ -1002,14 +1027,14 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
     </div>
   </div>
 
-  <div class="panel" id="evidencePanel">
+  <div class="legacy-hidden panel" id="evidencePanel"
     <div class="panel-head"><div><div class="title">Training / deployment evidence</div><div class="small">Un segnale è ammissibile solo con bundle compatibile e provenance coerente.</div></div></div>
     <div class="grid3" id="evidence"></div>
   </div>
 
 
-<div id="inspectorBackdrop" class="inspector-backdrop"></div>
-<aside id="inspectorDrawer" class="inspector-drawer" aria-label="Decision inspector" aria-hidden="true">
+<div id="inspectorBackdrop" class="legacy-hidden inspector-backdrop"</div>
+<aside id="inspectorDrawer" class="legacy-hidden inspector-drawer" aria-label="Decision inspector" aria-hidden="true"
   <div class="inspector-head">
     <div><div class="title">Decision inspector</div><div class="small" id="inspectorSubtitle">Asset —</div></div>
     <button class="inspector-close" id="inspectorClose" aria-label="Chiudi inspector">×</button>
@@ -1024,7 +1049,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
 
 <script>
 const $ = (id) => document.getElementById(id);
-const state = { data:null, history:null, selected:null, historyRequest:0 };
+const state = { data:null, history:null, selected:null, historyRequest:0, focusRequest:0, focusHistories:{} };
 
 function initAmbientFX(){
   const canvas=$("ambient-canvas");
