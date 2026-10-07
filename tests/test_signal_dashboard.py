@@ -63,7 +63,7 @@ def test_signal_terminal_serves_only_read_routes(tmp_path, monkeypatch):
     server = terminal_mod.ThreadingHTTPServer(("127.0.0.1", 0), handler)
     try:
         assert server.server_address[0] == "127.0.0.1"
-        assert "order" not in terminal_mod.HTML.lower().split("/api/")[-1]
+        assert not hasattr(handler, "do_POST")
     finally:
         server.server_close()
 
