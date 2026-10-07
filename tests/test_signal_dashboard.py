@@ -334,6 +334,14 @@ def test_scan_top5_filters_wait_and_caps_verified_picks(monkeypatch, tmp_path):
         )
 
     monkeypatch.setattr(live_mod, "exchange_client", lambda *args, **kwargs: object())
+    monkeypatch.setattr(live_mod, "discover_live_universe", lambda *args, **kwargs: {
+        "symbols": list(settings.live_symbols),
+        "universe_symbols": list(settings.live_symbols),
+        "discovered_markets": len(settings.live_symbols),
+        "model_backed_markets": len(settings.live_symbols),
+        "model_eligible_markets": len(settings.live_symbols),
+        "market_counts": {"spot": len(settings.live_symbols)},
+    })
     monkeypatch.setattr(live_mod, "assess_symbol", fake_assess)
 
     picks = live_mod.scan_top5(settings, tmp_path)
