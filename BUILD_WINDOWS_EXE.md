@@ -11,7 +11,7 @@ The artifact contains:
 - `SETUP_WINDOWS.md` and `README.md` — usage/reference.
 - `RUN.txt` — quick launch notes.
 
-The EXE opens the browser automatically and binds the local terminal to localhost by default.
+The EXE opens the browser automatically and binds the local terminal to localhost by default. The package keeps a small representative closed-candle fallback cache for offline startup; when Internet is available the dashboard discovers the current full OHLCV market universe and refreshes live quotes dynamically.
 
 ## Model bundles
 
