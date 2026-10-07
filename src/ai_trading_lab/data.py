@@ -144,18 +144,31 @@ def asof_join(base: pd.DataFrame, source: pd.DataFrame, *, source_time: str = "t
     if base.empty or source.empty:
         return base.copy()
     b = base.copy().sort_index()
-    s = source.copy()
-    if source_time in s.columns:
-        s[source_time] = pd.to_datetime(s[source_time], utc=True)
-        s = s.set_index(source_time)
-    if not isinstance(b.index, pd.DatetimeIndex) or not isinstance(s.index, pd.DatetimeIndex):
+    src = source.copy()
+    if source_time in src.columns:
+        src[source_time] = pd.to_datetime(src[source_time], utc=True)
+        src = src.set_index(source_time)
+    if not isinstance(b.index, pd.DatetimeIndex) or not isinstance(src.index, pd.DatetimeIndex):
         raise TypeError("base and source must use DatetimeIndex or source_time must define one")
-    s = s.sort_index()
+    src = src.sort_index()
     if columns is not None:
-        s = s[[c for c in columns if c in s.columns]]
+        src = src[[c for c in columns if c in src.columns]]
     if lag is not None:
-        s = s.copy(); s.index = s.index + lag
-    left = b.reset_index(names="__base_ts")
-    right = s.reset_index(names="__source_ts").rename(columns={"__source_ts": "__eligible_ts"})
-    out = pd.merge_asof(left, right, left_on="__base_ts", right_on="__eligible_ts", direction="backward", tolerance=tolerance, suffixes=("", suffix))
-    return out.drop(columns=["__eligible_ts"], errors="ignore").set_index("__base_ts").reindex(b.index)
+        src = src.copy()
+        src.index = src.index + lag
+
+    positions = src.index.searchsorted(b.index, side="right") - 1
+    valid = positions >= 0
+    if tolerance is not None and len(src):
+        safe_positions = np.maximum(positions, 0)
+        valid &= (b.index - src.index.to_numpy()[safe_positions]) <= tolerance
+
+    aligned = pd.DataFrame(index=b.index)
+    for col in src.columns:
+        target = col if col not in b.columns else f"{col}{suffix}"
+        series = pd.Series(np.nan, index=b.index, dtype="object")
+        if valid.any():
+            series.iloc[np.flatnonzero(valid)] = src[col].iloc[positions[valid]].to_numpy()
+        aligned[target] = series
+    return pd.concat([b, aligned], axis=1)
+
