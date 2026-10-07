@@ -314,6 +314,7 @@ def main():
         print(json.dumps(result, indent=2, default=str)); return
 
     if args.command == 'bootstrap-live-data':
+        import pandas as pd
         requested_symbols = [
             x.strip() for x in args.symbols.split(',') if x.strip()
         ] if args.symbols else []
@@ -357,7 +358,6 @@ def main():
                     continue
                 if mtype in {'swap', 'future'} and not bool(market.get('contract')):
                     continue
-                capabilities = market.get('info', {}) if isinstance(market.get('info'), dict) else {}
                 if isinstance(getattr(ex, 'has', None), dict):
                     # CCXT's global capability is the safest portable check.
                     if ex.has.get('fetchOHLCV') is False:
