@@ -100,6 +100,14 @@ jobs:
             --collect-all lightgbm \
             signal_dashboard.py
 
+      - name: Stage frozen runtime data for functional test
+        shell: pwsh
+        run: |
+          Copy-Item .\config.yaml .\dist\config.yaml
+          New-Item -ItemType Directory -Force -Path .\dist\data\historical | Out-Null
+          Copy-Item .\data\historical\*.csv .\dist\data\historical\
+          Write-Host "Staged config and bundled history beside the exact user-facing EXE."
+
       - name: Smoke test frozen executable
         shell: pwsh
         run: |
@@ -165,7 +173,7 @@ jobs:
           Copy-Item .\SETUP_WINDOWS.md .\release\SETUP_WINDOWS.md
           Copy-Item .\README.md .\release\README.md
           @"
-          Sakura Signal Terminal 0.9.29
+          Sakura Signal Terminal 0.9.30
           
           Launch SakuraSignalTerminal.exe.
           The executable is read-only: it exposes no order endpoints.
