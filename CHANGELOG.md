@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.15
+- Deployment readiness now binds model, runtime/economic policy, dataset provenance and executable artifact hashes.
+- Incomplete bundles and stale legacy trade-window fallbacks fail closed before inference.
+- Global champion promotion removes stale managed artifacts instead of mixing model generations.
+- Auto-update cache invalidates on model or deployment semantics drift, not just data changes.
+- Meta-policy training uses the full cost hurdle, including impact and directional short borrow.
+- Short-side live/tuning conformal gates consistently use the adverse upper bound.
+
 ## 0.9.14
 - Triple-barrier same-bar TP/SL collisions are now treated as ambiguous rather than directionally bearish.
 - OOS feature stitching rejects conflicting overlapping bars instead of silently choosing one source.
