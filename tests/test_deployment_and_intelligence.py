@@ -110,7 +110,7 @@ def test_bundle_compatibility_rejects_stale_manifest_provenance(tmp_path):
     )
     ok, reason = bundle_compatibility(settings, bundle, "BTC/USDT")
     assert not ok
-    assert reason == "deployment_bundle_incomplete"
+    assert reason == "deployment_manifest_data_mismatch"
 
 
 def test_refresh_deployment_manifest_requires_matching_evidence(tmp_path):
@@ -162,7 +162,7 @@ def test_incomplete_bundle_fails_cleanly_before_manifest_evaluation(tmp_path):
     )
     ok, reason = bundle_compatibility(settings, bundle, "BTC/USDT")
     assert not ok
-    assert reason == "deployment_manifest_data_mismatch"
+    assert reason == "deployment_bundle_incomplete"
 
 
 def test_asset_deployment_manifest_respects_root(tmp_path):
@@ -215,3 +215,21 @@ def test_bundle_compatibility_rejects_tampered_artifact(tmp_path):
     ok, reason = bundle_compatibility(settings, bundle, "BTC/USDT")
     assert not ok
     assert reason == "deployment_manifest_artifact_mismatch"
+
+
+def test_global_promotion_removes_stale_managed_artifacts(tmp_path):
+    from ai_trading_lab.main import _promote_asset_bundle
+    src = tmp_path / "asset"
+    dst = tmp_path / "champion"
+    src.mkdir()
+    dst.mkdir()
+    (src / "signal_model.joblib").write_bytes(b"new-signal")
+    (src / "base_training_meta.json").write_text("{}", encoding="utf-8")
+    (dst / "signal_model.joblib").write_bytes(b"old-signal")
+    (dst / "trade_window_specialist.joblib").write_bytes(b"stale-window")
+    (dst / "deployment_manifest.json").write_text("{}", encoding="utf-8")
+    _promote_asset_bundle(src, dst)
+    assert (dst / "signal_model.joblib").read_bytes() == b"new-signal"
+    assert (dst / "base_training_meta.json").exists()
+    assert not (dst / "trade_window_specialist.joblib").exists()
+    assert not (dst / "deployment_manifest.json").exists()
