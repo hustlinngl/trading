@@ -820,3 +820,20 @@ def test_bootstrap_live_data_is_parallel_resumable_and_uses_canonical_timeframe_
     assert ".tmp" in source
     assert ".replace(path)" in source
     assert "--workers" in source
+
+
+def test_live_scan_uses_bounded_parallel_workers():
+    from ai_trading_lab import live as live_mod
+    import inspect
+
+    source = inspect.getsource(live_mod.scan_top5)
+    assert "ThreadPoolExecutor" in source
+    assert "thread_name_prefix="live-scan"" in source
+    assert "max(1, min(8" in source
+    assert "worker_exchange" in source
+
+
+def test_dashboard_quote_cache_has_short_ttl():
+    import signal_dashboard as terminal_mod
+
+    assert terminal_mod.SignalTerminal._quotes.__doc__
