@@ -10,7 +10,6 @@ It only reads public market data, validates model provenance and serves signals.
 from __future__ import annotations
 
 import argparse
-import html
 import json
 import threading
 import time
@@ -533,7 +532,6 @@ async function refresh(force=false){
 }
 $("refresh").addEventListener("click",()=>refresh(true));
 refresh(false);
-setInterval(()=>refresh(false),45000);
 </script>
 </body>
 </html>
