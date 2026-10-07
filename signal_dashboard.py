@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import threading
 import time
@@ -55,12 +56,12 @@ def _json_safe(value):
         return {str(k): _json_safe(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
         return [_json_safe(v) for v in value]
-    try:
-        if value != value:
-            return None
-    except Exception:
-        pass
-    return value.item() if hasattr(value, "item") else value
+    item = getattr(value, "item", None)
+    if callable(item):
+        return _json_safe(item())
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
 
 
 def _read_json(path: Path) -> dict:
@@ -151,6 +152,21 @@ class SignalTerminal:
             info["compatibility"] = f"{type(exc).__name__}:{exc}"
         return info
 
+    @staticmethod
+    def _ticker_row(symbol: str, ticker: dict) -> dict:
+        def as_float(key: str):
+            value = ticker.get(key)
+            return float(value) if value is not None else None
+
+        return {
+            "symbol": symbol,
+            "price": as_float("last"),
+            "bid": as_float("bid"),
+            "ask": as_float("ask"),
+            "timestamp": ticker.get("timestamp"),
+            "quote_volume": ticker.get("quoteVolume"),
+        }
+
     def _quotes(self, symbols: list[str]) -> dict:
         """Best-effort realtime ticker overlay; failure never blocks signals."""
         result = {}
@@ -160,24 +176,26 @@ class SignalTerminal:
             )
         except Exception as exc:
             return {"_error": f"{type(exc).__name__}:{exc}"}
-        for symbol in symbols:
+
+        missing = list(dict.fromkeys(symbols))
+        bulk = getattr(exchange, "fetch_tickers", None)
+        if callable(bulk):
             try:
-                ticker = exchange.fetch_ticker(symbol)
-                result[symbol] = {
-                    "price": float(ticker.get("last"))
-                    if ticker.get("last") is not None
-                    else None,
-                    "bid": float(ticker.get("bid"))
-                    if ticker.get("bid") is not None
-                    else None,
-                    "ask": float(ticker.get("ask"))
-                    if ticker.get("ask") is not None
-                    else None,
-                    "timestamp": ticker.get("timestamp"),
-                    "quote_volume": ticker.get("quoteVolume"),
-                }
+                tickers = bulk(missing)
+                if isinstance(tickers, dict):
+                    for symbol in missing:
+                        ticker = tickers.get(symbol)
+                        if isinstance(ticker, dict):
+                            result[symbol] = self._ticker_row(symbol, ticker)
+                    missing = [symbol for symbol in missing if symbol not in result]
+            except Exception:
+                pass
+
+        for symbol in missing:
+            try:
+                result[symbol] = self._ticker_row(symbol, exchange.fetch_ticker(symbol))
             except Exception as exc:
-                result[symbol] = {"error": f"{type(exc).__name__}:{exc}"}
+                result[symbol] = {"symbol": symbol, "error": f"{type(exc).__name__}:{exc}"}
         return result
 
     def _quote(self, symbol: str) -> dict:
@@ -185,16 +203,9 @@ class SignalTerminal:
             exchange = exchange_client(
                 getattr(self.settings, "exchange", "binance"), sandbox=False
             )
-            ticker = exchange.fetch_ticker(symbol)
-            return {
-                "symbol": symbol,
-                "price": float(ticker.get("last")) if ticker.get("last") is not None else None,
-                "bid": float(ticker.get("bid")) if ticker.get("bid") is not None else None,
-                "ask": float(ticker.get("ask")) if ticker.get("ask") is not None else None,
-                "timestamp": ticker.get("timestamp"),
-                "quote_volume": ticker.get("quoteVolume"),
-                "generated_at": datetime.now(timezone.utc).isoformat(),
-            }
+            payload = self._ticker_row(symbol, exchange.fetch_ticker(symbol))
+            payload["generated_at"] = datetime.now(timezone.utc).isoformat()
+            return payload
         except Exception as exc:
             return {"symbol": symbol, "error": f"{type(exc).__name__}:{exc}"}
 
@@ -209,18 +220,19 @@ class SignalTerminal:
             )
             if frame is None or frame.empty:
                 return {"symbol": symbol, "bars": [], "error": "empty_data"}
-            candles = []
-            for ts, row in frame.tail(bars).iterrows():
-                candles.append(
-                    {
-                        "t": int(ts.timestamp() * 1000),
-                        "o": float(row["open"]),
-                        "h": float(row["high"]),
-                        "l": float(row["low"]),
-                        "c": float(row["close"]),
-                        "v": float(row["volume"]),
-                    }
-                )
+            candles = [
+                {
+                    "t": int(ts.timestamp() * 1000),
+                    "o": float(open_),
+                    "h": float(high),
+                    "l": float(low),
+                    "c": float(close),
+                    "v": float(volume),
+                }
+                for ts, open_, high, low, close, volume in frame.tail(bars)[
+                    ["open", "high", "low", "close", "volume"]
+                ].itertuples(index=True, name=None)
+            ]
             return {
                 "symbol": symbol,
                 "timeframe": self.settings.timeframe,
@@ -296,6 +308,7 @@ class SignalTerminal:
                 signals = []
                 for assessment in assessments:
                     row = self._assessment_payload(assessment)
+                    row["bundle"] = self._bundle_snapshot(assessment.symbol)
                     realtime = quotes.get(assessment.symbol, {})
                     if realtime.get("price") is not None:
                         row["realtime_price"] = realtime["price"]
@@ -617,9 +630,9 @@ th{font-size:9px;text-transform:uppercase;letter-spacing:.11em;color:var(--muted
 
 <script>
 const $ = (id) => document.getElementById(id);
-const state = { data:null, history:null, previousHistory:null, selected:null };
+const state = { data:null, history:null, selected:null, historyRequest:0 };
 
-function esc(v){return String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",""":"&quot;"}[c]));}
+function esc(v){return String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c]));}
 function pct(v,d=1){return v==null||Number.isNaN(Number(v))?"—":(Number(v)*100).toFixed(d)+"%";}
 function num(v,d=3){return v==null||Number.isNaN(Number(v))?"—":Number(v).toFixed(d);}
 function age(v){return v==null||Number.isNaN(Number(v))?"—":Number(v).toFixed(1)+"m";}
@@ -733,7 +746,7 @@ function render(data){
 }
 
 function drawChart(history, signals, journal, realtimePrice){
-  const canvas=$("chart"), wrap=$("chartWrap"), empty=$("chartEmpty");
+  const canvas=$("chart"), empty=$("chartEmpty");
   const bars=(history&&history.bars)||[];
   if(!bars.length){empty.style.display="flex";return;}
   empty.style.display="none";
@@ -812,7 +825,6 @@ async function loadQuote(symbol){
     if(q.price!=null){
       $("livePrice").textContent="REALTIME "+num(q.price,2);
       $("livePrice").className="pill good";
-      const selected=(state.data&&state.data.signals||[]).find(x=>x.symbol===symbol);
       drawChart(state.history,(state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[],q.price);
     }else{
       $("livePrice").textContent="REALTIME —";
@@ -826,14 +838,22 @@ async function loadQuote(symbol){
 
 async function loadHistory(symbol){
   if(!symbol)return;
+  const request=++state.historyRequest;
   try{
     const limit=$("range").value;
     const res=await fetch("/api/history?symbol="+encodeURIComponent(symbol)+"&limit="+encodeURIComponent(limit),{cache:"no-store"});
-    state.history=await res.json();
+    const history=await res.json();
+    if(request!==state.historyRequest || state.selected!==symbol)return;
+    state.history=history;
     const signals=(state.data&&state.data.signals)||[];
-    drawChart(state.history,signals,(state.data&&state.data.journal)||[],signals.find(x=>x.symbol===symbol)?.realtime_price);
+    drawChart(history,signals,(state.data&&state.data.journal)||[],signals.find(x=>x.symbol===symbol)?.realtime_price);
     await loadQuote(symbol);
-  }catch(e){$("chartEmpty").style.display="flex";$("chartEmpty").textContent="Storico non disponibile: "+e;}
+  }catch(e){
+    if(request===state.historyRequest){
+      $("chartEmpty").style.display="flex";
+      $("chartEmpty").textContent="Storico non disponibile: "+e;
+    }
+  }
 }
 
 async function refresh(force=false){
@@ -878,7 +898,6 @@ def make_handler(terminal: SignalTerminal):
             self.send_response(status)
             self.send_header("Content-Type", content_type)
             self.send_header("Cache-Control", "no-store")
-            self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
