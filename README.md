@@ -48,3 +48,16 @@ python -m ai_trading_lab.main paper-daemon --cycles 1
 For Windows EXE packaging see **BUILD_WINDOWS_EXE.md** and **SETUP_WINDOWS.md**.
 
 For long-history experiments see **REAL_DATA_PLAYBOOK.md** and **RESEARCH_STATUS.md**.
+
+### Live dashboard data
+
+The dashboard is a read-only market-data terminal. To make it immediately useful even before model training, bootstrap closed OHLCV history and launch it:
+
+```powershell
+python -m ai_trading_lab.main doctor
+python -m ai_trading_lab.main bootstrap-live-data --symbols BTC/USDT,ETH/USDT,BNB/USDT,SOL/USDT,XRP/USDT --live-bars 600
+python signal_dashboard.py
+```
+
+Signals are deliberately fail-closed: live prices can be displayed without a model, but LONG/SHORT results require compatible trained and validated model bundles.
+
