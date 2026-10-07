@@ -1,0 +1,86 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "windows-exe"
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install runtime dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build EXE
+        shell: bash
+        run: |
+          pyinstaller \
+            --noconfirm \
+            --clean \
+            --onefile \
+            --windowed \
+            --name SakuraSignalTerminal \
+            --paths src \
+            --collect-submodules ai_trading_lab \
+            --collect-all xgboost \
+            --collect-all lightgbm \
+            signal_dashboard.py
+
+      - name: Smoke test frozen executable
+        shell: pwsh
+        run: |
+          & .\dist\SakuraSignalTerminal.exe --smoke-test
+          if ($LASTEXITCODE -ne 0) {
+            throw "SakuraSignalTerminal.exe smoke test failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Assemble portable package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          Copy-Item .\dist\SakuraSignalTerminal.exe .\release\SakuraSignalTerminal.exe
+          Copy-Item .\config.yaml .\release\config.yaml
+          Copy-Item .\SETUP_WINDOWS.md .\release\SETUP_WINDOWS.md
+          Copy-Item .\README.md .\release\README.md
+          @"
+          Sakura Signal Terminal 0.9.17
+          
+          Launch SakuraSignalTerminal.exe.
+          The executable is read-only: it exposes no order endpoints.
+          
+          Keep config.yaml beside the EXE.
+          Trained model bundles are intentionally external and should remain
+          beside the executable in the repository's expected model layout.
+          "@ | Set-Content .\release\RUN.txt -Encoding UTF8
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: SakuraSignalTerminal-Windows-x64
+          path: release/
+          if-no-files-found: error
+          retention-days: 14
