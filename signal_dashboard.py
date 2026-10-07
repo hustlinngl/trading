@@ -746,7 +746,7 @@ button:focus-visible,select:focus-visible{outline:none;border-color:var(--pink);
 .operator-badge svg{width:30px;height:30px;filter:drop-shadow(0 0 8px rgba(255,120,200,.32))}
 .operator-copy{display:flex;flex-direction:column;line-height:1}.operator-copy strong{font-size:9px;letter-spacing:.16em}.operator-copy span{font-size:8px;color:var(--muted);margin-top:4px;letter-spacing:.12em}
 #stamp{font-size:12px;color:var(--muted);white-space:nowrap}
-.metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+
 .decision-deck{display:grid;grid-template-columns:1.05fr 1.45fr;gap:14px;margin-top:14px}
 .decision-hero{position:relative;overflow:hidden;padding:18px;border-radius:18px;background:
 radial-gradient(420px 180px at 0 0,rgba(255,120,200,.11),transparent 65%),
@@ -985,7 +985,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
 .pick-card.pick-short{--signal-accent:var(--red)}
 .pick-card .pick-head{position:relative}
 .pick-card .pick-signal{box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
-.signal-skeleton-grid{display:grid;grid-template-columns:repeat(3,minmax(280px,1fr));gap:12px}.signal-skeleton-card{min-height:248px;padding:18px;border:1px solid #202833;border-radius:12px;background:#0f1319;overflow:hidden;position:relative}.signal-skeleton-card::after{content:"";position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(229,138,184,.045),transparent);animation:skeletonSweep 1.35s ease-in-out infinite}.signal-skeleton-line,.signal-skeleton-stats span,.signal-skeleton-chart{display:block;background:#1b222c;border-radius:8px;position:relative;overflow:hidden}.signal-skeleton-rank{width:26px;height:10px;margin-bottom:11px}.signal-skeleton-symbol{width:46%;height:22px}.signal-skeleton-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:24px}.signal-skeleton-stats span{height:42px}.signal-skeleton-chart{height:88px;margin-top:14px}@keyframes skeletonSweep{to{transform:translateX(100%)}}.scan-progress{height:3px;max-width:420px;margin:18px auto 0;background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden}.scan-progress span{display:block;height:100%;background:linear-gradient(90deg,var(--pink),var(--cyan));box-shadow:0 0 12px rgba(255,120,200,.35);transition:width .24s ease}.top5-empty{padding:48px 24px;text-align:center;border:1px dashed rgba(255,120,200,.18);border-radius:18px;background:rgba(255,255,255,.015)}
+.signal-skeleton-grid{display:grid;grid-template-columns:repeat(3,minmax(280px,1fr));gap:12px}.signal-skeleton-card{min-height:248px;padding:18px;border:1px solid #202833;border-radius:12px;background:#0f1319;overflow:hidden;position:relative}.signal-skeleton-card::after{content:"";position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(229,138,184,.045),transparent);animation:skeletonSweep 1.35s ease-in-out infinite}.signal-skeleton-line,.signal-skeleton-stats span,.signal-skeleton-chart{display:block;background:#1b222c;border-radius:8px;position:relative;overflow:hidden}.signal-skeleton-rank{width:26px;height:10px;margin-bottom:11px}.signal-skeleton-symbol{width:46%;height:22px}.signal-skeleton-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:24px}.signal-skeleton-stats span{height:42px}.signal-skeleton-chart{height:88px;margin-top:14px}@keyframes skeletonSweep{to{transform:translateX(100%)}}.top5-empty{padding:48px 24px;text-align:center;border:1px dashed rgba(255,120,200,.18);border-radius:18px;background:rgba(255,255,255,.015)}
 .legacy-hidden{display:none!important}@media(max-width:980px){.top5-grid,.signal-skeleton-grid{grid-template-columns:1fr}.pick-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:640px){.wrap{padding:16px 12px 40px}.focus-only .top5-title{font-size:23px}.pick-chart{height:190px}}@media(prefers-reduced-motion:reduce){.pick-card{transition:none;animation:none}.signal-skeleton-card::after{animation:none;display:none}}
 </style>
 <style>
@@ -1068,7 +1068,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   outline:2px solid rgba(229,138,184,.72);
   outline-offset:2px;
 }
-.metrics{gap:10px}
+
 .metric,.card,.panel{
   border-color:var(--ui-border);
   border-radius:var(--ui-radius);
@@ -1131,7 +1131,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   .nav{top:6px;margin-inline:-2px;overflow-x:auto;scrollbar-width:none}
   .nav::-webkit-scrollbar{display:none}
   .nav-btn{flex:0 0 auto}
-  .metrics{gap:8px}
+  
   .metric{padding:11px}
   .metric .value{font-size:17px}
   .decision-deck{gap:10px}
