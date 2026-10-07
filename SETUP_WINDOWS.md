@@ -1,13 +1,21 @@
-# Adaptive AI Trading Lab V6 — Windows
+# Adaptive AI Signal Terminal — Windows 0.9.17
 
-Install Python 3.11+ 64-bit, then:
+## Packaged EXE
+
+The preferred Windows experience is the packaged read-only terminal:
+
+`SakuraSignalTerminal.exe`
+
+Keep `config.yaml` beside the executable. Model/deployment bundles remain external so provenance and compatibility checks continue to work across model generations.
+
+## Source mode
+
+Install Python 3.11+ 64-bit:
 
 ```powershell
 python -m pip install -e .
 python signal_dashboard.py
 ```
-
-Recommended pre-alpha flow: train/validate the model bundle, then launch `signal_dashboard.py` for read-only signals and outcome tracking. The project is paper/sandbox by default. The adaptive specialist targets 3–24h, with a soft preference for 3–4h; it is not a hard duration constraint.
 
 Run validation with:
 
@@ -17,4 +25,6 @@ python -m ai_trading_lab.main demo
 python -m ai_trading_lab.main doctor
 ```
 
-Never commit API keys. Use environment variables or GitHub Actions Secrets.
+For reproducible EXE builds see `BUILD_WINDOWS_EXE.md`.
+
+The terminal is read-only and paper/sandbox-oriented by default. Never commit API keys; use environment variables or GitHub Actions Secrets.
