@@ -127,14 +127,31 @@ def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
     base_utility=robust_performance_utility(h,min_trades=int(getattr(settings,"base_min_holdout_trades",20)),max_drawdown=float(getattr(settings,"base_max_holdout_drawdown",-0.25))) if h else -1.0
     base_checks["risk_adjusted_utility"]=base_utility>=float(getattr(settings,"base_min_holdout_utility",0.0))
     duration_bt=duration.get("holdout",{}).get("backtest",{}) if isinstance(duration,dict) else {}
+    current_fp=meta.get("data_fingerprint") or base.get("data_fingerprint")
+    duration_provenance_match=(
+        bool(duration)
+        and str(duration.get("data_fingerprint"))==str(current_fp)
+        and str(duration.get("symbol"))==str(getattr(settings,"symbol",""))
+        and str(duration.get("timeframe"))==str(getattr(settings,"timeframe",""))
+    )
     duration_utility=robust_performance_utility(duration_bt,min_trades=int(getattr(settings,"trade_window_min_holdout_trades",12)),max_drawdown=float(getattr(settings,"trade_window_max_holdout_drawdown",-0.25))) if duration_bt else -1.0
     duration_checks={
+        "duration_artifact_present":(asset_dir/"trade_window_specialist.joblib").exists(),
         "duration_report_present":bool(duration),
+        "duration_provenance_match":duration_provenance_match,
         "duration_production_ready":bool(duration.get("production_ready",False)),
         "risk_adjusted_utility":(not bool(duration_bt)) or duration_utility>=float(getattr(settings,"trade_window_min_holdout_utility",0.0)),
     }
-    checks={**base_checks,**duration_checks}
-    ready=all(checks.values()) if bool(getattr(settings,"trade_window_enabled",True)) else all(base_checks.values())
+    base_provenance_match=(
+        bool(base)
+        and str(base.get("data_fingerprint"))==str(meta.get("data_fingerprint"))
+        and str(base.get("symbol"))==str(getattr(settings,"symbol",""))
+    )
+    base_checks["holdout_provenance_match"]=base_provenance_match
+    if bool(getattr(settings,"trade_window_enabled",True)):
+        checks={**base_checks,**duration_checks}
+    else:
+        checks=base_checks
     return_manifest={
         "symbol":str(getattr(settings,"symbol","")),
         "timeframe":str(getattr(settings,"timeframe","")),
