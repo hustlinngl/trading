@@ -58,7 +58,7 @@ def test_short_signal_uses_upper_bound_for_directional_uncertainty():
     assert action == "FLAT"
     assert "signal_expected_return" in reasons
 
-    robust = row(p_up=0.10, expected_return=-0.006, expected_return_lcb=-0.012, expected_return_ucb=-0.004)
+    robust = row(action="SHORT", trade_window_direction="SHORT", p_up=0.10, expected_return=-0.006, expected_return_lcb=-0.012, expected_return_ucb=-0.004)
     action, reasons = live_signal_gate(robust, settings)
     assert action == "SHORT"
     assert reasons == []
