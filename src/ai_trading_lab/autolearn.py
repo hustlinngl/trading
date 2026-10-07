@@ -9,7 +9,7 @@ from .objectives import robust_performance_utility
 from .promotion import promotion_gate
 from .growth import GrowthRegistry
 from .fingerprint import strong_dataset_fingerprint
-from .deployment import model_semantics_fingerprint, refresh_deployment_manifest
+from .deployment import model_semantics_fingerprint, deployment_semantics_fingerprint, refresh_deployment_manifest
 
 def evaluate_engine(df,settings):
     folds=walk_forward(df,settings,independent_test=True)
@@ -119,6 +119,7 @@ def auto_update(df,settings,model_dir="models"):
             "timeframe":str(settings.timeframe),
             "data_fingerprint":fp,
             "model_semantics_fingerprint":model_semantics_fingerprint(settings),
+            "deployment_semantics_fingerprint":deployment_semantics_fingerprint(settings),
             "trained_at":pd.Timestamp.now(tz="UTC").isoformat(),
             "promotion_source":"auto_update",
         },indent=2,default=str),encoding="utf-8")
