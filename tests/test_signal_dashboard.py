@@ -475,6 +475,8 @@ def test_signal_terminal_background_state_does_not_hold_lock_during_scan(tmp_pat
 
     first = terminal._terminal_state(force=True, background=True)
     assert first["scan_in_progress"] is True
+    scan_thread = terminal._scan_thread
+    assert scan_thread is not None
     assert started.wait(1.0)
 
     second = {}
@@ -491,7 +493,7 @@ def test_signal_terminal_background_state_does_not_hold_lock_during_scan(tmp_pat
     returned_before_release = done.wait(0.5)
     release.set()
     request.join(2.0)
-    terminal._scan_thread.join(2.0)
+    scan_thread.join(2.0)
 
     assert returned_before_release is True
     assert second["state"]["scan_in_progress"] is True
