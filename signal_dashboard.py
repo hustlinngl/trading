@@ -1692,10 +1692,8 @@ function bindFocusCards(){
       const input=$("asset");
       if(input)input.value=symbol;
       openInspector(symbol);
-      renderDecisionDeck((state.data&&state.data.signals)||[]);
       const market=$("market");
       if(market){
-        market.classList.remove("legacy-hidden");
         market.scrollIntoView({behavior:"smooth",block:"start"});
       }
       loadHistory(symbol);
@@ -1887,8 +1885,7 @@ function renderLiveData(data){
 function render(data){
   state.data=data;
   if(!data.ok){
-    $("radarRows").innerHTML='<tr><td colspan="3"><span class="signal signal-wait">WAIT</span></td></tr>';
-    $("detailRows").innerHTML='<tr><td colspan="11" class="small">'+esc(data.error||"Terminale non disponibile")+'</td></tr>';
+    $("top5Grid").innerHTML='<div class="top5-empty"><h2 style="margin:0">Terminale non disponibile</h2><div class="small">'+esc(data.error||"Errore sconosciuto")+'</div></div>';
     return;
   }
   const signals=data.signals||[];
@@ -2080,7 +2077,7 @@ function scheduleRefresh(seconds){
   refreshTimer=setTimeout(()=>refresh(false),Math.max(10,Number(seconds||20))*1000);
 }
 $("refresh").addEventListener("click",()=>refresh(true));
-function openSelectedAsset(){const value=String($("asset").value||"").trim();if(!value)return;const allowed=new Set(state.marketSymbols||[]);if(!allowed.has(value)){ $("asset").setCustomValidity("Simbolo non presente nei mercati attivi.");$("asset").reportValidity();return;}$("asset").setCustomValidity("");state.selected=value;loadHistory(value);renderTimeline((state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[]);}$("asset").addEventListener("change",openSelectedAsset);$("asset").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();openSelectedAsset();}});$("loadAsset").addEventListener("click",openSelectedAsset);$("range").addEventListener("change",()=>loadHistory(state.selected));
+function openSelectedAsset(){const value=String($("asset").value||"").trim();if(!value)return;const allowed=new Set(state.marketSymbols||[]);if(!allowed.has(value)){ $("asset").setCustomValidity("Simbolo non presente nei mercati attivi.");$("asset").reportValidity();return;}$("asset").setCustomValidity("");state.selected=value;loadHistory(value);}$("asset").addEventListener("change",openSelectedAsset);$("asset").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();openSelectedAsset();}});$("loadAsset").addEventListener("click",openSelectedAsset);$("range").addEventListener("change",()=>loadHistory(state.selected));
 let resizeFrame=0;
 window.addEventListener("resize",()=>{
   if(resizeFrame)return;
@@ -2223,13 +2220,9 @@ def validate_dashboard_markup() -> None:
 
     # These are the critical opening tags most likely to break the single-file UI.
     malformed_prefixes = (
-        '<section class="legacy-hidden decision-deck" id="decisionDeck" aria-live="polite"\n',
-        '<div class="legacy-hidden panel chart-panel" id="market"\n',
-        '<div class="legacy-hidden panel" id="timeline"\n',
-        '<div class="legacy-hidden panel" id="detail"\n',
-        '<div class="legacy-hidden panel" id="journal"\n',
-        '<div class="legacy-hidden panel" id="evidencePanel"\n',
-        '<aside id="inspectorDrawer" class="legacy-hidden inspector-drawer" aria-label="Decision inspector" aria-hidden="true"\n',
+        '<section class="focus-only" id="focusDashboard" aria-live="polite"\n',
+        '<div class="panel chart-panel" id="market"\n',
+        '<aside id="inspectorDrawer" class="legacy-hidden inspector-drawer" aria-label="Signal details" aria-hidden="true"\n',
     )
     found = [token for token in malformed_prefixes if token in HTML]
     if found:
