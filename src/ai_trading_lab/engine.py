@@ -26,6 +26,21 @@ class EngineArtifacts:
     predictions: pd.DataFrame
 
 
+def _pre_calibration_core_mask(index, calibration_start, purge_bars):
+    """Match meta-learning's training boundary to SignalModel's purged calibration split."""
+    if not isinstance(index, pd.DatetimeIndex):
+        index = pd.DatetimeIndex(index)
+    if len(index) == 0:
+        return pd.Series(dtype=bool, index=index)
+    positions = np.arange(len(index))
+    try:
+        cal_pos = int(index.searchsorted(pd.Timestamp(calibration_start), side="left"))
+    except Exception:
+        cal_pos = len(index)
+    core_end = max(0, cal_pos - max(0, int(purge_bars)))
+    return pd.Series(positions < core_end, index=index, dtype=bool)
+
+
 class AdaptiveEngine:
     def __init__(self, settings):
         self.settings=settings
@@ -59,11 +74,11 @@ class AdaptiveEngine:
         self.model.fit(pruned,y,future_ret,purge_bars=int(getattr(self.settings,'validation_purge_bars',self.settings.horizon_bars)))
         cal_oos=getattr(self.model,'calibration_oos_',None)
         if cal_oos is not None and not cal_oos.empty:
-            first_cal=cal_oos.index[0]; core_idx=features.index<first_cal; self.meta_regimes=RegimeDetector(self.settings.seed,n_init=getattr(self.settings,'regime_n_init',5)); self.meta_regimes.fit(features.loc[core_idx])
+            first_cal=cal_oos.index[0]; core_idx=_pre_calibration_core_mask(features.index,first_cal,int(getattr(self.settings,'validation_purge_bars',self.settings.horizon_bars))); self.meta_regimes=RegimeDetector(self.settings.seed,n_init=getattr(self.settings,'regime_n_init',5)); self.meta_regimes.fit(features.loc[core_idx])
         self.regimes.fit(features); regime=self.regimes.transform(features); regime_persistence=self.regimes.persistence(features); model_features=pruned.reindex(index=features.index)
         meta_analog=None
         if cal_oos is not None and not cal_oos.empty:
-            first_cal=cal_oos.index[0]; core_idx=model_features.index<first_cal; meta_memory=AnalogMemory(k=getattr(self.settings,'memory_k',32)); meta_memory.fit(model_features.loc[core_idx],future_ret.loc[core_idx],information_weighted=bool(getattr(self.settings,'memory_information_weighted',False))); meta_analog=meta_memory.query_many(model_features.loc[cal_oos.index])
+            first_cal=cal_oos.index[0]; core_idx=_pre_calibration_core_mask(model_features.index,first_cal,int(getattr(self.settings,'validation_purge_bars',self.settings.horizon_bars))); meta_memory=AnalogMemory(k=getattr(self.settings,'memory_k',32)); meta_memory.fit(model_features.loc[core_idx],future_ret.loc[core_idx],information_weighted=bool(getattr(self.settings,'memory_information_weighted',False))); meta_analog=meta_memory.query_many(model_features.loc[cal_oos.index])
         self.memory.fit(model_features,future_ret,information_weighted=bool(getattr(self.settings,'memory_information_weighted',False))); base=self.model.predict(model_features); analog=self.memory.query_many(model_features,exclude_self=True)
         if cal_oos is not None and not cal_oos.empty and meta_analog is not None:
             idx=cal_oos.index.intersection(features.index); meta_base=cal_oos.loc[idx]; mm=self.meta_regimes if self.meta_regimes is not None else self.regimes; mr=mm.transform(features.loc[idx]); mp=mm.persistence(features.loc[idx]); mprob=mm.semantic_probabilities(features.loc[idx])
