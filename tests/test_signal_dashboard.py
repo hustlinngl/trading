@@ -330,12 +330,14 @@ def test_discover_live_universe_uses_all_active_market_types(monkeypatch, tmp_pa
     monkeypatch.setattr(live_mod, "resolve_signal_bundle", lambda settings, root, symbol:
         asset_root / symbol.replace("/", "_").replace(":", "_")
     )
+    monkeypatch.setattr(live_mod, "bundle_compatibility", lambda settings, bundle, symbol: (True, "ok"))
 
     meta = live_mod.discover_live_universe(settings, tmp_path, FakeExchange())
 
     assert set(meta["symbols"]) == {"BTC/USDT", "ETH/USDT:USDT", "XRP/USDT:USDT"}
     assert meta["discovered_markets"] == 4
     assert meta["model_backed_markets"] == 3
+    assert meta["model_eligible_markets"] == 3
     assert meta["market_counts"]["spot"] == 2
     assert meta["market_counts"]["swap"] == 1
     assert meta["market_counts"]["future"] == 1
