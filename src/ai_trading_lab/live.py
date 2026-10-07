@@ -80,12 +80,39 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None):
 
 def scan_top5(settings,root=".",symbols=None):
     ex=exchange_client(getattr(settings,"exchange","binance"),sandbox=False)
-    symbols=list(symbols or getattr(settings,"live_symbols",()) or [settings.symbol])[:int(getattr(settings,"live_max_symbols",15))]
+    configured=list(symbols or getattr(settings,"live_symbols",()) or [settings.symbol])
+    asset_root=Path(root)/"models"/"assets"
+    bundled_root=Path(root)/"data"/"historical"
+    discovered=[]
+    if asset_root.exists():
+        for path in asset_root.iterdir():
+            if path.is_dir():
+                name=path.name.replace("_","/")
+                if name.endswith(("/USDT","/USDC","/FDUSD")):
+                    discovered.append(name)
+    if bundled_root.exists():
+        for path in bundled_root.glob("*_*.csv"):
+            stem=path.stem.rsplit("_",1)[0]
+            if stem.endswith(("_USDT","_USDC","_FDUSD")):
+                discovered.append(stem.replace("_","/"))
+    universe=list(dict.fromkeys(configured+discovered))
+    max_symbols=max(5,int(getattr(settings,"live_max_symbols",15)))
     out=[]
-    for symbol in dict.fromkeys(symbols):
-        try: out.append(assess_symbol(settings,root,symbol,exchange=ex))
-        except Exception as exc: out.append(LiveAssessment(symbol,pd.Timestamp.now(tz="UTC").isoformat(),"WAIT","FLAT",0.0,0.0,float("nan"),[str(exc)],"",{"error":f"{type(exc).__name__}:{exc}"}))
-    out.sort(key=lambda x:(x.status=="SIGNAL",x.confidence),reverse=True)
+    for symbol in universe[:max_symbols]:
+        try:
+            assessment=assess_symbol(settings,root,symbol,exchange=ex)
+            if assessment.signal in {"LONG","SHORT"} and assessment.status=="SIGNAL":
+                out.append(assessment)
+        except Exception:
+            continue
+    out.sort(
+        key=lambda x: (
+            float(x.confidence),
+            float(x.expected_return),
+            str(x.timestamp),
+        ),
+        reverse=True,
+    )
     return out[:5]
 
 def write_live_snapshot(results,root="."):
