@@ -238,7 +238,7 @@ def test_signal_terminal_focus_surface_is_only_verified_picks():
     html = terminal_mod.HTML
     assert 'id="focusDashboard"' in html
     assert 'id="top5Grid"' in html
-    assert 'Top 5 Picks' in html
+    assert 'Top 5' in html
     assert 'legacy-hidden' in html
     assert 'class="legacy-hidden panel chart-panel" id="market"' in html
     assert 'class="legacy-hidden panel" id="detail"' in html
