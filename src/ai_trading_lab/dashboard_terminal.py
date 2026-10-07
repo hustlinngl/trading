@@ -94,15 +94,6 @@ def _signal_rank(signal: str) -> int:
     return {"LONG": 3, "SHORT": 2, "WAIT": 1, "FLAT": 0}.get(signal, 0)
 
 
-def _signal_class(signal: str) -> str:
-    return {
-        "LONG": "signal-long",
-        "SHORT": "signal-short",
-        "WAIT": "signal-wait",
-        "FLAT": "signal-flat",
-    }.get(signal, "signal-flat")
-
-
 class SignalTerminal:
     def __init__(
         self,
@@ -363,10 +354,10 @@ class SignalTerminal:
                 continue
         return rows
 
-    def _assessment_payload(self, assessment: LiveAssessment) -> dict:
-        payload = _json_safe(assessment.to_dict())
-        payload["signal_class"] = _signal_class(str(payload.get("signal", "WAIT")))
-        return payload
+    @staticmethod
+    def _assessment_payload(assessment: LiveAssessment) -> dict:
+        """Return the DirectSignal object without adding dashboard-specific fields."""
+        return _json_safe(assessment.to_dict())
 
     def _bootstrap_state(self) -> dict:
         return {
