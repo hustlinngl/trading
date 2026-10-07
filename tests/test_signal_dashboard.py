@@ -231,3 +231,50 @@ def test_signal_terminal_history_falls_back_to_bundled_cache(tmp_path, monkeypat
     assert result["network_error"] == "OSError:offline"
     assert len(result["bars"]) == 2
     assert result["bars"][1]["c"] == 101.5
+
+
+def test_signal_terminal_focus_surface_is_only_verified_picks():
+    import signal_dashboard as terminal_mod
+
+    html = terminal_mod.HTML
+    assert 'id="focusDashboard"' in html
+    assert 'id="top5Grid"' in html
+    assert 'Top 5 Picks' in html
+    assert 'legacy-hidden' in html
+    assert 'id="market" class="legacy-hidden' in html
+    assert 'id="detail" class="legacy-hidden' in html
+    assert 'id="journal" class="legacy-hidden' in html
+    assert 'id="timeline" class="legacy-hidden' in html
+    assert 'id="evidencePanel" class="legacy-hidden' in html
+
+
+def test_scan_top5_filters_wait_and_caps_verified_picks(monkeypatch, tmp_path):
+    import ai_trading_lab.live as live_mod
+
+    settings = load_settings("config.yaml")
+    settings.live_symbols = tuple(f"ASSET{i}/USDT" for i in range(8))
+
+    def fake_assess(settings, root, symbol, exchange=None):
+        idx = int(symbol.replace("ASSET", "").split("/")[0])
+        if idx == 7:
+            return LiveAssessment(symbol, "2026-10-07T00:00:00+00:00", "WAIT", "FLAT", 0.99, 0.9, 1.0, ["gate"], "fp")
+        return LiveAssessment(
+            symbol,
+            "2026-10-07T00:00:00+00:00",
+            "SIGNAL",
+            "LONG" if idx % 2 == 0 else "SHORT",
+            0.60 + idx / 100,
+            0.001 + idx / 10000,
+            100.0 + idx,
+            [],
+            "fp",
+        )
+
+    monkeypatch.setattr(live_mod, "exchange_client", lambda *args, **kwargs: object())
+    monkeypatch.setattr(live_mod, "assess_symbol", fake_assess)
+
+    picks = live_mod.scan_top5(settings, tmp_path)
+
+    assert len(picks) == 5
+    assert all(p.signal in {"LONG", "SHORT"} and p.status == "SIGNAL" for p in picks)
+    assert picks[0].confidence >= picks[-1].confidence
