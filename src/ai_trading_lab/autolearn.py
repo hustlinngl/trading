@@ -43,7 +43,6 @@ def auto_update(df,settings,model_dir="models"):
     current_artifact_fp=bundle_artifact_fingerprint(mdir)
     if (
         (mdir/"signal_model.joblib").exists()
-        and bool(state.get("deployment_ready",False))
         and state.get("data_fingerprint")==fp
         and state.get("model_semantics_fingerprint")==model_semantics
         and state.get("deployment_semantics_fingerprint")==deployment_semantics
@@ -52,7 +51,7 @@ def auto_update(df,settings,model_dir="models"):
         return {
             "promoted":False,
             "skipped":True,
-            "skip_reason":"dataset_and_configuration_unchanged",
+            "skip_reason":"dataset_configuration_and_artifacts_unchanged",
             "data_fingerprint":fp,
             "champion_score":previous_score,
             "challenger_score":previous_score,
