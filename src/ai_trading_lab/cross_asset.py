@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Iterable
 import numpy as np
-from .data import timeframe_offset
+from .data import timeframe_offset, _deduplicate_ohlcv
 import pandas as pd
 
 
@@ -15,7 +15,7 @@ def fetch_cross_asset_bars(exchange, symbols: Iterable[str], timeframe: str, lim
                 continue
             df = pd.DataFrame(rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
             df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
-            frame = df.set_index("timestamp").astype(float).sort_index()
+            frame = _deduplicate_ohlcv(df.set_index("timestamp").astype(float))
             if len(frame) > 1:
                 try:
                     delta = timeframe_offset(timeframe)
