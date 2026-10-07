@@ -180,6 +180,24 @@ class SignalTerminal:
                 result[symbol] = {"error": f"{type(exc).__name__}:{exc}"}
         return result
 
+    def _quote(self, symbol: str) -> dict:
+        try:
+            exchange = exchange_client(
+                getattr(self.settings, "exchange", "binance"), sandbox=False
+            )
+            ticker = exchange.fetch_ticker(symbol)
+            return {
+                "symbol": symbol,
+                "price": float(ticker.get("last")) if ticker.get("last") is not None else None,
+                "bid": float(ticker.get("bid")) if ticker.get("bid") is not None else None,
+                "ask": float(ticker.get("ask")) if ticker.get("ask") is not None else None,
+                "timestamp": ticker.get("timestamp"),
+                "quote_volume": ticker.get("quoteVolume"),
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        except Exception as exc:
+            return {"symbol": symbol, "error": f"{type(exc).__name__}:{exc}"}
+
     def _history(self, symbol: str, limit: int | None = None) -> dict:
         bars = max(80, min(1000, int(limit or self.history_bars)))
         try:
@@ -530,9 +548,10 @@ th{font-size:9px;text-transform:uppercase;letter-spacing:.11em;color:var(--muted
       <div class="panel-head">
         <div>
           <div class="title">Market cockpit</div>
-          <div class="small">Prezzo storico, regime visuale e marker dei segnali. Il prezzo realtime viene sovrapposto al close dell'ultima candela.</div>
+          <div class="small">Candele storiche + marker segnali, con ticker realtime separato dal close usato dal modello.</div>
         </div>
         <div class="chart-tools">
+          <span id="livePrice" class="pill good">REALTIME —</span>
           <select id="asset"></select>
           <select id="range"><option value="120">120</option><option value="240" selected>240</option><option value="480">480</option></select>
         </div>
@@ -785,6 +804,26 @@ function drawChart(history, signals, journal, realtimePrice){
   canvas.onmouseleave=()=>{$("cursor").style.display="none";};
 }
 
+async function loadQuote(symbol){
+  if(!symbol)return;
+  try{
+    const res=await fetch("/api/quote?symbol="+encodeURIComponent(symbol),{cache:"no-store"});
+    const q=await res.json();
+    if(q.price!=null){
+      $("livePrice").textContent="REALTIME "+num(q.price,2);
+      $("livePrice").className="pill good";
+      const selected=(state.data&&state.data.signals||[]).find(x=>x.symbol===symbol);
+      drawChart(state.history,(state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[],q.price);
+    }else{
+      $("livePrice").textContent="REALTIME —";
+      $("livePrice").className="pill warn";
+    }
+  }catch(e){
+    $("livePrice").textContent="REALTIME offline";
+    $("livePrice").className="pill warn";
+  }
+}
+
 async function loadHistory(symbol){
   if(!symbol)return;
   try{
@@ -793,6 +832,7 @@ async function loadHistory(symbol){
     state.history=await res.json();
     const signals=(state.data&&state.data.signals)||[];
     drawChart(state.history,signals,(state.data&&state.data.journal)||[],signals.find(x=>x.symbol===symbol)?.realtime_price);
+    await loadQuote(symbol);
   }catch(e){$("chartEmpty").style.display="flex";$("chartEmpty").textContent="Storico non disponibile: "+e;}
 }
 
@@ -818,6 +858,7 @@ $("asset").addEventListener("change",()=>{state.selected=$("asset").value;loadHi
 $("range").addEventListener("change",()=>loadHistory(state.selected));
 window.addEventListener("resize",()=>{if(state.history)drawChart(state.history,(state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[],(state.data&&state.data.signals||[]).find(x=>x.symbol===state.selected)?.realtime_price);});
 refresh(true);
+setInterval(()=>loadQuote(state.selected),5000);
 </script>
 </body>
 </html>
@@ -868,6 +909,27 @@ def make_handler(terminal: SignalTerminal):
                 self._send(
                     body, content_type="application/json; charset=utf-8"
                 )
+                return
+            if parsed.path == "/api/quote":
+                query = parse_qs(parsed.query)
+                symbol = query.get("symbol", [terminal.settings.symbol])[0]
+                allowed = set(
+                    getattr(terminal.settings, "live_symbols", ())
+                    or (terminal.settings.symbol,)
+                )
+                if symbol not in allowed:
+                    self._send(
+                        b'{"error":"symbol_not_configured"}',
+                        status=400,
+                        content_type="application/json; charset=utf-8",
+                    )
+                    return
+                body = json.dumps(
+                    terminal._quote(symbol),
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ).encode("utf-8")
+                self._send(body, content_type="application/json; charset=utf-8")
                 return
             if parsed.path == "/api/history":
                 query = parse_qs(parsed.query)
