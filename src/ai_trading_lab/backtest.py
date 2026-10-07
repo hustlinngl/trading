@@ -67,6 +67,7 @@ def _stats(equity: pd.Series, trades: list[dict], bars_per_year: float | None = 
         'fees_total': fees_total,
         'slippage_impact_total': float(slippage_total + impact_total),
         'borrow_cost_total': borrow_total,
+        'funding_cost_total': float(sum(t.get('funding_cost', 0.0) for t in trades)) if trades else 0.0,
         'avg_entry_participation': float(participation.mean()) if len(participation) else 0.0,
         'p95_entry_participation': float(np.quantile(participation, 0.95)) if len(participation) else 0.0,
         'exposure': float(np.mean([abs(t.get('notional', 0.0)) / max(float(t.get('entry_equity', equity.iloc[0])), 1e-9) for t in trades])) if trades else 0.0,
@@ -77,7 +78,10 @@ def _stats(equity: pd.Series, trades: list[dict], bars_per_year: float | None = 
 def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
                  fee_bps=7, slippage_bps=5, max_holding_bars: int | None = None,
                  intrabar_barriers: bool = True, impact_bps_per_sqrt: float = 1.5,
-                 force_daily_loss_exit: bool = True, short_borrow_bps_per_bar: float = 0.0) -> BacktestResult:
+                 force_daily_loss_exit: bool = True, short_borrow_bps_per_bar: float = 0.0,
+                 funding_rate_column: str = 'funding_rate', funding_interval_bars: int = 32,
+                 funding_bps_per_bar: float = 0.0, apply_funding: bool = False,
+                 require_short_borrow_cost: bool = False) -> BacktestResult:
     """Event-driven single-asset simulator with strict decision/execution semantics."""
     if not signal.index.equals(df.index):
         signal = signal.reindex(df.index).fillna('FLAT')
@@ -96,6 +100,7 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
     entry_impact_cost = 0.0
     entry_participation = 0.0
     borrow_cost = 0.0
+    funding_cost = 0.0
     equity_curve: list[float] = []
     trades: list[dict] = []
 
@@ -103,7 +108,7 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
         return cash if side == 0 else cash + side * (close - float(entry)) * qty
 
     def close_position(ts, fill_raw: float, volume_notional: float, reason: str):
-        nonlocal cash, side, qty, entry, stop, take, entry_idx, entry_ts, entry_fee, entry_slippage_cost, entry_impact_cost, entry_participation, borrow_cost, entry_equity
+        nonlocal cash, side, qty, entry, stop, take, entry_idx, entry_ts, entry_fee, entry_slippage_cost, entry_impact_cost, entry_participation, borrow_cost, funding_cost, entry_equity
         exit_notional_raw = qty * fill_raw
         exit_fill, fee = _fill_prices(fill_raw, -side, exit_notional_raw, volume_notional, fee_bps, slippage_bps, impact_bps_per_sqrt)
         participation_exit = min(1.0, abs(exit_notional_raw) / max(volume_notional, 1.0)) if volume_notional > 0 else 1.0
@@ -112,7 +117,7 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
         gross = side * (exit_fill - float(entry)) * qty
         fee_cash = abs(qty * exit_fill) * fee
         cash += gross - fee_cash
-        pnl_net = gross - fee_cash - entry_fee - borrow_cost
+        pnl_net = gross - fee_cash - entry_fee - borrow_cost - funding_cost
         trades.append({
             'timestamp': ts, 'entry_timestamp': entry_ts,
             'side': 'LONG' if side > 0 else 'SHORT',
@@ -122,13 +127,14 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
             'entry_fee': float(entry_fee), 'exit_fee': float(fee_cash),
             'slippage_cost': float(entry_slippage_cost + exit_slippage),
             'borrow_cost': float(borrow_cost),
+            'funding_cost': float(funding_cost),
             'impact_cost': float(entry_impact_cost + exit_impact),
             'entry_participation': float(entry_participation),
             'holding_bars': int(i - int(entry_idx)) if entry_idx is not None else None,
         })
         side = 0; qty = 0.0; entry = stop = take = None
         entry_idx = entry_ts = None; entry_fee = 0.0; entry_equity = float(cash)
-        entry_slippage_cost = entry_impact_cost = entry_participation = borrow_cost = 0.0
+        entry_slippage_cost = entry_impact_cost = entry_participation = borrow_cost = funding_cost = 0.0
 
     for i, (ts, row) in enumerate(df.iterrows()):
         close = float(row['close']); open_ = float(row['open'])
@@ -159,6 +165,9 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
 
         if side == 0 and i > 0 and pending in {'LONG', 'SHORT'}:
             direction = 1 if pending == 'LONG' else -1
+            if direction < 0 and require_short_borrow_cost and float(short_borrow_bps_per_bar) <= 0.0:
+                equity_curve.append(mark(close))
+                continue
             approved = risk.size(cash, open_, atr, direction)
             if approved.allowed:
                 max_participation = float(getattr(risk, 'max_participation_pct', 0.0) or 0.0)
@@ -193,6 +202,19 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
                 borrow = abs(qty * open_) * float(short_borrow_bps_per_bar) / 10_000
                 cash -= borrow
                 borrow_cost += borrow
+            if apply_funding and holding > 0:
+                interval = max(1, int(funding_interval_bars))
+                if holding % interval == 0:
+                    rate = row.get(funding_rate_column, np.nan)
+                    if pd.notna(rate):
+                        funding_rate = float(rate)
+                        funding_cashflow = -float(side) * abs(qty * open_) * funding_rate
+                        cash += funding_cashflow
+                        funding_cost += -funding_cashflow
+                    elif funding_bps_per_bar > 0:
+                        fallback = abs(qty * open_) * float(funding_bps_per_bar) / 10_000.0
+                        cash -= fallback
+                        funding_cost += fallback
             time_stop = max_holding_bars is not None and holding >= int(max_holding_bars)
             if time_stop:
                 close_position(ts, open_, prev_quote_volume, 'time_stop')

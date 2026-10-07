@@ -9,6 +9,7 @@ from .objectives import robust_performance_utility
 from .promotion import promotion_gate
 from .growth import GrowthRegistry
 from .fingerprint import strong_dataset_fingerprint
+from .research_ledger import register_holdout_access
 from .deployment import model_semantics_fingerprint, deployment_semantics_fingerprint, bundle_artifact_fingerprint, refresh_deployment_manifest
 
 def evaluate_engine(df,settings):
@@ -17,10 +18,12 @@ def evaluate_engine(df,settings):
     score=float(folds["robust_score"].median()-0.20*abs(folds["robust_score"].std(ddof=0)))
     return score,{"folds":int(len(folds)),"median_score":float(folds["robust_score"].median()),"score_std":float(folds["robust_score"].std(ddof=0)),"positive_folds":int((folds["robust_score"]>0).sum()),"positive_fold_ratio":float((folds["robust_score"]>0).mean()),"worst_drawdown":float(folds["max_drawdown"].min()),"total_trades":int(folds["trades"].sum()),"median_return":float(folds["total_return"].median()),"median_sharpe":float(folds["sharpe_like"].median()),"_fold_frame":folds}
 
-def _final_holdout_eval(df,settings,engine=None):
+def _final_holdout_eval(df,settings,engine=None,run_id=None):
     frac=float(np.clip(getattr(settings,"final_holdout_frac",0.15),0.05,0.30)); cut=int(len(df)*(1-frac))
     if len(df)-cut<max(20,int(getattr(settings,"base_min_holdout_trades",20))): return {"passed":False,"reason":"insufficient_holdout_rows"}
     tuning,holdout=df.iloc[:cut].copy(),df.iloc[cut:].copy()
+    ledger_path=getattr(settings,'research_ledger_path','data/research_ledger.json')
+    holdout_governance=register_holdout_access(ledger_path,dataset_fingerprint=strong_dataset_fingerprint(df),holdout_start=str(holdout.index[0]),holdout_end=str(holdout.index[-1]),holdout_frac=float(frac),purpose='auto_update_final_holdout',run_id=run_id)
     engine=engine or AdaptiveEngine(settings)
     if not getattr(engine.model,"ready",False): engine.fit(tuning)
     features=make_oos_features(tuning,holdout,settings.horizon_bars,external_feature_lag_bars=getattr(settings,"external_feature_lag_bars",1))
@@ -28,7 +31,7 @@ def _final_holdout_eval(df,settings,engine=None):
     bt=holdout.copy(); bt["atr_14"]=features["atr_14"]; result=run_configured_backtest(bt,actions,settings); stats=dict(result.stats)
     utility=robust_performance_utility(stats,min_trades=int(getattr(settings,"base_min_holdout_trades",20)),max_drawdown=float(getattr(settings,"base_max_holdout_drawdown",-0.25)))
     checks={"minimum_trades":int(stats.get("trades",0))>=int(getattr(settings,"base_min_holdout_trades",20)),"positive_return":float(stats.get("total_return",0))>0 if bool(getattr(settings,"base_require_positive_holdout_return",True)) else True,"profit_factor":float(stats.get("profit_factor",0))>=float(getattr(settings,"base_min_holdout_profit_factor",1.0)),"drawdown":float(stats.get("max_drawdown",-1))>=float(getattr(settings,"base_max_holdout_drawdown",-0.25)),"utility":float(utility)>=float(getattr(settings,"base_min_holdout_utility",0))}
-    return {"passed":bool(all(checks.values())),"checks":checks,"stats":stats,"utility":float(utility),"holdout_rows":len(holdout)}
+    return {"passed":bool(all(checks.values())) and bool(holdout_governance['pristine']),"checks":checks,"stats":stats,"utility":float(utility),"holdout_rows":len(holdout),"holdout_governance":holdout_governance,"promotion_allowed_from_holdout":bool(holdout_governance['pristine'])}
 
 def auto_update(df,settings,model_dir="models"):
     mdir=Path(model_dir)
@@ -86,7 +89,8 @@ def auto_update(df,settings,model_dir="models"):
         require_score_improvement=False,
     )
 
-    holdout=_final_holdout_eval(df,settings)
+    run_id=f"auto_update:{pd.Timestamp.now(tz='UTC').isoformat()}"
+    holdout=_final_holdout_eval(df,settings,run_id=run_id)
     champion_holdout={}
     holdout_superiority=True
     if mdir/"signal_model.joblib".exists():
@@ -97,7 +101,7 @@ def auto_update(df,settings,model_dir="models"):
                 champion_holdout={"passed":False,"reason":reason,"utility":-np.inf}
             else:
                 champion_engine=AdaptiveEngine(settings).load(mdir)
-                champion_holdout=_final_holdout_eval(df,settings,champion_engine)
+                champion_holdout=_final_holdout_eval(df,settings,champion_engine,run_id=run_id)
         except Exception as exc:
             champion_holdout={"passed":False,"reason":f"{type(exc).__name__}:{exc}","utility":-np.inf}
         holdout_superiority=float(holdout.get("utility",-np.inf))>float(champion_holdout.get("utility",-np.inf))+0.01

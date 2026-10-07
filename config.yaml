@@ -21,7 +21,8 @@ model:
   sl_atr: 1.0
   memory_k: 32
   memory_information_weighted: false
-  max_holding_bars: 96
+  # Execution geometry is locked to the 8-bar triple-barrier target below.
+  max_holding_bars: 8
   trade_window_enabled: true
   trade_window_required_for_signal: true
   require_deployment_manifest_for_signal: true
@@ -30,12 +31,18 @@ risk:
   risk_per_trade: 0.005
   max_position_pct: 0.25
   max_daily_loss_pct: 0.02
-  stop_atr_mult: 1.8
-  take_profit_rr: 2.2
+  stop_atr_mult: 1.0
+  take_profit_rr: 1.6
   fee_bps: 7
   slippage_bps: 5
   impact_bps_per_sqrt: 1.5
   max_participation_pct: 0.10
+  require_short_borrow_cost: true
+  funding_rate_column: funding_rate
+  funding_interval_hours: 8.0
+  funding_bps_per_bar: 0.0
+  require_funding_data_for_derivatives: true
+  backtest_market_type: spot
 research:
   walk_forward_train_bars: 3000
   walk_forward_test_bars: 500
@@ -54,6 +61,9 @@ execution:
   live_market_types: [spot, swap, future, margin, option]
   # Max concurrent model/data assessments during a full-universe scan.
   live_scan_workers: 6
+  live_portfolio_correlation_bars: 96
+  live_max_pairwise_return_correlation: 0.80
+  live_min_correlation_observations: 48
   live_symbols: [BTC/USDT, ETH/USDT, BNB/USDT, SOL/USDT, XRP/USDT]
 growth:
   validation_purge_bars: 12
@@ -72,6 +82,8 @@ growth:
   conformal_blend: 0.60
   efficiency_corr_threshold: 0.995
   master_tuning_cache_dir: data/master_cache
+  memory_exclusion_bars: 12
+  research_ledger_path: data/research_ledger.json
   short_borrow_bps_per_bar: 0.0
   force_daily_loss_exit: true
 real_data:
