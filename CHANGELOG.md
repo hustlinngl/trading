@@ -6,6 +6,7 @@
 - Dashboard scans no longer hold the state lock across network/model work; repeated state requests remain responsive during a broad scan.
 - Market explorer/history routes now use the discovered active market map, with explicit exchange/local-fallback provenance in the state payload.
 - Added regressions for non-blocking scans and exchange-authoritative universe coverage.
+- Fixed refresh lifecycle wiring so the Top 5 and secondary Market/Journal/Evidence surfaces are rendered from the same completed state.
 
 ## 0.9.18
 - Full-universe live scanner: discovers active spot/margin/swap/future/option markets, checks deployment compatibility and ranks the best five model-backed signals.
