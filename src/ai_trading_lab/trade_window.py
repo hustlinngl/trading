@@ -53,17 +53,25 @@ def train_trade_window_backbone(df,settings,holdout_frac=.15,save_path=None):
     x=x.loc[mask]; y=lab.loc[mask,"direction"].map({-1:0,1:1}).astype(int)
     if len(x)<80:
         return {"production_ready":False,"reason":"insufficient_labeled_rows","rows":int(len(x))}
-    cut=max(40,min(len(x)-20,int(len(x)*(1-holdout_frac))))
+    original_positions=df.index.get_indexer(x.index)
+    split_pos=int(len(df)*(1-float(holdout_frac)))
+    train_mask=(original_positions>=0) & ((original_positions+max_bars)<split_pos)
+    holdout_mask=(original_positions>=split_pos)
+    train_x=x.loc[train_mask]
+    train_y=y.loc[train_mask]
+    holdout_x=x.loc[holdout_mask]
+    holdout_y=y.loc[holdout_mask]
+    if len(train_x)<40 or len(holdout_x)<20:
+        return {"production_ready":False,"reason":"insufficient_purged_split","rows":int(len(x)),"train_rows":int(len(train_x)),"holdout_rows":int(len(holdout_x))}
     model=ExtraTreesClassifier(
         n_estimators=300,min_samples_leaf=12,max_features="sqrt",
         random_state=int(settings.seed),n_jobs=-1,class_weight="balanced"
     )
-    model.fit(x.iloc[:cut],y.iloc[:cut])
-    holdout_x=x.iloc[cut:]
+    model.fit(train_x,train_y)
     p=model.predict_proba(holdout_x)[:,1]
     active=(p>=.62)|(p<=.38)
     pred=(p>=.62).astype(int)
-    truth=y.iloc[cut:].to_numpy()
+    truth=holdout_y.to_numpy()
     successes=int(np.sum(pred[active]==truth[active])) if active.any() else 0
     precision=float(successes/max(1,int(active.sum()))) if active.any() else 0.0
     support=int(active.sum())
