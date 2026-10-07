@@ -468,6 +468,7 @@ class SignalTerminal:
         }
 
     def _bootstrap_state(self) -> dict:
+        market_snapshot = self._load_market_snapshot()
         return {
             "ok": True,
             "app": APP_TITLE,
@@ -501,7 +502,6 @@ class SignalTerminal:
                 "fresh_data_assets": 0,
                 "terminal_ready": False,
             },
-            market_snapshot = self._load_market_snapshot()
             "signals": [],
             "market_data": {
                 "generated_at": market_snapshot.get("generated_at"),
