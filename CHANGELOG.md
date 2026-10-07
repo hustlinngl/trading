@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.28
+- Final dashboard polish: result-first Top 5 cards now use restrained motion, a compact confidence meter and cleaner empty/loading presentation.
+- Removed stale primary-state CSS and legacy metric styling that no longer had visible consumers.
+
+
 ## 0.9.30
 - Fixed the packaged dashboard smoke test to stage `config.yaml` and bundled historical CSVs beside the exact frozen EXE before exercising its localhost history routes.
 - Kept packaging validation on the same user-facing one-file binary from build through functional verification.
