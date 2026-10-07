@@ -1,4 +1,4 @@
-# Research status — 0.9.13
+# Research status — 0.9.15
 
 ## Current state
 
@@ -21,7 +21,7 @@ The system is deliberately research-first. No result in this repository should b
 
 ## Engineering state
 
-The 0.9.13 hardening pass restores the missing benchmark command, fixes master-tuning cache partitioning, repairs paper/live inference, wires strict signal safety gates, makes configured cost-stress multipliers effective, and adds CI/regression coverage.
+The 0.9.15 hardening pass restores the missing benchmark command, fixes master-tuning cache partitioning, repairs paper/live inference, wires strict signal safety gates, makes configured cost-stress multipliers effective, and adds CI/regression coverage.
 
 The current code remains suitable for research and paper/signal operation. A production-grade market edge remains **unproven** until fresh multi-year, multi-asset real-data evidence passes the full protocol.
 
