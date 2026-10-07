@@ -11,14 +11,31 @@ from .fingerprint import strong_dataset_fingerprint
 from .policy import live_signal_gate
 from .trade_window import assess_trade_window
 from .deployment import resolve_signal_bundle, resolve_trade_window_model, bundle_compatibility
+from .signal_contract import DirectSignal
 
 @dataclass
 class LiveAssessment:
     symbol:str; timestamp:str; status:str; signal:str; confidence:float; expected_return:float; price:float; reason_codes:list[str]; data_fingerprint:str
     details:dict[str, object] = field(default_factory=dict)
     correlation_returns:pd.Series|None = field(default=None, repr=False, compare=False)
+    horizon_bars:int = 8
 
     def to_dict(self):
+        """Publish only the stable direct-signal contract."""
+        return DirectSignal(
+            symbol=self.symbol,
+            timestamp=self.timestamp,
+            signal=self.signal,
+            confidence=float(self.confidence),
+            expected_return=float(self.expected_return),
+            price=float(self.price),
+            horizon_bars=max(1, int(self.horizon_bars)),
+            actionable=self.signal in {"LONG", "SHORT"},
+            reason="qualified" if self.signal in {"LONG", "SHORT"} else "no_actionable_setup",
+        ).to_dict()
+
+    def to_internal_dict(self):
+        """Retain research/tracking fields for private logs only."""
         data=asdict(self)
         data.pop("correlation_returns",None)
         return data
@@ -492,6 +509,6 @@ def append_live_signal_history(results,root="."):
             key=(str(r.symbol),str(r.timestamp))
             if key in seen:
                 continue
-            fh.write(json.dumps(r.to_dict(),default=str)+"\n")
+            fh.write(json.dumps(r.to_internal_dict(),default=str)+"\n")
             seen.add(key); added+=1
     return {"path":str(p),"added":int(added),"duplicates_skipped":int(len(results)-added)}
