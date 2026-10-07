@@ -2760,7 +2760,6 @@ def main():
         refresh_seconds=args.refresh,
         history_bars=args.history_bars,
     )
-    terminal.start_live_streams()
     if args.once:
         print(
             json.dumps(
@@ -2771,6 +2770,7 @@ def main():
         )
         return
 
+    terminal.start_live_streams()
     try:
         server = ThreadingHTTPServer((args.host, args.port), make_handler(terminal))
     except OSError as exc:
