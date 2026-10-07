@@ -1017,18 +1017,13 @@ h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
 .connection-stamp{display:inline-flex;align-items:center;gap:7px;color:#77818e;font-size:10px;letter-spacing:.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
 .connection-stamp::before{content:"";width:6px;height:6px;border-radius:50%;background:#66717d;box-shadow:0 0 0 3px rgba(102,113,125,.08)}
 .connection-stamp.online::before{background:#55d79a;box-shadow:0 0 0 3px rgba(85,215,154,.08),0 0 10px rgba(85,215,154,.22);animation:statusBreath 2.4s ease-in-out infinite}
-.connection-stamp.offline::before{background:#f2768e;box-shadow:0 0 0 3px rgba(242,118,142,.08)}
 .music-toggle{background:transparent!important;border-color:transparent!important;box-shadow:none!important;color:#737e8b;font-size:10px;letter-spacing:.04em;padding:8px 7px;min-height:38px}
 .music-toggle:hover{color:#d8a7c2;border-color:rgba(229,138,184,.18)!important;background:rgba(229,138,184,.045)!important}
 .music-toggle[aria-pressed="true"]{color:#e58ab8;text-shadow:0 0 10px rgba(229,138,184,.2)}
-.focus-status{font-size:10px;color:#66717f;font-variant-numeric:tabular-nums;white-space:nowrap}
-.focus-status.good{color:#55d79a}
-.focus-status.warn{color:#e7bc62}
 .trace-state{display:inline-flex;align-items:center;gap:5px;font-size:10px;color:#737e8b;font-variant-numeric:tabular-nums}
 .trace-state.ready{color:#55d79a}.trace-state.wait{color:#e7bc62}
 .trace-mini-dot{width:5px;height:5px;border-radius:50%;background:currentColor;box-shadow:0 0 7px currentColor}
-.history-source{color:#697481;font-variant-numeric:tabular-nums}
-@keyframes statusBreath{0%,100%{opacity:.72;transform:scale(.92)}50%{opacity:1;transform:scale(1)}}
+
 .section-reveal{animation:sectionReveal .24s cubic-bezier(.2,.8,.2,1) both}
 @keyframes sectionReveal{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
 .actions button[disabled]{opacity:.72;cursor:wait}
@@ -1051,7 +1046,7 @@ h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
 .pick-stat .v{margin-top:3px;font-size:12px;font-weight:670}
 .pick-chart{height:165px;padding:0 4px 4px}
 .pick-foot{padding:9px 14px 12px;border-top:1px solid #1b222c;font-size:10px;color:#697481}
-.history-badge{padding:3px 6px;border-radius:5px;background:transparent;border:1px solid #252d38;color:#7e8996}
+
 .top5-empty{padding:56px 20px;border:1px dashed #2a313b;border-radius:12px;background:#0d1116}
 .top5-empty h2{font-size:18px;font-weight:680}
 #ambient-canvas{opacity:.10}
@@ -1059,7 +1054,7 @@ h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
 #anime-cursor{filter:drop-shadow(0 0 6px rgba(229,138,184,.28));width:40px;height:40px}
 .click-ripple{border-color:rgba(229,138,184,.38);box-shadow:none}
 @media(max-width:1050px){.top5-grid{grid-template-columns:repeat(2,minmax(280px,1fr))}.pick-primary{grid-column:span 2}}
-@media(max-width:700px){.wrap{padding:20px 14px 34px}.top5-grid{grid-template-columns:1fr}.pick-primary{grid-column:span 1}.pick-chart,.pick-primary .pick-chart{height:150px}.focus-head-meta{justify-content:flex-start}.focus-coverage{white-space:normal}}
+@media(max-width:700px){.wrap{padding:20px 14px 34px}.top5-grid{grid-template-columns:1fr}.pick-primary{grid-column:span 1}.pick-chart,.pick-primary .pick-chart{height:150px}}
 <style>
 </style>
 </style>
@@ -1694,12 +1689,7 @@ async function loadFocusHistories(picks){
   picks.forEach(r=>{
     const h=state.focusHistories[r.symbol]||{};
     const canvas=Array.from(document.querySelectorAll("[data-pick-chart]")).find(el=>el.dataset.pickChart===r.symbol);
-    const badge=Array.from(document.querySelectorAll("[data-history-badge]")).find(el=>el.dataset.historyBadge===r.symbol);
     if(canvas)drawPickChart(canvas,h,r.signal);
-    if(badge){
-      const labels={network:"live",local_cache:"cache",bundled:"bundled",unavailable:"offline"};
-      badge.textContent=labels[h.source]||"—";
-    }
   });
 }
 
@@ -1833,7 +1823,6 @@ function renderDecisionDeck(signals){
   if(!active){
     deckSignal.textContent="WAIT";deckSignal.className="decision-signal signal-wait";
     deckMeta.textContent="Nessun asset disponibile.";
-    deckBundle.className="pill warn";deckBundle.innerHTML='<span class="dot"></span>WAIT';
     $("deckAsset").textContent="—";$("deckPrice").textContent="—";$("deckConfidence").textContent="—";$("deckEdge").textContent="—";
     trace.innerHTML="";reasons.innerHTML="";return;
   }
