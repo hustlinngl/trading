@@ -708,7 +708,7 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
 @media(max-width:1180px){.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.layout{grid-template-columns:1fr}}
 @media(max-width:760px){.wrap{padding:18px 13px 40px}.top{align-items:flex-start;flex-direction:column}h1{font-size:29px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3{grid-template-columns:1fr}.chart-panel{min-height:430px}#chart{height:350px}.nav{overflow:auto;flex-wrap:nowrap}.nav-btn{white-space:nowrap}}
 
-/* 0.9.17 art-direction layer */
+/* 0.9.18 art-direction layer */
 .operator-stage{
   position:absolute;right:14px;bottom:10px;width:126px;height:126px;pointer-events:none;opacity:.9;
   animation:operatorFloat 4.8s ease-in-out infinite;transform-origin:50% 80%;
