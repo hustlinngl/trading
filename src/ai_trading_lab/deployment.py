@@ -29,6 +29,53 @@ def model_semantics_fingerprint(settings) -> str:
     }
     return hashlib.sha256(json.dumps(fields, sort_keys=True).encode("utf-8")).hexdigest()[:24]
 
+def deployment_semantics_fingerprint(settings) -> str:
+    """Fingerprint every runtime/economic rule that can change signal eligibility."""
+    import hashlib
+    fields = {
+        "model_semantics": model_semantics_fingerprint(settings),
+        "exchange": str(getattr(settings, "exchange", "binance")),
+        "probability_threshold": float(getattr(settings, "probability_threshold", 0.57)),
+        "min_expected_return": float(getattr(settings, "min_expected_return", 0.0015)),
+        "min_edge_after_cost_bps": float(getattr(settings, "min_edge_after_cost_bps", 5.0)),
+        "decision_threshold": float(getattr(settings, "decision_threshold", 0.16)),
+        "meta_threshold": float(getattr(settings, "meta_threshold", 0.53)),
+        "conformal_blend": float(getattr(settings, "conformal_blend", 0.60)),
+        "uncertainty_penalty_mult": float(getattr(settings, "uncertainty_penalty_mult", 2.0)),
+        "regime_weight": float(getattr(settings, "regime_weight", 0.08)),
+        "memory_weight": float(getattr(settings, "memory_weight", 0.16)),
+        "meta_weight": float(getattr(settings, "meta_weight", 0.18)),
+        "conviction_weight": float(getattr(settings, "conviction_weight", 0.34)),
+        "edge_weight": float(getattr(settings, "edge_weight", 0.30)),
+        "max_holding_bars": int(getattr(settings, "max_holding_bars", 96)),
+        "risk_per_trade": float(getattr(settings, "risk_per_trade", 0.005)),
+        "max_position_pct": float(getattr(settings, "max_position_pct", 0.25)),
+        "max_daily_loss_pct": float(getattr(settings, "max_daily_loss_pct", 0.02)),
+        "stop_atr_mult": float(getattr(settings, "stop_atr_mult", 1.8)),
+        "take_profit_rr": float(getattr(settings, "take_profit_rr", 2.2)),
+        "fee_bps": float(getattr(settings, "fee_bps", 7.0)),
+        "slippage_bps": float(getattr(settings, "slippage_bps", 5.0)),
+        "impact_bps_per_sqrt": float(getattr(settings, "impact_bps_per_sqrt", 1.5)),
+        "max_participation_pct": float(getattr(settings, "max_participation_pct", 0.10)),
+        "short_borrow_bps_per_bar": float(getattr(settings, "short_borrow_bps_per_bar", 0.0)),
+        "force_daily_loss_exit": bool(getattr(settings, "force_daily_loss_exit", True)),
+        "trade_window_enabled": bool(getattr(settings, "trade_window_enabled", True)),
+        "trade_window_required_for_signal": bool(getattr(settings, "trade_window_required_for_signal", True)),
+        "trade_window_target_precision": float(getattr(settings, "trade_window_target_precision", 0.80)),
+        "trade_window_min_holdout_wilson": float(getattr(settings, "trade_window_min_holdout_wilson", 0.60)),
+        "trade_window_min_holdout_trades": int(getattr(settings, "trade_window_min_holdout_trades", 12)),
+        "trade_window_min_confidence": float(getattr(settings, "trade_window_min_confidence", 0.80)),
+        "trade_window_min_net_return": float(getattr(settings, "trade_window_min_net_return", 0.0005)),
+        "trade_window_require_positive_holdout_backtest": bool(getattr(settings, "trade_window_require_positive_holdout_backtest", True)),
+        "base_min_holdout_trades": int(getattr(settings, "base_min_holdout_trades", 20)),
+        "base_require_positive_holdout_return": bool(getattr(settings, "base_require_positive_holdout_return", True)),
+        "base_min_holdout_profit_factor": float(getattr(settings, "base_min_holdout_profit_factor", 1.0)),
+        "base_max_holdout_drawdown": float(getattr(settings, "base_max_holdout_drawdown", -0.25)),
+        "base_min_holdout_utility": float(getattr(settings, "base_min_holdout_utility", 0.0)),
+    }
+    payload = json.dumps(fields, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()[:24]
+
 def asset_slug(symbol: str) -> str:
     return str(symbol).replace("/", "_").replace(":", "_")
 
@@ -78,8 +125,13 @@ def bundle_compatibility(settings, bundle: str | Path, symbol: str) -> tuple[boo
             recorded_semantics=meta.get("model_semantics_fingerprint")
             if recorded_semantics and str(recorded_semantics)!=model_semantics_fingerprint(settings):
                 return False, "model_semantics_mismatch"
-            if bool(getattr(settings, "require_deployment_manifest_for_signal", False)) and not meta.get("data_fingerprint"):
-                return False, "model_data_provenance_missing"
+            if bool(getattr(settings, "require_deployment_manifest_for_signal", False)):
+                if not meta.get("data_fingerprint"):
+                    return False, "model_data_provenance_missing"
+                if not meta.get("deployment_semantics_fingerprint"):
+                    return False, "deployment_semantics_provenance_missing"
+                if str(meta.get("deployment_semantics_fingerprint")) != deployment_semantics_fingerprint(settings):
+                    return False, "deployment_semantics_mismatch"
         except Exception as exc:
             return False, f"model_metadata_error:{type(exc).__name__}"
     if bool(getattr(settings, "require_deployment_manifest_for_signal", False)):
@@ -98,6 +150,8 @@ def bundle_compatibility(settings, bundle: str | Path, symbol: str) -> tuple[boo
                 return False, "deployment_manifest_data_mismatch"
             if str(manifest.get("model_semantics_fingerprint")) != str(meta.get("model_semantics_fingerprint")):
                 return False, "deployment_manifest_semantics_mismatch"
+            if str(manifest.get("deployment_semantics_fingerprint")) != deployment_semantics_fingerprint(settings):
+                return False, "deployment_manifest_runtime_mismatch"
         except Exception as exc:
             return False, f"deployment_manifest_error:{type(exc).__name__}"
     return True, "ok"
@@ -116,7 +170,8 @@ def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
     h=base.get("holdout",{}) if isinstance(base,dict) else {}
     base_checks={
         "model_artifact_present":(asset_dir/"signal_model.joblib").exists(),
-        "model_provenance_present":bool(meta.get("data_fingerprint")) and bool(meta.get("model_semantics_fingerprint")),
+        "model_provenance_present":bool(meta.get("data_fingerprint")) and bool(meta.get("model_semantics_fingerprint")) and bool(meta.get("deployment_semantics_fingerprint")),
+        "deployment_semantics_match":str(meta.get("deployment_semantics_fingerprint"))==deployment_semantics_fingerprint(settings),
         "holdout_report_present":bool(base),
         "holdout_trade_support":int(h.get("trades_taken",h.get("trades",0)))>=int(getattr(settings,"base_min_holdout_trades",20)),
         "positive_holdout_return":float(h.get("net_compounded_return",h.get("total_return",h.get("return",-1.0))))>0.0 if bool(getattr(settings,"base_require_positive_holdout_return",True)) else True,
@@ -159,6 +214,7 @@ def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
         "ready":bool(ready),
         "data_fingerprint":meta.get("data_fingerprint") or base.get("data_fingerprint"),
         "model_semantics_fingerprint":meta.get("model_semantics_fingerprint"),
+        "deployment_semantics_fingerprint":meta.get("deployment_semantics_fingerprint"),
         "checks":checks,
         "base_holdout_report":str(base_path),
         "duration_report":str(duration_path),
