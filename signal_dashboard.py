@@ -1010,11 +1010,17 @@ h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
 .nav{position:sticky;top:10px;z-index:20;padding:6px;background:rgba(14,18,24,.88);border-color:#242c36;box-shadow:0 10px 26px rgba(0,0,0,.18)}
 .nav-btn{border-radius:7px;padding:7px 10px}
 .nav-btn.active{background:#171d25;border-color:#313b49;box-shadow:inset 0 0 0 1px rgba(229,138,184,.10);color:#f3f5f8}
+.nav-btn:focus-visible{outline:none;border-color:#596575;box-shadow:0 0 0 2px rgba(229,138,184,.11)}
+.nav-btn:not(.active):hover{background:#141a21;border-color:#29323d}
+.pick-card:hover{transform:translateY(-2px);border-color:#3a4654;box-shadow:0 12px 30px rgba(0,0,0,.20)}
 .actions button::after{display:none}
 .connection-stamp{display:inline-flex;align-items:center;gap:7px;color:#77818e;font-size:10px;letter-spacing:.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
 .connection-stamp::before{content:"";width:6px;height:6px;border-radius:50%;background:#66717d;box-shadow:0 0 0 3px rgba(102,113,125,.08)}
-.connection-stamp.online::before{background:#55d79a;box-shadow:0 0 0 3px rgba(85,215,154,.08),0 0 10px rgba(85,215,154,.22)}
+.connection-stamp.online::before{background:#55d79a;box-shadow:0 0 0 3px rgba(85,215,154,.08),0 0 10px rgba(85,215,154,.22);animation:statusBreath 2.4s ease-in-out infinite}
 .connection-stamp.offline::before{background:#f2768e;box-shadow:0 0 0 3px rgba(242,118,142,.08)}
+@keyframes statusBreath{0%,100%{opacity:.72;transform:scale(.92)}50%{opacity:1;transform:scale(1)}}
+.section-reveal{animation:sectionReveal .24s cubic-bezier(.2,.8,.2,1) both}
+@keyframes sectionReveal{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
 .actions button[disabled]{opacity:.72;cursor:wait}
 .actions button[aria-busy="true"]::before{content:"";display:inline-block;width:10px;height:10px;margin-right:7px;border:1px solid #65707e;border-top-color:#e58ab8;border-radius:50%;vertical-align:-1px;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -1463,7 +1469,12 @@ function initNavigation(){
   const reveal=id=>{
     const el=$(id);
     if(!el)return null;
-    if(el.classList.contains("legacy-hidden"))el.classList.remove("legacy-hidden");
+    if(el.classList.contains("legacy-hidden")){
+      el.classList.remove("legacy-hidden");
+      el.classList.remove("section-reveal");
+      void el.offsetWidth;
+      el.classList.add("section-reveal");
+    }
     return el;
   };
   buttons.forEach(b=>b.addEventListener("click",()=>{
