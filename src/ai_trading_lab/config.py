@@ -87,7 +87,9 @@ class Settings:
     sandbox: bool = True
     poll_seconds: int = 60
     live_lookback_bars: int = 600
-    live_max_symbols: int = 15
+    # 0 means scan every discovered active market with a compatible local model.
+    live_max_symbols: int = 0
+    live_market_types: tuple[str, ...] = ("spot", "swap", "future", "margin")
     live_default_refresh_seconds: int = 60
     seed: int = 42
     walk_forward_train_bars: int = 3000
