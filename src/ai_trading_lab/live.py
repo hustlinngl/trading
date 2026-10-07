@@ -286,8 +286,8 @@ def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, re
             "universe_uncovered": int(universe.get("uncovered_markets", 0)),
             "universe_evaluated": int(len(candidates)),
             "market_counts": universe["market_counts"],
-            "exchange_market_metadata": bool(universe.get("exchange_market_metadata", False)),
-            "universe_mode": "all_active_markets" if universe.get("exchange_market_metadata") else "local_fallback_universe",
+            "exchange_market_metadata": bool(universe.get("exchange_market_metadata", ex is not None)),
+            "universe_mode": "all_active_markets" if universe.get("exchange_market_metadata", ex is not None) else "local_fallback_universe",
             "assessments_reused": int(reused),
             "assessments_refreshed": int(refreshed),
         }
