@@ -9,7 +9,7 @@ from .objectives import robust_performance_utility
 from .promotion import promotion_gate
 from .growth import GrowthRegistry
 from .fingerprint import strong_dataset_fingerprint
-from .deployment import model_semantics_fingerprint, deployment_semantics_fingerprint, refresh_deployment_manifest
+from .deployment import model_semantics_fingerprint, deployment_semantics_fingerprint, bundle_artifact_fingerprint, refresh_deployment_manifest
 
 def evaluate_engine(df,settings):
     folds=walk_forward(df,settings,independent_test=True)
@@ -40,11 +40,14 @@ def auto_update(df,settings,model_dir="models"):
     model_semantics=model_semantics_fingerprint(settings)
     deployment_semantics=deployment_semantics_fingerprint(settings)
 
+    current_artifact_fp=bundle_artifact_fingerprint(mdir)
     if (
         (mdir/"signal_model.joblib").exists()
+        and bool(state.get("deployment_ready",False))
         and state.get("data_fingerprint")==fp
         and state.get("model_semantics_fingerprint")==model_semantics
         and state.get("deployment_semantics_fingerprint")==deployment_semantics
+        and state.get("bundle_artifact_fingerprint")==current_artifact_fp
     ):
         return {
             "promoted":False,
@@ -158,6 +161,8 @@ def auto_update(df,settings,model_dir="models"):
             "data_fingerprint":fp,
             "model_semantics_fingerprint":model_semantics,
             "deployment_semantics_fingerprint":deployment_semantics,
+            "bundle_artifact_fingerprint":bundle_artifact_fingerprint(mdir),
+            "deployment_ready":bool(deployment_manifest.get("ready",False)),
             "final_holdout":holdout,
             "champion_holdout":champion_holdout,
             "deployment_manifest":deployment_manifest,
@@ -176,6 +181,8 @@ def auto_update(df,settings,model_dir="models"):
             "data_fingerprint":fp,
             "model_semantics_fingerprint":model_semantics,
             "deployment_semantics_fingerprint":deployment_semantics,
+            "bundle_artifact_fingerprint":bundle_artifact_fingerprint(mdir),
+            "deployment_ready":False,
             "last_challenger_score":score,
             "last_champion_score":previous_score,
             "last_stats":stats,
