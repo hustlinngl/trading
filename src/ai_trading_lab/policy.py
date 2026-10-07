@@ -11,8 +11,13 @@ def decide_actions(pred, regime, analog, meta_p, settings, *, regime_persistence
         value=overrides.get(name,getattr(settings,name,default)); return float(value) if isinstance(default,float) else value
     probability_threshold=float(val('probability_threshold',0.57)); min_expected_return=float(val('min_expected_return',0.0015))
     fee_bps=float(getattr(settings,'fee_bps',0.0)); slippage_bps=float(getattr(settings,'slippage_bps',0.0)); impact_bps=float(getattr(settings,'impact_bps_per_sqrt',0.0)); max_participation=float(np.clip(getattr(settings,'max_participation_pct',0.10),0,1))
-    hurdle_bps=2*(fee_bps+slippage_bps)+2*impact_bps*np.sqrt(max_participation)+max(0.0,float(getattr(settings,'min_edge_after_cost_bps',5.0)))
-    effective_min_expected_return=max(min_expected_return,hurdle_bps/10000)
+    borrow_bps_per_bar=float(max(0.0,getattr(settings,'short_borrow_bps_per_bar',0.0)))
+    max_holding=int(max(1,getattr(settings,'max_holding_bars',96)))
+    base_hurdle_bps=2*(fee_bps+slippage_bps)+2*impact_bps*np.sqrt(max_participation)+max(0.0,float(getattr(settings,'min_edge_after_cost_bps',5.0)))
+    short_borrow_hurdle_bps=borrow_bps_per_bar*max_holding
+    direction_hint=np.where(pred['p_up'].to_numpy(float)>=0.5,1.0,-1.0)
+    hurdle_bps=np.where(direction_hint>0,base_hurdle_bps,base_hurdle_bps+short_borrow_hurdle_bps)
+    effective_min_expected_return=np.maximum(min_expected_return,hurdle_bps/10000)
     decision_threshold=float(val('decision_threshold',0.16)); meta_threshold=float(val('meta_threshold',0.53)); conformal_blend=float(np.clip(val('conformal_blend',0.60),0,1))
     regime_weight=float(val('regime_weight',0.08)); uncertainty_penalty_mult=float(val('uncertainty_penalty_mult',2.0)); memory_weight=float(val('memory_weight',0.16)); meta_weight=float(val('meta_weight',0.18)); conviction_weight=float(val('conviction_weight',0.34)); edge_weight=float(val('edge_weight',0.30))
     p_up=pred['p_up'].to_numpy(float); er=pred['expected_return'].to_numpy(float); er_lcb=pred['expected_return_lcb'].to_numpy(float) if 'expected_return_lcb' in pred else er
