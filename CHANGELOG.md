@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.20
+- Refined the Top 5 visual hierarchy with a stronger primary pick, tighter card density and clearer signal accents.
+- Made Top 5 cards keyboard-accessible and directly connected them to the decision inspector and market history.
+- Added explicit connection status and refresh-busy feedback to make the terminal state legible at a glance.
+- Added live scan progress presentation with evaluated/total coverage and a lightweight progress bar.
+- Added regression coverage for the polished interaction and status states.
+
 ## 0.9.19
 - Full-universe discovery now treats active exchange metadata as authoritative and avoids inventing coverage from stale configured/local symbols when the exchange map is available.
 - Signal ranking is normalized to the active probability, robust-edge, score and trade-window gates rather than fixed unrelated scales.
