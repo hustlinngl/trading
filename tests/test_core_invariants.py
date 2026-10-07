@@ -130,3 +130,24 @@ def test_import_normalization_preserves_microstructure_and_rejects_conflicts():
         assert "Conflicting duplicate timestamps" in str(exc)
     else:
         raise AssertionError("conflicting duplicate data must be rejected")
+
+
+def test_short_borrow_reduces_short_risk_size():
+    from ai_trading_lab.risk import RiskEngine
+    base = dict(
+        initial_cash=10_000.0,
+        risk_per_trade=0.01,
+        max_position_pct=1.0,
+        max_daily_loss_pct=0.20,
+        stop_atr_mult=2.0,
+        rr=2.0,
+        fee_bps=0.0,
+        slippage_bps=0.0,
+        max_participation_pct=1.0,
+        impact_bps_per_sqrt=0.0,
+        max_holding_bars=96,
+    )
+    no_borrow = RiskEngine(**base, short_borrow_bps_per_bar=0.0).size(10_000.0, 100.0, 1.0, -1)
+    with_borrow = RiskEngine(**base, short_borrow_bps_per_bar=10.0).size(10_000.0, 100.0, 1.0, -1)
+    assert no_borrow.allowed and with_borrow.allowed
+    assert with_borrow.qty < no_borrow.qty
