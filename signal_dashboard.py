@@ -486,7 +486,7 @@ class SignalTerminal:
                 outcome_update = update_live_signal_outcomes(
                     self.settings, str(self.state_root), exchange=self._get_exchange()
                 )
-        except Exception as exc:
+            except Exception as exc:
                     outcome_update = {
                         "updated": 0,
                         "open": None,
@@ -494,183 +494,183 @@ class SignalTerminal:
                         "error": f"{type(exc).__name__}:{exc}",
                     }
 
-                market_symbols = sorted({
-                    str(symbol).strip()
-                    for symbol in (universe_meta.get("market_symbols") or [])
-                    if str(symbol).strip()
-                })
-                quotes = self._quotes(symbols)
-                signals = []
-                for assessment in assessments:
-                    row = self._assessment_payload(assessment)
-                    row["bundle"] = self._bundle_snapshot(assessment.symbol)
-                    realtime = quotes.get(assessment.symbol, {})
-                    if realtime.get("price") is not None:
-                        row["realtime_price"] = realtime["price"]
-                    row["quote"] = realtime
+            market_symbols = sorted({
+                str(symbol).strip()
+                for symbol in (universe_meta.get("market_symbols") or [])
+                if str(symbol).strip()
+            })
+            quotes = self._quotes(symbols)
+            signals = []
+            for assessment in assessments:
+                row = self._assessment_payload(assessment)
+                row["bundle"] = self._bundle_snapshot(assessment.symbol)
+                realtime = quotes.get(assessment.symbol, {})
+                if realtime.get("price") is not None:
+                    row["realtime_price"] = realtime["price"]
+                row["quote"] = realtime
 
-                    details = row.get("details") or {}
-                    row["decision"] = {
-                        "p_up": details.get("p_up"),
-                        "expected_return": row.get("expected_return"),
-                        "expected_return_lcb": details.get("expected_return_lcb"),
-                        "expected_return_ucb": details.get("expected_return_ucb"),
-                        "robust_directional_edge": details.get("robust_directional_edge"),
-                        "selection_score": details.get("selection_score"),
-                        "score": details.get("score"),
-                        "meta_success": details.get("meta_success"),
-                        "model_disagreement": details.get("model_disagreement"),
-                        "return_disagreement": details.get("return_disagreement"),
-                        "regime": details.get("regime"),
-                        "analog_n": details.get("analog_n"),
-                        "analog_agreement": details.get("analog_agreement"),
-                        "trade_window_ready": details.get("trade_window_ready"),
-                        "trade_window_direction": details.get(
-                            "trade_window_direction"
-                        ),
-                        "trade_window_confidence": details.get(
-                            "trade_window_confidence"
-                        ),
-                        "data_age_minutes": details.get("data_age_minutes"),
-                    }
-                    signals.append(row)
-
-                signals.sort(
-                    key=lambda x: (
-                        _signal_rank(str(x.get("signal", "WAIT"))),
-                        float((x.get("decision") or {}).get("selection_score", 0.0) or 0.0),
-                        float((x.get("decision") or {}).get("robust_directional_edge", 0.0) or 0.0),
-                        float(x.get("confidence", 0.0) or 0.0),
+                details = row.get("details") or {}
+                row["decision"] = {
+                    "p_up": details.get("p_up"),
+                    "expected_return": row.get("expected_return"),
+                    "expected_return_lcb": details.get("expected_return_lcb"),
+                    "expected_return_ucb": details.get("expected_return_ucb"),
+                    "robust_directional_edge": details.get("robust_directional_edge"),
+                    "selection_score": details.get("selection_score"),
+                    "score": details.get("score"),
+                    "meta_success": details.get("meta_success"),
+                    "model_disagreement": details.get("model_disagreement"),
+                    "return_disagreement": details.get("return_disagreement"),
+                    "regime": details.get("regime"),
+                    "analog_n": details.get("analog_n"),
+                    "analog_agreement": details.get("analog_agreement"),
+                    "trade_window_ready": details.get("trade_window_ready"),
+                    "trade_window_direction": details.get(
+                        "trade_window_direction"
                     ),
-                    reverse=True,
-                )
+                    "trade_window_confidence": details.get(
+                        "trade_window_confidence"
+                    ),
+                    "data_age_minutes": details.get("data_age_minutes"),
+                }
+                signals.append(row)
 
-                active = sum(
-                    str(x.get("signal")) in {"LONG", "SHORT"} for x in signals
-                )
-                compatible = int(
-                    universe_meta.get("universe_model_eligible", len(signals))
-                )
-                fresh = sum(
-                    float((x.get("decision") or {}).get("data_age_minutes", 1e9))
-                    <= float(
-                        getattr(
-                            self.settings, "live_max_data_age_minutes", 30.0
-                        )
+            signals.sort(
+                key=lambda x: (
+                    _signal_rank(str(x.get("signal", "WAIT"))),
+                    float((x.get("decision") or {}).get("selection_score", 0.0) or 0.0),
+                    float((x.get("decision") or {}).get("robust_directional_edge", 0.0) or 0.0),
+                    float(x.get("confidence", 0.0) or 0.0),
+                ),
+                reverse=True,
+            )
+
+            active = sum(
+                str(x.get("signal")) in {"LONG", "SHORT"} for x in signals
+            )
+            compatible = int(
+                universe_meta.get("universe_model_eligible", len(signals))
+            )
+            fresh = sum(
+                float((x.get("decision") or {}).get("data_age_minutes", 1e9))
+                <= float(
+                    getattr(
+                        self.settings, "live_max_data_age_minutes", 30.0
                     )
-                    for x in signals
-                    if (x.get("decision") or {}).get("data_age_minutes")
-                    is not None
                 )
+                for x in signals
+                if (x.get("decision") or {}).get("data_age_minutes")
+                is not None
+            )
 
-                state = {
-                    "ok": True,
-                    "app": APP_TITLE,
-                    "version": __version__,
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
-                    "scan_seconds": round(
-                        time.monotonic() - started, 3
+            state = {
+                "ok": True,
+                "app": APP_TITLE,
+                "version": __version__,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "scan_seconds": round(
+                    time.monotonic() - started, 3
+                ),
+                "refresh_seconds": self.refresh_seconds,
+                "scan_progress": {
+                    "stage": "complete",
+                    "evaluated": int(universe_meta.get("scan_completed", universe_meta.get("universe_evaluated", len(signals)))),
+                    "total": int(universe_meta.get("scan_total", universe_meta.get("universe_evaluated", len(signals)))),
+                    "reused": int(universe_meta.get("assessments_reused", 0)),
+                    "refreshed": int(universe_meta.get("assessments_refreshed", 0)),
+                    "signals": int(universe_meta.get("universe_signals", len(signals))),
+                    "waits": int(universe_meta.get("universe_waits", 0)),
+                    "failures": int(universe_meta.get("assessment_failures", 0)),
+                },
+                "config": {
+                    "exchange": self.settings.exchange,
+                    "timeframe": self.settings.timeframe,
+                    "primary_symbol": self.settings.symbol,
+                    "live_symbols": configured_symbols,
+                    "market_symbols": market_symbols,
+                    "market_counts": universe_meta.get("market_counts", {}),
+                    "scan_scope": universe_meta.get("universe_mode", "all_active_markets"),
+                    "scan_source": "exchange" if market_symbols else "local_fallback",
+                    "signal_only_mode": bool(
+                        self.settings.signal_only_mode
                     ),
-                    "refresh_seconds": self.refresh_seconds,
-                    "scan_progress": {
-                        "stage": "complete",
-                        "evaluated": int(universe_meta.get("scan_completed", universe_meta.get("universe_evaluated", len(signals)))),
-                        "total": int(universe_meta.get("scan_total", universe_meta.get("universe_evaluated", len(signals)))),
-                        "reused": int(universe_meta.get("assessments_reused", 0)),
-                        "refreshed": int(universe_meta.get("assessments_refreshed", 0)),
-                        "signals": int(universe_meta.get("universe_signals", len(signals))),
-                        "waits": int(universe_meta.get("universe_waits", 0)),
-                        "failures": int(universe_meta.get("assessment_failures", 0)),
-                    },
-                    "config": {
-                        "exchange": self.settings.exchange,
-                        "timeframe": self.settings.timeframe,
-                        "primary_symbol": self.settings.symbol,
-                        "live_symbols": configured_symbols,
-                        "market_symbols": market_symbols,
-                        "market_counts": universe_meta.get("market_counts", {}),
-                        "scan_scope": universe_meta.get("universe_mode", "all_active_markets"),
-                        "scan_source": "exchange" if market_symbols else "local_fallback",
-                        "signal_only_mode": bool(
-                            self.settings.signal_only_mode
-                        ),
-                        "paper_only": bool(self.settings.paper_only),
-                        "sandbox": bool(self.settings.sandbox),
-                        "trade_window_required": bool(
-                            self.settings.trade_window_required_for_signal
-                        ),
-                    },
-                    "summary": {
-                        "exchange_available": self._get_exchange() is not None,
-                        "exchange_error": self._exchange_error,
-                        "assets_scanned": int(universe_meta.get("universe_evaluated", len(signals))),
-                        "universe_total": int(universe_meta.get("universe_total", len(signals))),
-                        "model_backed_assets": int(universe_meta.get("universe_model_backed", len(signals))),
-                        "model_eligible_assets": int(universe_meta.get("universe_model_eligible", len(signals))),
-                        "ineligible_model_assets": int(universe_meta.get("universe_ineligible_model", 0)),
-                        "uncovered_assets": int(universe_meta.get("universe_uncovered", 0)),
-                        "active_signals": active,
-                        "waits": int(universe_meta.get("universe_waits", max(0, universe_meta.get("universe_evaluated", len(signals)) - active))),
-                        "compatible_bundles": compatible,
-                        "fresh_data_assets": fresh,
-                        "assessment_failures": int(universe_meta.get("assessment_failures", 0)),
-                        "assessments_reused": int(universe_meta.get("assessments_reused", 0)),
-                        "assessments_refreshed": int(universe_meta.get("assessments_refreshed", 0)),
-                        "terminal_ready": compatible > 0,
-                    },
-                    "signals": signals,
-                    "journal": self._journal(),
-                    "outcome_update": _json_safe(outcome_update),
-                    "notes": [
-                        "Sola lettura: il terminale non espone API per ordini.",
-                        "Ogni scan valuta l'universo attivo scoperto dall'exchange, limitandosi ai bundle verificati per la Top 5.",
-                        "WAIT è l'esito predefinito quando dati, provenienza o evidenze non sono sufficienti.",
-                    ],
-                }
-            except Exception as exc:
-                state = {
-                    "ok": False,
-                    "app": APP_TITLE,
-                    "version": __version__,
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
-                    "scan_seconds": round(
-                        time.monotonic() - started, 3
+                    "paper_only": bool(self.settings.paper_only),
+                    "sandbox": bool(self.settings.sandbox),
+                    "trade_window_required": bool(
+                        self.settings.trade_window_required_for_signal
                     ),
-                    "refresh_seconds": self.refresh_seconds,
-                    "config": {
-                        "exchange": self.settings.exchange,
-                        "timeframe": self.settings.timeframe,
-                        "primary_symbol": self.settings.symbol,
-                        "live_symbols": list(
-                            getattr(self.settings, "live_symbols", ())
-                            or ()
-                        ),
-                    },
-                    "summary": {
-                        "assets_scanned": 0,
-                        "active_signals": 0,
-                        "waits": 0,
-                        "compatible_bundles": 0,
-                        "fresh_data_assets": 0,
-                        "terminal_ready": False,
-                    },
-                    "signals": [],
-                    "journal": self._journal(),
-                    "outcome_update": {},
-                    "error": f"{type(exc).__name__}:{exc}",
-                    "notes": [
-                        "Il terminale ha eseguito un fail-closed.",
-                        "Controlla dati pubblici, bundle addestrati e compatibilità.",
-                    ],
-                }
+                },
+                "summary": {
+                    "exchange_available": self._get_exchange() is not None,
+                    "exchange_error": self._exchange_error,
+                    "assets_scanned": int(universe_meta.get("universe_evaluated", len(signals))),
+                    "universe_total": int(universe_meta.get("universe_total", len(signals))),
+                    "model_backed_assets": int(universe_meta.get("universe_model_backed", len(signals))),
+                    "model_eligible_assets": int(universe_meta.get("universe_model_eligible", len(signals))),
+                    "ineligible_model_assets": int(universe_meta.get("universe_ineligible_model", 0)),
+                    "uncovered_assets": int(universe_meta.get("universe_uncovered", 0)),
+                    "active_signals": active,
+                    "waits": int(universe_meta.get("universe_waits", max(0, universe_meta.get("universe_evaluated", len(signals)) - active))),
+                    "compatible_bundles": compatible,
+                    "fresh_data_assets": fresh,
+                    "assessment_failures": int(universe_meta.get("assessment_failures", 0)),
+                    "assessments_reused": int(universe_meta.get("assessments_reused", 0)),
+                    "assessments_refreshed": int(universe_meta.get("assessments_refreshed", 0)),
+                    "terminal_ready": compatible > 0,
+                },
+                "signals": signals,
+                "journal": self._journal(),
+                "outcome_update": _json_safe(outcome_update),
+                "notes": [
+                    "Sola lettura: il terminale non espone API per ordini.",
+                    "Ogni scan valuta l'universo attivo scoperto dall'exchange, limitandosi ai bundle verificati per la Top 5.",
+                    "WAIT è l'esito predefinito quando dati, provenienza o evidenze non sono sufficienti.",
+                ],
+            }
+        except Exception as exc:
+            state = {
+                "ok": False,
+                "app": APP_TITLE,
+                "version": __version__,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "scan_seconds": round(
+                    time.monotonic() - started, 3
+                ),
+                "refresh_seconds": self.refresh_seconds,
+                "config": {
+                    "exchange": self.settings.exchange,
+                    "timeframe": self.settings.timeframe,
+                    "primary_symbol": self.settings.symbol,
+                    "live_symbols": list(
+                        getattr(self.settings, "live_symbols", ())
+                        or ()
+                    ),
+                },
+                "summary": {
+                    "assets_scanned": 0,
+                    "active_signals": 0,
+                    "waits": 0,
+                    "compatible_bundles": 0,
+                    "fresh_data_assets": 0,
+                    "terminal_ready": False,
+                },
+                "signals": [],
+                "journal": self._journal(),
+                "outcome_update": {},
+                "error": f"{type(exc).__name__}:{exc}",
+                "notes": [
+                    "Il terminale ha eseguito un fail-closed.",
+                    "Controlla dati pubblici, bundle addestrati e compatibilità.",
+                ],
+            }
 
-            cached_state = _json_safe(state)
-            with self._lock:
-                self._cached_state = cached_state
-                self._cached_at = time.time()
-                self._scan_progress = dict(cached_state.get("scan_progress") or {})
-                self._scan_thread = None
-            return cached_state
+        cached_state = _json_safe(state)
+        with self._lock:
+            self._cached_state = cached_state
+            self._cached_at = time.time()
+            self._scan_progress = dict(cached_state.get("scan_progress") or {})
+            self._scan_thread = None
+        return cached_state
 
     def health(self) -> dict:
         return {
