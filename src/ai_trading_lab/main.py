@@ -209,7 +209,7 @@ def system_doctor(settings, root: str | Path = ".") -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description='Adaptive AI Trading Lab')
-    parser.add_argument('command', choices=['download', 'bulk-download', 'import-data', 'list-data', 'train', 'train-all', 'train-complete', 'train-complete-all', 'train-window', 'train-window-all', 'test', 'test-window', 'test-all', 'live-scan', 'live-outcomes', 'research', 'discover', 'optimize', 'master-tune', 'benchmark', 'paper', 'paper-daemon', 'demo', 'auto-update', 'autonomous', 'grow', 'evolve', 'daemon', 'state', 'stream', 'real-history', 'real-ticker', 'doctor', 'rl-help'])
+    parser.add_argument('command', choices=['download', 'bulk-download', 'import-data', 'list-data', 'train', 'train-all', 'train-complete', 'train-complete-all', 'train-window', 'train-window-all', 'test', 'test-window', 'test-all', 'live-scan', 'live-outcomes', 'research', 'discover', 'optimize', 'master-tune', 'benchmark', 'paper', 'paper-daemon', 'demo', 'auto-update', 'autonomous', 'grow', 'evolve', 'daemon', 'state', 'stream', 'real-history', 'real-ticker', 'bootstrap-live-data', 'doctor', 'rl-help'])
     parser.add_argument('--config', default='config.yaml')
     parser.add_argument('--iterations', type=int, default=1)
     parser.add_argument('--query', default=None, help='External-intelligence query for autonomous research')
@@ -226,6 +226,7 @@ def main():
     parser.add_argument('--symbols', default=None, help='Comma-separated symbols for live scan')
     parser.add_argument('--holdout-frac', type=float, default=0.15)
     parser.add_argument('--limit', type=int, default=700, help='Maximum bars for bounded real-data adapters such as Kraken')
+    parser.add_argument('--live-bars', type=int, default=None, help='Closed OHLCV bars to cache for the live dashboard')
     parser.add_argument('--benchmark-bars', type=int, default=3000, help='Bars used by the diagnostic benchmark suite')
     args = parser.parse_args()
     s = load_settings(args.config)
@@ -309,6 +310,43 @@ def main():
         from .live_tracker import update_live_signal_outcomes
         result = update_live_signal_outcomes(s, '.')
         print(json.dumps(result, indent=2, default=str)); return
+
+    if args.command == 'bootstrap-live-data':
+        symbols = [
+            x.strip()
+            for x in (
+                args.symbols.split(',')
+                if args.symbols
+                else list(getattr(s, 'live_symbols', ()) or [s.symbol])
+            )
+            if x.strip()
+        ]
+        bars = max(80, int(args.live_bars or getattr(s, 'live_lookback_bars', 600)))
+        out_dir = Path('data') / 'historical'
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ex = exchange_client(getattr(s, 'exchange', 'binance'), sandbox=False)
+        results = []
+        for symbol in dict.fromkeys(symbols):
+            frame = fetch_ohlcv(
+                ex, symbol, s.timeframe, limit=bars, include_unclosed=False
+            )
+            path = out_dir / (
+                f"{symbol.replace('/', '_').replace(':', '_')}_{s.timeframe}.csv"
+            )
+            frame.to_csv(path, index_label='timestamp')
+            results.append({
+                'symbol': symbol,
+                'timeframe': s.timeframe,
+                'bars': int(len(frame)),
+                'start': str(frame.index.min()) if len(frame) else None,
+                'end': str(frame.index.max()) if len(frame) else None,
+                'output': str(path),
+            })
+        print(json.dumps({
+            'exchange': getattr(s, 'exchange', 'binance'),
+            'results': results,
+        }, indent=2))
+        return
 
     if args.command == 'real-ticker':
         from .kraken_data import fetch_ticker
