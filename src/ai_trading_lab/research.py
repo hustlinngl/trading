@@ -30,7 +30,11 @@ def walk_forward(df: pd.DataFrame, settings, independent_test=False):
     return pd.DataFrame(rows)
 
 def strategy_discovery(df,settings):
-    split=int(len(df)*0.75); train_df,valid_df=df.iloc[:split],df.iloc[split:]; train_x,_,train_ret=make_features(train_df,settings.horizon_bars); valid_x=make_oos_features(train_df,valid_df,settings.horizon_bars,external_feature_lag_bars=getattr(settings,'external_feature_lag_bars',1)); valid_ret=valid_df.close.shift(-(int(settings.horizon_bars)+1))/valid_df.open.shift(-1)-1; best=evolve(train_x,train_ret,settings.population_size,settings.generations,settings.seed); serial=[{'train_score':float(s),'validation_score':float(score_candidate(c,valid_x,valid_ret)),'direction':c.direction,'rules':[r.__dict__ for r in c.rules]} for s,c in best]; serial.sort(key=lambda z:z['validation_score'],reverse=True); return serial
+    split=int(len(df)*0.75); train_df,valid_df=df.iloc[:split],df.iloc[split:]; train_x,_,train_ret=make_features(train_df,settings.horizon_bars); valid_x=make_oos_features(train_df,valid_df,settings.horizon_bars,external_feature_lag_bars=getattr(settings,'external_feature_lag_bars',1)); valid_ret=valid_df.close.shift(-(int(settings.horizon_bars)+1))/valid_df.open.shift(-1)-1
+    impact=float(getattr(settings,'impact_bps_per_sqrt',0.0))*np.sqrt(max(0.0,float(getattr(settings,'max_participation_pct',0.10))))
+    research_cost_bps=float(getattr(settings,'fee_bps',0.0))+float(getattr(settings,'slippage_bps',0.0))+impact
+    best=evolve(train_x,train_ret,settings.population_size,settings.generations,settings.seed,cost_bps=research_cost_bps)
+    serial=[{'train_score':float(s),'validation_score':float(score_candidate(c,valid_x,valid_ret,cost_bps=research_cost_bps)),'direction':c.direction,'rules':[r.__dict__ for r in c.rules]} for s,c in best]; serial.sort(key=lambda z:z['validation_score'],reverse=True); return serial
 
 def research_report(df,settings):
     folds=walk_forward(df,settings); return {'folds':folds.to_dict('records'),'aggregate':aggregate_fold_stats(folds)}
