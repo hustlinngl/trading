@@ -1987,6 +1987,7 @@ async function refresh(force=false){
   try{
     const res=await fetch("/api/state?force="+(force?"1":"0"),{cache:"no-store"});
     const data=await res.json();
+    render(data);
     renderFocus(data);
     scheduleRefresh(data.scan_in_progress ? 3 : (data.refresh_seconds||20));
   }catch(e){
