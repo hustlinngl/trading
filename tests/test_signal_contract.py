@@ -1,0 +1,110 @@
+from __future__ import annotations
+
+import math
+
+import pytest
+
+from ai_trading_lab.signal_contract import (
+    DirectSignal,
+    SignalContractError,
+    compile_direct_signal,
+)
+
+
+def test_long_compiles_to_public_contract():
+    signal = compile_direct_signal(
+        {"action": "LONG", "p_up": 0.91, "expected_return": 0.0062, "score": 999},
+        symbol="BTC/USDT",
+        timestamp="2026-10-08T00:00:00+00:00",
+        price=100000.0,
+        horizon_bars=8,
+    )
+    assert signal.to_dict() == {
+        "symbol": "BTC/USDT",
+        "timestamp": "2026-10-08T00:00:00+00:00",
+        "signal": "LONG",
+        "confidence": 0.91,
+        "expected_return": 0.0062,
+        "price": 100000.0,
+        "horizon_bars": 8,
+        "actionable": True,
+        "reason": "qualified",
+    }
+
+
+def test_short_confidence_is_directional():
+    signal = compile_direct_signal(
+        {"action": "SHORT", "p_up": 0.17, "expected_return": -0.004},
+        symbol="ETH/USDT",
+        timestamp="2026-10-08T00:00:00+00:00",
+        price=4000.0,
+        horizon_bars=8,
+    )
+    assert signal.signal == "SHORT"
+    assert signal.confidence == pytest.approx(0.83)
+    assert signal.actionable is True
+
+
+def test_flat_is_not_actionable():
+    signal = compile_direct_signal(
+        {"action": "FLAT", "p_up": 0.54, "expected_return": 0.0001},
+        symbol="SOL/USDT",
+        timestamp="2026-10-08T00:00:00+00:00",
+        price=200.0,
+        horizon_bars=8,
+    )
+    assert signal.signal == "FLAT"
+    assert signal.confidence == 0.0
+    assert signal.actionable is False
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        {"action": "LONG", "p_up": math.nan, "expected_return": 0.01},
+        {"action": "LONG", "p_up": 1.2, "expected_return": 0.01},
+        {"action": "LONG", "p_up": 0.8, "expected_return": math.nan},
+    ],
+)
+def test_non_finite_or_invalid_model_output_fails_closed(row):
+    with pytest.raises(SignalContractError):
+        compile_direct_signal(
+            row,
+            symbol="BTC/USDT",
+            timestamp="2026-10-08T00:00:00+00:00",
+            price=100000.0,
+            horizon_bars=8,
+        )
+
+
+def test_public_contract_does_not_leak_internal_fields():
+    signal = compile_direct_signal(
+        {
+            "action": "LONG",
+            "p_up": 0.9,
+            "expected_return": 0.005,
+            "regime": "trend_up",
+            "analog_edge": 0.4,
+            "meta_success": 0.8,
+            "selection_score": 0.7,
+        },
+        symbol="BTC/USDT",
+        timestamp="2026-10-08T00:00:00+00:00",
+        price=100000.0,
+        horizon_bars=8,
+    )
+    public = signal.to_dict()
+    assert set(public) == {
+        "symbol",
+        "timestamp",
+        "signal",
+        "confidence",
+        "expected_return",
+        "price",
+        "horizon_bars",
+        "actionable",
+        "reason",
+    }
+    assert "regime" not in public
+    assert "analog_edge" not in public
+    assert "meta_success" not in public
