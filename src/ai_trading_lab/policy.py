@@ -36,10 +36,13 @@ def live_signal_gate(row, settings):
     p_up = float(row.get("p_up", 0.5))
     expected_return = float(row.get("expected_return", 0.0))
     expected_return_lcb = float(row.get("expected_return_lcb", expected_return))
+    expected_return_ucb = float(row.get("expected_return_ucb", expected_return))
     action = str(row.get("action", "FLAT"))
     direction = 1.0 if p_up >= 0.5 else -1.0
     p_direction = p_up if direction > 0 else 1.0 - p_up
-    robust_expected_return = direction * expected_return_lcb
+    # For LONG, the conservative bound is LCB. For SHORT, the conservative
+    # directional bound is -UCB because less-negative returns are the adverse case.
+    robust_expected_return = expected_return_lcb if direction > 0 else -expected_return_ucb
     reasons = []
 
     if action not in {"LONG", "SHORT"}:
