@@ -170,7 +170,10 @@ def resolve_trade_window_model(settings, root: str | Path, symbol: str) -> Path:
         settings, "trade_window_model_path", "models/champion/trade_window_specialist.joblib"
     )
     if symbol == str(getattr(settings, "symbol", "")) and configured.exists():
-        return configured
+        bundle = configured.parent
+        compatible, _ = bundle_compatibility(settings, bundle, symbol)
+        if compatible:
+            return configured
     return asset
 
 
