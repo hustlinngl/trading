@@ -11,6 +11,7 @@ from .fingerprint import strong_dataset_fingerprint
 from .policy import live_signal_gate
 from .trade_window import assess_trade_window
 from .deployment import resolve_signal_bundle, resolve_trade_window_model, bundle_compatibility
+from .signal_contract import direct_signal
 
 @dataclass
 class LiveAssessment:
@@ -19,9 +20,20 @@ class LiveAssessment:
     correlation_returns:pd.Series|None = field(default=None, repr=False, compare=False)
 
     def to_dict(self):
-        data=asdict(self)
-        data.pop("correlation_returns",None)
-        return data
+        # Only the direct signal contract crosses the live/dashboard boundary.
+        payload=direct_signal(
+            symbol=self.symbol,
+            timestamp=self.timestamp,
+            signal=self.signal,
+            confidence=self.confidence,
+            expected_return=self.expected_return,
+            price=self.price,
+            horizon_bars=int(getattr(self, "_horizon_bars", 1)),
+            reason=";".join(str(x) for x in self.reason_codes),
+        ).to_dict()
+        payload["status"]=self.status
+        payload["data_fingerprint"]=self.data_fingerprint
+        return payload
 
 def _load_bundled_history(root, symbol, timeframe, limit):
     slug = symbol.replace("/", "_").replace(":", "_")
@@ -211,12 +223,14 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
             "funding_rate": funding.get("funding_rate"),
             "funding_cost_return": float(funding.get("funding_cost_return",0.0) or 0.0),
         })
-        return LiveAssessment(
+        assessment=LiveAssessment(
             symbol,stamp,"SIGNAL" if signal!="FLAT" else "WAIT",signal,
             confidence,float(last.get("expected_return",0.0)),price,
             (reasons + ([str(last.get("trade_window_reason"))] if tw.get("trade_window_reason") not in {None, "ok", "disabled"} and str(last.get("trade_window_reason")) else []) or quality_reasons),fp,
             details,correlation_returns=correlation_returns,
         )
+        object.__setattr__(assessment,"_horizon_bars",int(getattr(settings,"horizon_bars",8)))
+        return assessment
     except Exception as exc:
         return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[f"runtime:{type(exc).__name__}:{exc}"],fp)
 
