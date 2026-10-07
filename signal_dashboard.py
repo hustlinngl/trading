@@ -1008,6 +1008,13 @@ h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
 .actions button{background:#121820;border-color:#28303b;border-radius:9px;box-shadow:none;padding:8px 12px}
 .actions button:hover{border-color:#3c4654;box-shadow:0 4px 16px rgba(0,0,0,.18);transform:none}
 .actions button::after{display:none}
+.connection-stamp{display:inline-flex;align-items:center;gap:7px;color:#77818e;font-size:10px;letter-spacing:.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.connection-stamp::before{content:"";width:6px;height:6px;border-radius:50%;background:#66717d;box-shadow:0 0 0 3px rgba(102,113,125,.08)}
+.connection-stamp.online::before{background:#55d79a;box-shadow:0 0 0 3px rgba(85,215,154,.08),0 0 10px rgba(85,215,154,.22)}
+.connection-stamp.offline::before{background:#f2768e;box-shadow:0 0 0 3px rgba(242,118,142,.08)}
+.actions button[disabled]{opacity:.72;cursor:wait}
+.actions button[aria-busy="true"]::before{content:"";display:inline-block;width:10px;height:10px;margin-right:7px;border:1px solid #65707e;border-top-color:#e58ab8;border-radius:50%;vertical-align:-1px;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 .focus-only .top5-head{margin:4px 0 14px;padding-bottom:13px;border-bottom:1px solid var(--line)}
 .focus-only .top5-title{font-size:22px;font-weight:700;letter-spacing:-.015em}
 .focus-only .top5-sub{margin-top:4px;max-width:720px;font-size:12px;color:#737e8b}
@@ -1193,8 +1200,8 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
         </div>
         <div class="operator-copy"><strong>SAKURA</strong><span>WATCHER // ONLINE</span></div>
       </div>
-      <span id="stamp">Connessione…</span>
-      <button id="refresh">Refresh</button>
+      <span id="stamp" class="connection-stamp" aria-live="polite">Connessione…</span>
+      <button id="refresh" type="button" aria-label="Aggiorna stato e segnali">Refresh</button>
     </div>
   </div>
 
@@ -1632,7 +1639,11 @@ function renderMetrics(data){
   ].map(x=>'<div class="card"><div class="metric-label">'+x[0]+'</div><div class="metric-value '+x[2]+'">'+esc(x[1])+'</div></div>').join("");
   const source=q.scan_source==="exchange"?"market map live":q.scan_source==="local_fallback"?"local fallback":"—";
   const types=Object.entries(q.market_counts||{}).sort((a,b)=>String(a[0]).localeCompare(String(b[0]))).slice(0,4).map(([k,v])=>k+" "+v).join(" · ");
-  $("stamp").textContent=(data.generated_at?new Date(data.generated_at).toLocaleTimeString():"—")+" · "+(q.exchange||"—")+" · "+source+(types?" · "+types:"");
+  const stamp=$("stamp");
+  if(stamp){
+    stamp.className="connection-stamp "+(data.ok?"online":"offline");
+    stamp.textContent=(data.generated_at?new Date(data.generated_at).toLocaleTimeString():"—")+" · "+(q.exchange||"—")+" · "+source+(types?" · "+types:"");
+  }
 }
 
 function renderRadar(signals){
@@ -2040,7 +2051,12 @@ async function loadHistory(symbol){
 }
 
 async function refresh(force=false){
-  $("stamp").textContent="scansione…";
+  const button=$("refresh");
+  if(button){
+    button.disabled=true;
+    button.setAttribute("aria-busy","true");
+  }
+  $("stamp").textContent="Aggiornamento…";
   try{
     const res=await fetch("/api/state?force="+(force?"1":"0"),{cache:"no-store"});
     const data=await res.json();
@@ -2048,8 +2064,15 @@ async function refresh(force=false){
     renderFocus(data);
     scheduleRefresh(data.scan_in_progress ? 3 : (data.refresh_seconds||20));
   }catch(e){
-    renderFocus({ok:false,error:String(e),config:{},refresh_seconds:20});
+    const fallback={ok:false,error:String(e),config:{},refresh_seconds:20};
+    render(fallback);
+    renderFocus(fallback);
     scheduleRefresh(20);
+  }finally{
+    if(button){
+      button.disabled=false;
+      button.setAttribute("aria-busy","false");
+    }
   }
 }
 let refreshTimer=null;
