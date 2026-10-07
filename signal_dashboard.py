@@ -1024,6 +1024,9 @@ h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
 .focus-status{font-size:10px;color:#66717f;font-variant-numeric:tabular-nums;white-space:nowrap}
 .focus-status.good{color:#55d79a}
 .focus-status.warn{color:#e7bc62}
+.trace-state{display:inline-flex;align-items:center;gap:5px;font-size:10px;color:#737e8b;font-variant-numeric:tabular-nums}
+.trace-state.ready{color:#55d79a}.trace-state.wait{color:#e7bc62}
+.trace-mini-dot{width:5px;height:5px;border-radius:50%;background:currentColor;box-shadow:0 0 7px currentColor}
 .history-source{color:#697481;font-variant-numeric:tabular-nums}
 @keyframes statusBreath{0%,100%{opacity:.72;transform:scale(.92)}50%{opacity:1;transform:scale(1)}}
 .section-reveal{animation:sectionReveal .24s cubic-bezier(.2,.8,.2,1) both}
@@ -1531,27 +1534,25 @@ function stopSakuraMusic(){
 function initSakuraMusic(){
   const button=$("sakuraMusic");
   if(!button)return;
+  const persist=enabled=>{
+    try{localStorage.setItem("sakuraMusic",enabled?"on":"off");}catch(_){}
+  };
   button.addEventListener("click",async e=>{
     e.stopPropagation();
-    if(sakuraEnabled)stopSakuraMusic();else{try{await startSakuraMusic();}catch(_){}}
+    if(sakuraEnabled){stopSakuraMusic();persist(false);}
+    else{try{await startSakuraMusic();persist(true);}catch(_){}}
   });
-  if(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches)return;
   let primed=false;
-  const prime=async()=>{
-    if(primed)return;primed=true;
+  const prime=async e=>{
+    if(primed || (e.target&&e.target.closest&&e.target.closest("#sakuraMusic")))return;
+    primed=true;
     try{
-      if(!localStorage.getItem("sakuraMusicDisabled"))await startSakuraMusic();
+      const preference=localStorage.getItem("sakuraMusic");
+      if(preference!=="off")await startSakuraMusic();
     }catch(_){}
     document.removeEventListener("pointerdown",prime,true);
   };
-  const disablePersist=()=>{
-    try{localStorage.setItem("sakuraMusicDisabled","1");}catch(_){}
-  };
-  document.addEventListener("pointerdown",e=>{
-    if(e.target&&e.target.closest&&e.target.closest("#sakuraMusic"))return;
-    prime();
-  },{capture:true,passive:true});
-  button.addEventListener("dblclick",disablePersist);
+  document.addEventListener("pointerdown",prime,{capture:true,passive:true});
 }
 
 function initNavigation(){
@@ -1896,7 +1897,7 @@ function signalOutcomeClass(outcome){
   return outcome==="WIN"?"good":outcome==="LOSS"?"bad":outcome==="TIMEOUT"?"warn":"";
 }
 function traceState(ok,label){
-  return '<span class="pill '+(ok?'good':'warn')+'"><span class="dot"></span>'+esc(label)+'</span>';
+  return '<span class="trace-state '+(ok?'ready':'wait')+'"><i class="trace-mini-dot"></i>'+esc(label)+'</span>';
 }
 
 function renderTimeline(signals,journal){
