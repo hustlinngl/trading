@@ -277,3 +277,29 @@ def test_scan_top5_filters_wait_and_caps_verified_picks(monkeypatch, tmp_path):
     assert len(picks) == 5
     assert all(p.signal in {"LONG", "SHORT"} and p.status == "SIGNAL" for p in picks)
     assert picks[0].confidence >= picks[-1].confidence
+
+
+def test_signal_terminal_dashboard_markup_passes_release_smoke_check():
+    import signal_dashboard as terminal_mod
+
+    terminal_mod.validate_dashboard_markup()
+
+
+def test_signal_terminal_journal_reads_frozen_state_root(tmp_path, monkeypatch):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path)
+    state_root = tmp_path / "runtime-state"
+    journal_path = state_root / "logs" / "live_signal_history.jsonl"
+    journal_path.parent.mkdir(parents=True)
+    journal_path.write_text(
+        '{"symbol":"BTC/USDT","status":"SIGNAL","signal":"LONG","timestamp":"2026-10-07T00:00:00+00:00"}\n',
+        encoding="utf-8",
+    )
+    terminal.state_root = state_root
+
+    rows = terminal._journal()
+
+    assert len(rows) == 1
+    assert rows[0]["signal"] == "LONG"
