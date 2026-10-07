@@ -1,3 +1,9 @@
+## 0.9.32
+- Fixed the anime cursor click feedback so the click animation can never overwrite the pointer-position transform and jump to the top-left corner.
+- Exposed realtime market quotes in `/api/state` even when no model-backed signal is available, so the dashboard still shows useful live market data.
+- History loading now prefers fresh local cache, refreshes stale cache from the live exchange, and falls back to bundled history only when the network is unavailable.
+- Added `bootstrap-live-data` to populate `data/historical/` with closed OHLCV bars for the configured live symbols.
+
 # Changelog
 
 ## 0.9.31
