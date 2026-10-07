@@ -17,14 +17,12 @@ def test_execution_semantics_match_default_training_geometry():
 
 def test_analog_memory_excludes_overlapping_neighbors():
     idx = pd.date_range("2026-01-01", periods=80, freq="15min", tz="UTC")
-    rng = np.random.default_rng(42)
-    x = pd.DataFrame(rng.normal(size=(80, 3)), index=idx, columns=["a", "b", "c"])
-    y = pd.Series(np.linspace(-1, 1, 80), index=idx)
-    memory = AnalogMemory(k=8, exclusion_bars=7).fit(x, y)
-    out = memory.query_many(x.iloc[[40]], exclude_self=True, exclusion_bars=7)
-    assert out.iloc[0]["n"] >= 1
-    ts = idx[40]
-    positions = np.arange(len(memory.timestamps))
-    distances = np.abs(positions - 40)
-    # The directly queried point and its 7 overlapping neighbors must not be used.
-    assert not np.any(distances[np.isfinite(memory.outcomes)] <= 7)
+    x = pd.DataFrame(0.0, index=idx, columns=["a", "b", "c"])
+    y = pd.Series(0.0, index=idx)
+    y.iloc[33:48] = 10.0
+    memory = AnalogMemory(k=4, exclusion_bars=7).fit(x, y)
+    query = x.iloc[[40]]
+    leaked = memory.query_many(query, exclude_self=True, exclusion_bars=0)
+    guarded = memory.query_many(query, exclude_self=True, exclusion_bars=7)
+    assert leaked.iloc[0]["edge"] > 9.0
+    assert guarded.iloc[0]["edge"] < 1.0
