@@ -256,10 +256,37 @@ class LiveTracker:
             value = payload.get(key)
             if value is not None:
                 try:
-                    return float(value)
+                    candidate = float(value)
+                    if np.isfinite(candidate) and candidate > 0:
+                        return candidate
                 except (TypeError, ValueError):
                     continue
-        return previous.get("price") if previous else None
+        previous_price = previous.get("price") if previous else None
+        try:
+            return (
+                float(previous_price)
+                if previous_price is not None and np.isfinite(float(previous_price))
+                else None
+            )
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _valid_quote(bid: Any, ask: Any) -> tuple[float, float] | None:
+        try:
+            bid_value = float(bid)
+            ask_value = float(ask)
+        except (TypeError, ValueError):
+            return None
+        if not (
+            np.isfinite(bid_value)
+            and np.isfinite(ask_value)
+            and bid_value > 0
+            and ask_value > 0
+            and ask_value >= bid_value
+        ):
+            return None
+        return bid_value, ask_value
 
     def _merge_event(self, event: StreamEvent) -> None:
         symbol = str(event.symbol or "").strip().upper()
@@ -297,33 +324,35 @@ class LiveTracker:
             )
 
             payload = event.payload or {}
-            price = self._event_price(event, previous)
-            if price is not None and np.isfinite(price):
-                merged["price"] = float(price)
+            event_price = self._event_price(event, previous)
+            if event_price is not None and np.isfinite(event_price):
+                merged["last_trade_price"] = float(event_price)
 
             for target, source in (("bid", "b"), ("ask", "a")):
                 if source in payload:
                     try:
                         value = float(payload[source])
-                        if np.isfinite(value):
+                        if np.isfinite(value) and value > 0:
                             merged[target] = value
                     except (TypeError, ValueError):
                         pass
 
-            if "bid" in merged and "ask" in merged:
-                try:
-                    merged["mid"] = (
-                        float(merged["bid"]) + float(merged["ask"])
-                    ) / 2.0
-                    if merged.get("price") is None:
-                        merged["price"] = merged["mid"]
-                except (TypeError, ValueError):
-                    pass
+            quote = self._valid_quote(merged.get("bid"), merged.get("ask"))
+            if quote is not None:
+                bid, ask = quote
+                merged["mid"] = (bid + ask) / 2.0
+                # The dashboard's canonical realtime price is the executable quote
+                # midpoint, not the last trade, whenever a valid book exists.
+                merged["price"] = merged["mid"]
+            elif event_price is not None and np.isfinite(event_price):
+                merged["price"] = float(event_price)
 
             if event.event_type.lower() in {"aggtrade", "trade"}:
                 try:
                     if payload.get("q") is not None:
-                        merged["last_qty"] = float(payload["q"])
+                        qty = float(payload["q"])
+                        if np.isfinite(qty) and qty >= 0:
+                            merged["last_qty"] = qty
                 except (TypeError, ValueError):
                     pass
                 merged["trade_side"] = (
@@ -335,7 +364,7 @@ class LiveTracker:
             self._latest = view
 
     def submit_update(self, event: StreamEvent) -> bool:
-        """Publish an event without blocking the caller."""
+        """Schedule an event without blocking; True means the hand-off was accepted."""
         if not isinstance(event, StreamEvent):
             raise TypeError("event must be a StreamEvent")
         loop = self._loop
@@ -343,25 +372,27 @@ class LiveTracker:
             self._merge_event(event)
             return True
 
-        accepted = {"value": True}
+        # The queue operation executes on the event-loop thread, so the caller
+        # cannot know synchronously whether a later queue-full eviction occurs.
+        # Returning True here means the hand-off was scheduled successfully.
+        loop.call_soon_threadsafe(self._publish_threadsafe, event)
+        return True
 
-        def publish() -> None:
-            queue = self._queue
-            if queue is None:
-                accepted["value"] = False
-                return
-            try:
-                queue.put_nowait(event)
-            except asyncio.QueueFull:
-                try:
-                    queue.get_nowait()
-                    queue.task_done()
-                    queue.put_nowait(event)
-                except (asyncio.QueueEmpty, asyncio.QueueFull):
-                    accepted["value"] = False
-
-        loop.call_soon_threadsafe(publish)
-        return accepted["value"]
+    def _publish_threadsafe(self, event: StreamEvent) -> None:
+        queue = self._queue
+        if queue is None:
+            return
+        try:
+            queue.put_nowait(event)
+            return
+        except asyncio.QueueFull:
+            pass
+        try:
+            queue.get_nowait()
+            queue.task_done()
+            queue.put_nowait(event)
+        except (asyncio.QueueEmpty, asyncio.QueueFull):
+            self._logger.warning("live tracker queue remained full; dropping submitted event")
 
     def get_current_state(self, symbol: str | None = None) -> Mapping[str, Any]:
         """Return the latest immutable state view; average lookup is O(1)."""
