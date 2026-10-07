@@ -50,6 +50,7 @@ execution:
   poll_seconds: 60
   live_lookback_bars: 600
   live_max_symbols: 15
+  live_symbols: [BTC/USDT, ETH/USDT, BNB/USDT, SOL/USDT, XRP/USDT]
 growth:
   validation_purge_bars: 12
   regime_weight: 0.08
