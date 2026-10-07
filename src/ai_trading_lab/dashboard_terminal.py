@@ -1839,16 +1839,11 @@ function applyLiveDelta(payload){
   const symbol=String(payload.symbol||state.selected||"—");
   patchLiveNode("kpiPrice",liveNum(payload.price??market.price,2));
   patchLiveNode("kpiPriceMeta","stream · "+symbol);
-  patchLiveNode("kpiRegime",String(regime.label||"Unknown"),regime.direction==="DOWN"?"bad":regime.direction==="UP"?"good":"warn");
-  patchLiveNode("kpiRegimeMeta","confidence · "+livePct(regime.confidence,1)+" · "+(regime.source||"—"));
-  patchLiveNode("kpiRisk","DD "+livePct(risk.drawdown,2)+" · Lev "+(risk.leverage==null?"—":liveNum(risk.leverage,2)+"x"));
-  patchLiveNode("kpiRiskMeta",risk.current_exposure_available?"RiskEngine · live exposure":"RiskEngine · telemetry unavailable");
-  const slip=efficiency.slippage_bps==null?"—":liveNum(efficiency.slippage_bps,2)+"bp";
-  const lat=efficiency.latency_ms==null?"—":liveNum(efficiency.latency_ms,0)+"ms";
-  patchLiveNode("kpiEfficiency","SLIP "+slip+" · LAT "+lat);
-  patchLiveNode("kpiEfficiencyMeta",efficiency.execution_available?("execution telemetry · n="+(efficiency.sample_count||0)):(efficiency.source||"telemetry unavailable"));
-  patchLiveNode("liveTelemetryStamp","LIVE DATA · "+symbol+" · seq "+(market.sequence||0));
-  renderLiveCognition(payload.cognition||{});
+  // Research/telemetry stays internal. The presentation layer consumes only the
+  // direct signal result and optional realtime price context.
+  patchLiveNode("liveTelemetryStamp","SIGNAL · "+symbol);
+  const signal=payload.signal || payload.action || "WAIT";
+  patchLiveNode("liveSignal",String(signal),signal==="LONG"?"good":signal==="SHORT"?"bad":"warn");
 }
 
 function age(v){return v==null||Number.isNaN(Number(v))?"—":Number(v).toFixed(1)+"m";}
@@ -1908,8 +1903,8 @@ function renderFocus(data){
       '<div class="pick-stats">'+
       '<div class="pick-stat"><div class="k">Price</div><div class="v">'+num(r.realtime_price??r.price,2)+'</div></div>'+
       '<div class="pick-stat pick-stat-meter"><div class="k">Confidence</div><div class="v">'+pct(r.confidence,1)+'</div><span class="signal-meter" aria-hidden="true" style="--meter:'+confidenceMeter.toFixed(1)+'%"></span></div>'+
-      '<div class="pick-stat"><div class="k">Edge</div><div class="v">'+pct(d.robust_directional_edge,2)+'</div></div>'+
-      '<div class="pick-stat"><div class="k">Score</div><div class="v">'+num(d.score,2)+'</div></div>'+
+      '<div class="pick-stat"><div class="k">Expected return</div><div class="v">'+pct(r.expected_return,2)+'</div></div>'+
+      '<div class="pick-stat"><div class="k">Horizon</div><div class="v">'+esc(String(r.horizon_bars||"—"))+' bars</div></div>'+
       '</div>'+
       '<div class="pick-chart"><canvas data-pick-chart="'+esc(r.symbol)+'"></canvas></div>'+
       '</article>';
@@ -1990,20 +1985,14 @@ function renderRadar(signals){
 function renderDetail(signals){
   $("detailRows").innerHTML=signals.map(r=>{
     const d=r.decision||{}, b=r.bundle||{};
-    const robust=(d.expected_return_lcb==null)?"—":num(d.expected_return_lcb,4)+" / "+num(d.expected_return_ucb,4);
-    const duration=d.trade_window_direction?esc(d.trade_window_direction)+" · "+pct(d.trade_window_confidence,0):"—";
     const why=(r.reason_codes||[]).map(x=>'<span class="reason">'+esc(x)+'</span>').join("");
     return '<tr class="interactive-row" data-symbol="'+esc(r.symbol)+'" tabindex="0" role="button" aria-label="Apri '+esc(r.symbol)+' nel market inspector">'+
       '<td><strong>'+esc(r.symbol)+'</strong></td>'+
-      '<td><span class="signal '+cls(r.signal)+'">'+esc(r.signal||"WAIT")+'</span><div class="small">'+esc(r.status||"WAIT")+'</div></td>'+
+      '<td><span class="signal '+cls(r.signal)+'">'+esc(r.signal||"WAIT")+'</span></td>'+
       '<td class="num">'+num(r.realtime_price??r.price,2)+'</td>'+
-      '<td class="num">'+robust+'</td>'+
-      '<td class="num">'+num(d.score,3)+'</td>'+
-      '<td class="num">'+pct(d.meta_success,0)+'</td>'+
-      '<td class="num">'+(d.analog_n==null?"—":esc(d.analog_n))+" · "+pct(d.analog_agreement,0)+'</td>'+
-      '<td>'+esc(d.regime||"—")+'</td>'+
-      '<td>'+duration+'</td>'+
-      '<td class="num">'+age(d.data_age_minutes)+'</td>'+
+      '<td class="num">'+pct(r.confidence,1)+'</td>'+
+      '<td class="num">'+pct(r.expected_return,2)+'</td>'+
+      '<td class="num">'+esc(String(r.horizon_bars||"—"))+' bars</td>'+
       '<td>'+why+'</td>'+
     '</tr>';
   }).join("")||'<tr><td colspan="11" class="small">Nessun dato.</td></tr>';
@@ -2087,15 +2076,15 @@ function renderDecisionDeck(signals){
   $("deckAsset").textContent=active.symbol||"—";
   $("deckPrice").textContent=num(active.realtime_price??active.price,2);
   $("deckConfidence").textContent=pct(active.confidence,1);
-  $("deckEdge").textContent=d.expected_return_lcb==null?"—":num(d.expected_return_lcb,4)+" / "+num(d.expected_return_ucb,4);
+  $("deckEdge").textContent=pct(active.expected_return,2);
   reasons.innerHTML=(active.reason_codes||[]).slice(0,8).map(x=>'<span class="reason">'+esc(x)+'</span>').join("");
   const nodes=[
-    ["p(up)",d.p_up==null?"—":pct(d.p_up,1)],
-    ["Meta success",d.meta_success==null?"—":pct(d.meta_success,0)],
-    ["Memory",d.analog_n==null?"—":String(d.analog_n)+" · "+pct(d.analog_agreement,0)],
-    ["Duration",d.trade_window_confidence==null?"—":pct(d.trade_window_confidence,0)+" · "+esc(d.trade_window_direction||"—")],
+    ["Signal",d.signal||sig],
+    ["Confidence",d.confidence==null?"—":pct(d.confidence,1)],
     ["Expected return",d.expected_return==null?"—":pct(d.expected_return,2)],
-    ["Score",d.score==null?"—":num(d.score,3)]
+    ["Price",d.price==null?"—":num(d.price,2)],
+    ["Horizon",d.horizon_bars==null?"—":String(d.horizon_bars)+" bars"],
+    ["Actionable",d.actionable?"YES":"NO"]
   ];
   trace.innerHTML=nodes.map(n=>'<div class="trace-node"><strong>'+esc(n[0])+'</strong><span>'+esc(n[1])+'</span></div>').join("");
 }
