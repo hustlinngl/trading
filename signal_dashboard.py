@@ -397,24 +397,6 @@ class SignalTerminal:
             "hint": "Nessuno storico disponibile: connetti il terminale a Internet oppure esegui bootstrap-live-data.",
         }
 
-    def _journal(self) -> list[dict]:
-        # Frozen builds persist mutable state outside the executable directory.
-        # Read from the same state root used by the writer so journal history survives restarts.
-        path = self.state_root / "logs" / "live_signal_history.jsonl"
-        if not path.exists():
-            return []
-        rows: list[dict] = []
-        for line in path.read_text(
-            encoding="utf-8", errors="replace"
-        ).splitlines()[-60:]:
-            try:
-                obj = json.loads(line)
-                if isinstance(obj, dict):
-                    rows.append(obj)
-            except json.JSONDecodeError:
-                continue
-        return rows
-
     def _assessment_payload(self, assessment: LiveAssessment) -> dict:
         payload = _json_safe(assessment.to_dict())
         payload["signal_class"] = _signal_class(str(payload.get("signal", "WAIT")))
@@ -533,7 +515,6 @@ class SignalTerminal:
                 "universe_total": int(market_snapshot.get("universe_total", 0) or 0),
                 "market_counts": market_snapshot.get("market_counts", {}),
             },
-            "journal": self._journal(),
             "outcome_update": {},
             "notes": ["Scansione completa dell'universo attivo in corso."],
         }
@@ -770,7 +751,6 @@ class SignalTerminal:
                 },
                 "signals": signals,
                 "market_data": market_data,
-                "journal": self._journal(),
                 "outcome_update": _json_safe(outcome_update),
                 "notes": [
                     "Sola lettura: il terminale non espone API per ordini.",
