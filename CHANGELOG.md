@@ -1,4 +1,5 @@
 ## 0.9.34
+- Parallelized compatible-model live scanning with bounded thread-local exchange clients; added a short-lived quote cache to reduce dashboard refresh pressure.
 - Hardened the full-universe live-data bootstrap with bounded parallel workers, resumable timestamp-based cache reuse and atomic CSV replacement.
 - Added persistent live-market-universe snapshots so discovered symbols remain available across dashboard restarts and temporary exchange outages.
 - Aligned live market defaults and Windows/release documentation with the current OHLCV-focused signal surface.
