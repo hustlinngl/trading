@@ -11,7 +11,7 @@ from .fingerprint import strong_dataset_fingerprint
 from .policy import live_signal_gate
 from .trade_window import assess_trade_window
 from .deployment import resolve_signal_bundle, resolve_trade_window_model, bundle_compatibility
-from .signal_contract import DirectSignal
+from .signal_contract import compile_direct_signal
 
 @dataclass
 class LiveAssessment:
@@ -22,16 +22,25 @@ class LiveAssessment:
 
     def to_dict(self):
         """Publish only the stable direct-signal contract."""
-        return DirectSignal(
+        signal = str(self.signal).upper()
+        confidence = float(self.confidence)
+        p_up = (
+            confidence
+            if signal == "LONG"
+            else 1.0 - confidence
+            if signal == "SHORT"
+            else 0.5
+        )
+        return compile_direct_signal(
+            {
+                "action": signal,
+                "p_up": p_up,
+                "expected_return": float(self.expected_return),
+            },
             symbol=self.symbol,
             timestamp=self.timestamp,
-            signal=self.signal,
-            confidence=float(self.confidence),
-            expected_return=float(self.expected_return),
             price=float(self.price),
             horizon_bars=max(1, int(self.horizon_bars)),
-            actionable=self.signal in {"LONG", "SHORT"},
-            reason="qualified" if self.signal in {"LONG", "SHORT"} else "no_actionable_setup",
         ).to_dict()
 
     def to_internal_dict(self):
