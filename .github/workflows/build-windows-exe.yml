@@ -10,10 +10,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: "windows-exe"
-  cancel-in-progress: true
-
 jobs:
   build-windows:
     runs-on: windows-latest
