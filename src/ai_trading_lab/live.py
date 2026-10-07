@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 import json, numpy as np, pandas as pd
 
@@ -14,6 +14,7 @@ from .deployment import resolve_signal_bundle, resolve_trade_window_model, bundl
 @dataclass
 class LiveAssessment:
     symbol:str; timestamp:str; status:str; signal:str; confidence:float; expected_return:float; price:float; reason_codes:list[str]; data_fingerprint:str
+    details:dict[str, object] = field(default_factory=dict)
     def to_dict(self): return asdict(self)
 
 def assess_symbol(settings,root=".",symbol=None,exchange=None):
@@ -34,22 +35,22 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None):
         age_minutes=max(0.0,(pd.Timestamp.now(tz="UTC")-pd.Timestamp(df.index[-1])).total_seconds()/60.0)
         quality_reasons=[f"data_quality:{reason}" for reason in quality.reasons]
         if not quality.passed:
-            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,quality_reasons or ["data_quality"],fp)
+            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,quality_reasons or ["data_quality"],fp,{"data_quality":quality.to_dict()})
         if age_minutes > float(getattr(settings,"live_max_data_age_minutes",30.0)):
-            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[f"stale_data:{age_minutes:.1f}m"],fp)
+            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[f"stale_data:{age_minutes:.1f}m"],fp,{"data_age_minutes":age_minutes})
 
         model_dir=resolve_signal_bundle(settings,root,symbol)
         if not (model_dir/"signal_model.joblib").exists():
-            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,["model_missing"],fp)
+            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,["model_missing"],fp,{"bundle":str(model_dir)})
         compatible, compatibility_reason=bundle_compatibility(settings,model_dir,symbol)
         if not compatible:
-            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[compatibility_reason],fp)
+            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[compatibility_reason],fp,{"bundle":str(model_dir),"compatibility":compatibility_reason})
 
         eng=AdaptiveEngine(settings).load(model_dir)
         feat=eng.features(df)
         pred=eng.predict_frame(feat)
         if pred.empty:
-            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,["empty_prediction"],fp)
+            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,["empty_prediction"],fp,{"bundle":str(model_dir)})
 
         last=pred.iloc[-1].copy()
         tw_path = resolve_trade_window_model(settings,root,symbol)
@@ -59,10 +60,20 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None):
         signal,reasons=live_signal_gate(last,settings)
         p=float(last.get("p_up",0.5))
         confidence=p if signal=="LONG" else (1.0-p if signal=="SHORT" else 0.0)
+        detail_keys=(
+            "p_up","expected_return","expected_return_lcb","expected_return_ucb","score",
+            "meta_success","model_disagreement","return_disagreement","regime",
+            "regime_persistence","analog_edge","analog_agreement","analog_dispersion","analog_n",
+            "trade_window_available","trade_window_ready","trade_window_direction",
+            "trade_window_confidence","trade_window_reason",
+        )
+        details={k:last.get(k) for k in detail_keys if k in last.index}
+        details.update({"data_age_minutes":age_minutes,"bundle":str(model_dir),"compatibility":"ok"})
         return LiveAssessment(
             symbol,stamp,"SIGNAL" if signal!="FLAT" else "WAIT",signal,
             confidence,float(last.get("expected_return",0.0)),price,
             (reasons + ([str(last.get("trade_window_reason"))] if tw.get("trade_window_reason") not in {None, "ok", "disabled"} and str(last.get("trade_window_reason")) else []) or quality_reasons),fp,
+            details,
         )
     except Exception as exc:
         return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[f"runtime:{type(exc).__name__}:{exc}"],fp)
@@ -73,7 +84,7 @@ def scan_top5(settings,root=".",symbols=None):
     out=[]
     for symbol in dict.fromkeys(symbols):
         try: out.append(assess_symbol(settings,root,symbol,exchange=ex))
-        except Exception as exc: out.append(LiveAssessment(symbol,pd.Timestamp.now(tz="UTC").isoformat(),"WAIT","FLAT",0.0,0.0,float("nan"),[str(exc)],""))
+        except Exception as exc: out.append(LiveAssessment(symbol,pd.Timestamp.now(tz="UTC").isoformat(),"WAIT","FLAT",0.0,0.0,float("nan"),[str(exc)],"",{"error":f"{type(exc).__name__}:{exc}"}))
     out.sort(key=lambda x:(x.status=="SIGNAL",x.confidence),reverse=True)
     return out[:5]
 
