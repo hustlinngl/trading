@@ -118,6 +118,38 @@ jobs:
 
           Write-Host "Primary windowed executable produced successfully: $exe"
 
+      - name: Functional packaged dashboard smoke test
+        shell: pwsh
+        run: |
+          $port = 8876
+          $proc = Start-Process -FilePath .\dist\SakuraSignalTerminal.exe `
+            -ArgumentList "--no-browser --host 127.0.0.1 --port $port" `
+            -PassThru
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              try {
+                $page = Invoke-WebRequest -Uri "http://127.0.0.1:$port/" -UseBasicParsing -TimeoutSec 2
+                $health = Invoke-RestMethod -Uri "http://127.0.0.1:$port/api/health" -TimeoutSec 2
+                $ready = $true
+                break
+              } catch {
+                Start-Sleep -Seconds 1
+              }
+            }
+            if (-not $ready) { throw "Packaged terminal did not start on port $port" }
+            if (-not $page.Content.Contains("Top 5 Picks")) { throw "Packaged dashboard does not contain the focused Top 5 surface" }
+            if (-not $health.ok) { throw "Packaged health endpoint did not report ok=true" }
+            $symbols = @("BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT")
+            foreach ($symbol in $symbols) {
+              $encoded = [System.Uri]::EscapeDataString($symbol)
+              $history = Invoke-RestMethod -Uri "http://127.0.0.1:$port/api/history?symbol=$encoded&limit=120" -TimeoutSec 5
+              if ($history.bars.Count -lt 100) { throw "Insufficient packaged history for $symbol: $($history.bars.Count) bars" }
+            }
+            Write-Host "Functional packaged dashboard smoke test passed for all five historical assets."
+          } finally {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          }
       - name: Assemble portable package
         shell: pwsh
         run: |
