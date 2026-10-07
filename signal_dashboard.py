@@ -494,7 +494,7 @@ class SignalTerminal:
                 "exchange_available": self._exchange is not None,
                 "exchange_error": self._exchange_error,
                 "assets_scanned": 0,
-                "universe_total": 0,
+                "universe_total": int(market_snapshot.get("universe_total", 0) or 0),
                 "model_backed_assets": 0,
                 "active_signals": 0,
                 "waits": 0,
