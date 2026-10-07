@@ -57,3 +57,15 @@ def test_strict_signal_mode_rejects_unlabelled_model(tmp_path):
     ok, reason = bundle_compatibility(settings, bundle, "BTC/USDT")
     assert not ok
     assert reason == "model_metadata_missing"
+
+
+def test_research_router_is_deterministic():
+    from ai_trading_lab.experiment_router import ResearchRouter, ResearchTask
+    tasks = [
+        ResearchTask("b","B", "h", 0.0, 0.8, 0.2, 1.0, 0.5),
+        ResearchTask("a","A", "h", 0.0, 0.8, 0.2, 1.0, 0.5),
+        ResearchTask("c","C", "h", 0.0, 0.2, 0.8, 2.0, 0.9),
+    ]
+    router1 = ResearchRouter(seed=7)
+    router2 = ResearchRouter(seed=7)
+    assert [x.task_id for x in router1.rank(tasks, budget=10.0, top_k=3)] == [x.task_id for x in router2.rank(tasks, budget=10.0, top_k=3)]
