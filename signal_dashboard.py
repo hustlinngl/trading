@@ -13,6 +13,7 @@ import argparse
 import json
 import threading
 import time
+import sys
 import webbrowser
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -528,6 +529,7 @@ async function refresh(force=false){
     scheduleRefresh(data.refresh_seconds||45);
   }catch(e){
     render({ok:false,error:String(e),summary:{},notes:["Il browser non riesce a raggiungere il terminale locale dei segnali."]});
+    scheduleRefresh(45);
   }
 }
 $("refresh").addEventListener("click",()=>refresh(true));
@@ -579,7 +581,7 @@ def make_handler(terminal: SegnaleTerminale):
 
 def parse_args():
     parser = argparse.ArgumentParser(description=APP_TITLE)
-    parser.add_argument("--config", default="config.yaml", help="Settings YAML path")
+    parser.add_argument("--config", default=None, help="Settings YAML path (defaults to repository/config.yaml)")
     parser.add_argument("--host", default=DEFAULT_HOST, help="Bind address (default: localhost only)")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="HTTP port")
     parser.add_argument("--refresh", type=int, default=DEFAULT_REFRESH, help="Segnale refresh TTL in seconds")
@@ -591,7 +593,8 @@ def parse_args():
 
 def main():
     args = parse_args()
-    settings = load_settings(args.config)
+    config_path = args.config or str(ROOT / "config.yaml")
+    settings = load_settings(config_path)
     if args.symbols:
         settings.live_symbols = tuple(x.strip() for x in args.symbols.split(",") if x.strip())
 
