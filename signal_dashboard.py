@@ -362,16 +362,19 @@ class SignalTerminal:
 
             started = time.monotonic()
             try:
-                symbols = list(
+                configured_symbols = list(
                     dict.fromkeys(
                         getattr(self.settings, "live_symbols", ())
                         or (self.settings.symbol,)
                     )
-                )[: int(getattr(self.settings, "live_max_symbols", 15))]
-
-                assessments = scan_top5(
-                    self.settings, str(self.root), symbols=symbols
                 )
+                assessments, universe_meta = scan_top5(
+                    self.settings, str(self.root), return_meta=True
+                )
+                # Tickers are presentation-only; never poll the entire scan universe.
+                symbols = list(dict.fromkeys(
+                    configured_symbols + [x.symbol for x in assessments]
+                ))
                 write_live_snapshot(assessments, str(self.state_root))
                 append_live_signal_history(assessments, str(self.state_root))
 
@@ -466,7 +469,8 @@ class SignalTerminal:
                         "exchange": self.settings.exchange,
                         "timeframe": self.settings.timeframe,
                         "primary_symbol": self.settings.symbol,
-                        "live_symbols": symbols,
+                        "live_symbols": configured_symbols,
+                        "scan_scope": universe_meta.get("universe_mode", "all_active_markets"),
                         "signal_only_mode": bool(
                             self.settings.signal_only_mode
                         ),
@@ -477,7 +481,9 @@ class SignalTerminal:
                         ),
                     },
                     "summary": {
-                        "assets_scanned": len(signals),
+                        "assets_scanned": int(universe_meta.get("universe_evaluated", len(signals))),
+                        "universe_total": int(universe_meta.get("universe_total", len(signals))),
+                        "model_backed_assets": int(universe_meta.get("universe_model_backed", len(signals))),
                         "active_signals": active,
                         "waits": len(signals) - active,
                         "compatible_bundles": compatible,
