@@ -130,6 +130,8 @@ class SignalTerminal:
         self._scan_started_at = 0.0
         self._scan_progress: dict[str, object] = {}
         self._market_snapshot_path = self.state_root / "logs" / "live_market_universe.json"
+        self._quote_cache = {}
+        self._quote_cache_ttl = 8.0
         self.state_root.joinpath("logs").mkdir(parents=True, exist_ok=True)
         self.state_root.joinpath("data", "history").mkdir(parents=True, exist_ok=True)
 
