@@ -38,7 +38,7 @@ class AnalogMemory:
         metric_weights=np.sqrt(self.feature_weights.reindex(x.columns).fillna(1.0).to_numpy(float)) if self.feature_weights is not None else 1.0
         zx=zx*metric_weights
 
-        exclusion=max(0,int(self.exclusion_bars if exclusion_bars is None else exclusion_bars))
+        exclusion=max(0,int(getattr(self,'exclusion_bars',0) if exclusion_bars is None else exclusion_bars))
         requested=min(len(self.matrix),max(self.k,2*self.k+2*exclusion+8))
         dist,idx=self.nn.kneighbors(zx,n_neighbors=requested)
         mem_ts=pd.Index(self.timestamps) if self.timestamps is not None else pd.Index([])
@@ -82,7 +82,7 @@ class AnalogMemory:
         return pd.DataFrame({'edge':edges,'dispersion':dispersions,'agreement':agreements,'n':counts},index=frame.index)
 
     def query(self,row):
-        result=self.query_many(pd.DataFrame([row]),exclude_self=True,exclusion_bars=self.exclusion_bars)
+        result=self.query_many(pd.DataFrame([row]),exclude_self=True,exclusion_bars=getattr(self,'exclusion_bars',0))
         r=result.iloc[0]
         return {'edge':float(r['edge']),'dispersion':float(r['dispersion']),'agreement':float(r['agreement']),'n':int(r['n'])}
 
