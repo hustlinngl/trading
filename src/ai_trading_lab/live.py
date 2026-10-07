@@ -153,7 +153,7 @@ def discover_live_universe(settings, root=".", exchange=None, symbols=None):
     if ex is not None:
         try:
             markets = getattr(ex, "markets", {}) or {}
-            allowed_types = set(getattr(settings, "live_market_types", ("spot", "swap", "future", "margin", "option")))
+            allowed_types = set(getattr(settings, "live_market_types", ("spot", "swap", "future")))
             if isinstance(markets, dict):
                 exchange_ready = bool(markets)
             for market in markets.values():
