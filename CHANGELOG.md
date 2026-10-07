@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.28
+- Refined the Overview into a cleaner direct-results surface: compact `Top 5 signals` header, no redundant explanatory copy, and no loading/error status text in the primary feed.
+- Added a restrained confidence meter to each signal card using the signal's own probability value; no new status badges or synthetic scoring scales were introduced.
+- Added regression assertions for the result-only card presentation and updated packaged release metadata.
+
 ## 0.9.27
 - Fixed a packaging-blocking dashboard indentation regression.
 - Replaced primary scan-progress copy with lightweight skeleton results so the main screen stays signal-focused while data is loading.
