@@ -41,7 +41,7 @@ class Settings:
     memory_information_weighted: bool = False
     max_holding_bars: int = 96
     trade_window_enabled: bool = True
-    trade_window_required_for_signal: bool = False
+    trade_window_required_for_signal: bool = True
     trade_window_min_confidence: float = 0.80
     trade_window_min_expected_return: float = 0.0015
     trade_window_require_base_agreement: bool = True
@@ -64,7 +64,7 @@ class Settings:
     base_min_holdout_profit_factor: float = 1.0
     base_max_holdout_drawdown: float = -0.25
     base_min_holdout_utility: float = 0.0
-    require_deployment_manifest_for_signal: bool = False
+    require_deployment_manifest_for_signal: bool = True
     trade_window_min_holdout_utility: float = 0.0
     live_max_data_age_minutes: float = 30.0
     trade_window_max_holdout_drawdown: float = -0.25
