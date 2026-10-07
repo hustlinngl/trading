@@ -92,8 +92,11 @@ def test_signal_terminal_builds_read_only_state(tmp_path, monkeypatch):
     assert state["summary"]["assets_scanned"] == 1
     assert state["summary"]["active_signals"] == 1
     assert state["signals"][0]["signal"] == "LONG"
-    assert state["signals"][0]["decision"]["score"] == 0.41
-    assert "bundle" in state["signals"][0]
+    assert state["signals"][0]["decision"]["signal"] == "LONG"
+    assert state["signals"][0]["decision"]["confidence"] == 0.91
+    assert state["signals"][0]["decision"]["horizon_bars"] == 8
+    assert "details" not in state["signals"][0]
+    assert "bundle" not in state["signals"][0]
     assert state["notes"][0].startswith("Sola lettura")
 
 
