@@ -140,7 +140,7 @@ def discover_live_universe(settings, root=".", exchange=None, symbols=None):
     if ex is not None:
         try:
             markets = getattr(ex, "markets", {}) or {}
-            allowed_types = set(getattr(settings, "live_market_types", ("spot", "swap", "future", "margin")))
+            allowed_types = set(getattr(settings, "live_market_types", ("spot", "swap", "future", "margin", "option")))
             for market in markets.values():
                 if not isinstance(market, dict) or market.get("active") is False:
                     continue
@@ -190,6 +190,7 @@ def discover_live_universe(settings, root=".", exchange=None, symbols=None):
         "symbols": scoreable,
         "discovered_markets": len(universe),
         "model_backed_markets": len(scoreable),
+        "uncovered_markets": max(0, len(universe) - len(scoreable)),
         "market_counts": market_counts,
     }
 
@@ -257,6 +258,7 @@ def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, re
         return picks, {
             "universe_total": int(universe["discovered_markets"]),
             "universe_model_backed": int(universe["model_backed_markets"]),
+            "universe_uncovered": int(universe.get("uncovered_markets", 0)),
             "universe_evaluated": int(len(candidates)),
             "market_counts": universe["market_counts"],
             "universe_mode": "all_active_markets",
