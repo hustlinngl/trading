@@ -67,7 +67,11 @@ class AdaptiveEngine:
         self.memory.fit(model_features,future_ret,information_weighted=bool(getattr(self.settings,'memory_information_weighted',False))); base=self.model.predict(model_features); analog=self.memory.query_many(model_features,exclude_self=True)
         if cal_oos is not None and not cal_oos.empty and meta_analog is not None:
             idx=cal_oos.index.intersection(features.index); meta_base=cal_oos.loc[idx]; mm=self.meta_regimes if self.meta_regimes is not None else self.regimes; mr=mm.transform(features.loc[idx]); mp=mm.persistence(features.loc[idx]); mprob=mm.semantic_probabilities(features.loc[idx])
-            meta_x=MetaPolicy.frame(meta_base,features.loc[idx],mr,meta_analog.loc[idx],regime_persistence=mp,regime_probs=mprob); rtc=2*(float(getattr(self.settings,'fee_bps',0))+float(getattr(self.settings,'slippage_bps',0)))/10000.0; meta_y=cost_aware_meta_target(future_ret.loc[idx].to_numpy(),meta_base.p_up.to_numpy(),rtc); valid=future_ret.loc[idx].notna().to_numpy()
+            meta_x=MetaPolicy.frame(meta_base,features.loc[idx],mr,meta_analog.loc[idx],regime_persistence=mp,regime_probs=mprob)
+            fee_bps=float(getattr(self.settings,'fee_bps',0.0)); slip_bps=float(getattr(self.settings,'slippage_bps',0.0)); impact_bps=float(getattr(self.settings,'impact_bps_per_sqrt',0.0)); participation=float(np.clip(getattr(self.settings,'max_participation_pct',0.10),0.0,1.0)); edge_bps=float(getattr(self.settings,'min_edge_after_cost_bps',5.0)); borrow_bps=float(max(0.0,getattr(self.settings,'short_borrow_bps_per_bar',0.0)))*int(max(1,getattr(self.settings,'max_holding_bars',96)))
+            base_cost=(2*(fee_bps+slip_bps)+2*impact_bps*np.sqrt(participation)+max(0.0,edge_bps))/10000.0
+            directional_cost=base_cost+np.where(meta_base.p_up.to_numpy(float)<0.5,borrow_bps/10000.0,0.0)
+            meta_y=cost_aware_meta_target(future_ret.loc[idx].to_numpy(),meta_base.p_up.to_numpy(),directional_cost); valid=future_ret.loc[idx].notna().to_numpy()
             if valid.sum()>=100 and np.unique(meta_y[valid]).size>1: self.meta.fit(meta_x.loc[valid],pd.Series(meta_y[valid],index=idx[valid]))
         meta_detector=self.meta_regimes if self.meta_regimes is not None else self.regimes
         meta_regime=meta_detector.transform(features)
