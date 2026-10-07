@@ -610,3 +610,11 @@ def test_signal_terminal_frontend_races_are_latest_request_wins():
     assert "clearTimeout(refreshTimer)" in html
     assert 'aria-current="page"' in html
     assert "scroll-margin-top:82px" in html
+
+def test_signal_terminal_offline_state_does_not_claim_realtime():
+    import signal_dashboard as terminal_mod
+
+    html = terminal_mod.HTML
+    assert 'aria-current="page"' in html
+    assert 'REALTIME offline' in html
+    assert 'STATE · OFFLINE' in html
