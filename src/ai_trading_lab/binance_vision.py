@@ -98,7 +98,7 @@ def _normalize_vision_csv(raw):
     df=df.sort_values('timestamp')
     dup=df[df['timestamp'].duplicated(keep=False)]
     if not dup.empty:
-        numeric=[c for c in ('open','high','low','close','volume') if c in dup.columns]
+        numeric=[c for c in ('open','high','low','close','volume','quote_volume','trades','taker_buy_base_volume','taker_buy_quote_volume') if c in dup.columns]
         conflicting=dup.groupby('timestamp')[numeric].nunique(dropna=False).max(axis=1)
         if bool((conflicting>1).any()):
             bad=str(conflicting[conflicting>1].index[0])
