@@ -11,8 +11,25 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from ai_trading_lab.dashboard_terminal import main
+from ai_trading_lab.dashboard_terminal import (  # noqa: E402
+    HTML,
+    SignalTerminal,
+    ThreadingHTTPServer,
+    __version__,
+    make_handler,
+    main,
+    validate_dashboard_markup,
+)
 
+__all__ = [
+    "HTML",
+    "SignalTerminal",
+    "ThreadingHTTPServer",
+    "__version__",
+    "make_handler",
+    "main",
+    "validate_dashboard_markup",
+]
 
 if __name__ == "__main__":
     main()
