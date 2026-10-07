@@ -29,19 +29,28 @@ def model_semantics_fingerprint(settings) -> str:
     }
     return hashlib.sha256(json.dumps(fields, sort_keys=True).encode("utf-8")).hexdigest()[:24]
 
+ENGINE_ARTIFACTS = (
+    "signal_model.joblib",
+    "analog_memory.joblib",
+    "regime_detector.joblib",
+    "meta_regime_detector.joblib",
+    "meta_policy.joblib",
+    "feature_efficiency.joblib",
+)
+MANAGED_BUNDLE_FILES = ENGINE_ARTIFACTS + (
+    "trade_window_specialist.joblib",
+    "trade_window_training_report.json",
+    "base_training_meta.json",
+    "base_holdout_report.json",
+    "deployment_manifest.json",
+    "promotion_state.json",
+)
+
 def bundle_artifact_fingerprint(bundle: str | Path) -> str:
     """Hash executable model artifacts so a manifest cannot bless a tampered bundle."""
     import hashlib
     bundle=Path(bundle)
-    names=(
-        "signal_model.joblib",
-        "analog_memory.joblib",
-        "regime_detector.joblib",
-        "meta_regime_detector.joblib",
-        "meta_policy.joblib",
-        "feature_efficiency.joblib",
-        "trade_window_specialist.joblib",
-    )
+    names=ENGINE_ARTIFACTS + ("trade_window_specialist.joblib",)
     h=hashlib.sha256()
     for name in names:
         path=bundle/name
@@ -241,7 +250,7 @@ def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
     duration=json.loads(duration_path.read_text(encoding="utf-8")) if duration_path.exists() else {}
     h=base.get("holdout",{}) if isinstance(base,dict) else {}
     base_checks={
-        "model_artifact_present":(asset_dir/"signal_model.joblib").exists(),
+        "required_engine_artifacts_present":all((asset_dir/name).exists() for name in ENGINE_ARTIFACTS),
         "model_provenance_present":bool(meta.get("data_fingerprint")) and bool(meta.get("model_semantics_fingerprint")) and bool(meta.get("deployment_semantics_fingerprint")),
         "deployment_semantics_match":str(meta.get("deployment_semantics_fingerprint"))==deployment_semantics_fingerprint(settings),
         "holdout_report_present":bool(base),
