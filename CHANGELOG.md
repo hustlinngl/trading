@@ -1,6 +1,10 @@
 # Changelog
 
 ## 0.9.16
+- Final pre-alpha freeze: restored bundle provenance/evidence into the dashboard payload and kept compatibility checks fail-closed.
+- Hardened dashboard JSON serialization, browser escaping and asynchronous asset switching.
+- Optimized realtime ticker collection with bulk-fetch fallback while keeping the selected-asset ticker display-only.
+- Kept the model decision clock on closed candles and the realtime visual clock independent.
 - Added `signal_dashboard.py`, a single local read-only signal terminal driven by the trained model bundles.
 - Added fast realtime ticker polling for the selected asset while preserving closed-candle semantics for model signals.
 - Added a smooth canvas market cockpit with selectable 120/240/480-bar history, OHLC visualization, realtime price line and historical signal markers.
