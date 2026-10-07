@@ -7,11 +7,13 @@ import numpy as np
 import pandas as pd
 
 from ai_trading_lab.config import load_settings
-from ai_trading_lab.data import asof_join, drop_unclosed_tail, timeframe_offset
+from ai_trading_lab.data import asof_join, drop_unclosed_tail, timeframe_offset, load_cached
 from ai_trading_lab.master_tuner import _fold_cache_key
 from ai_trading_lab.risk import RiskEngine
 from ai_trading_lab.backtest import run_backtest
 from ai_trading_lab.engine import AdaptiveEngine
+from ai_trading_lab.features import make_oos_features
+from ai_trading_lab.labels import triple_barrier_labels
 
 
 def market_frame(n: int = 240, freq: str = "15min") -> pd.DataFrame:
@@ -151,3 +153,41 @@ def test_short_borrow_reduces_short_risk_size():
     with_borrow = RiskEngine(**base, short_borrow_bps_per_bar=10.0).size(10_000.0, 100.0, 1.0, -1)
     assert no_borrow.allowed and with_borrow.allowed
     assert with_borrow.qty < no_borrow.qty
+
+
+def test_triple_barrier_same_bar_collision_is_ambiguous():
+    idx = pd.date_range("2026-01-01", periods=20, freq="15min", tz="UTC")
+    close = np.full(20, 100.0)
+    df = pd.DataFrame({
+        "open": close,
+        "high": close,
+        "low": close,
+        "close": close,
+        "volume": np.full(20, 10_000.0),
+    }, index=idx)
+    # Seed ATR then force both barriers inside the same executable bar.
+    df.loc[idx[14], "high"] = 103.0
+    df.loc[idx[14], "low"] = 97.0
+    out = triple_barrier_labels(df, horizon=2, pt_atr=0.5, sl_atr=0.5)
+    assert np.isnan(out.loc[idx[13], "tb_label"])
+    assert np.isnan(out.loc[idx[13], "tb_return"])
+
+
+def test_oos_feature_stitch_rejects_conflicting_overlap():
+    history = market_frame(80)
+    future = market_frame(10)
+    future.index = pd.date_range(history.index[-1] - pd.Timedelta(minutes=15), periods=10, freq="15min", tz="UTC")
+    future.iloc[0, future.columns.get_loc("close")] = 999.0
+    try:
+        make_oos_features(history, future, horizon=4)
+    except ValueError as exc:
+        assert "Conflicting overlapping OOS data" in str(exc)
+    else:
+        raise AssertionError("conflicting overlap must be rejected")
+
+
+def test_oos_feature_stitch_allows_identical_overlap():
+    history = market_frame(80)
+    future = history.iloc[-1:].copy()
+    out = make_oos_features(history, future, horizon=4)
+    assert list(out.index) == list(future.index)
