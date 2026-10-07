@@ -198,7 +198,7 @@ class SignalTerminal:
     def _timeframe_minutes(timeframe: str) -> float:
         tf = str(timeframe).strip().lower()
         import re
-        match = re.fullmatch(r"(\\d+)(s|min|m|h|d|w)", tf)
+        match = re.fullmatch(r"(\d+)(s|min|m|h|d|w)", tf)
         if not match:
             return 15.0
         n, unit = int(match.group(1)), match.group(2)
