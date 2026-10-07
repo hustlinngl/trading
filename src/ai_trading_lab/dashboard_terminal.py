@@ -598,8 +598,6 @@ class SignalTerminal:
                 "terminal_ready": False,
             },
             "signals": [],
-            "journal": self._journal(),
-            "outcome_update": {},
             "notes": ["Scansione completa dell'universo attivo in corso."],
         }
 
@@ -712,46 +710,27 @@ class SignalTerminal:
                 "quotes": _json_safe(quotes),
             }
             signals = []
+            ages = []
             for assessment in assessments:
                 row = self._assessment_payload(assessment)
-                row["bundle"] = self._bundle_snapshot(assessment.symbol)
-                realtime = quotes.get(assessment.symbol, {})
-                if realtime.get("price") is not None:
-                    row["realtime_price"] = realtime["price"]
-                row["quote"] = realtime
-
-                details = row.get("details") or {}
-                row["decision"] = {
-                    "p_up": details.get("p_up"),
-                    "expected_return": row.get("expected_return"),
-                    "expected_return_lcb": details.get("expected_return_lcb"),
-                    "expected_return_ucb": details.get("expected_return_ucb"),
-                    "robust_directional_edge": details.get("robust_directional_edge"),
-                    "selection_score": details.get("selection_score"),
-                    "score": details.get("score"),
-                    "meta_success": details.get("meta_success"),
-                    "model_disagreement": details.get("model_disagreement"),
-                    "return_disagreement": details.get("return_disagreement"),
-                    "regime": details.get("regime"),
-                    "analog_n": details.get("analog_n"),
-                    "analog_agreement": details.get("analog_agreement"),
-                    "trade_window_ready": details.get("trade_window_ready"),
-                    "trade_window_direction": details.get(
-                        "trade_window_direction"
-                    ),
-                    "trade_window_confidence": details.get(
-                        "trade_window_confidence"
-                    ),
-                    "data_age_minutes": details.get("data_age_minutes"),
-                }
+                # Keep the signal object itself limited to DirectSignal fields.
                 signals.append(row)
+                try:
+                    ages.append(
+                        float(
+                            assessment.details.get("data_age_minutes", 1e9)
+                            if isinstance(assessment.details, dict)
+                            else 1e9
+                        )
+                    )
+                except (TypeError, ValueError):
+                    ages.append(1e9)
 
             signals.sort(
                 key=lambda x: (
-                    _signal_rank(str(x.get("signal", "WAIT"))),
-                    float((x.get("decision") or {}).get("selection_score", 0.0) or 0.0),
-                    float((x.get("decision") or {}).get("robust_directional_edge", 0.0) or 0.0),
+                    _signal_rank(str(x.get("signal", "FLAT"))),
                     float(x.get("confidence", 0.0) or 0.0),
+                    abs(float(x.get("expected_return", 0.0) or 0.0)),
                 ),
                 reverse=True,
             )
@@ -763,15 +742,8 @@ class SignalTerminal:
                 universe_meta.get("universe_model_eligible", len(signals))
             )
             fresh = sum(
-                float((x.get("decision") or {}).get("data_age_minutes", 1e9))
-                <= float(
-                    getattr(
-                        self.settings, "live_max_data_age_minutes", 30.0
-                    )
-                )
-                for x in signals
-                if (x.get("decision") or {}).get("data_age_minutes")
-                is not None
+                age <= float(getattr(self.settings, "live_max_data_age_minutes", 30.0))
+                for age in ages
             )
 
             state = {
@@ -831,8 +803,6 @@ class SignalTerminal:
                 },
                 "signals": signals,
                 "market_data": market_data,
-                "journal": self._journal(),
-                "outcome_update": _json_safe(outcome_update),
                 "notes": [
                     "Sola lettura: il terminale non espone API per ordini.",
                     "Ogni scan valuta l'universo attivo scoperto dall'exchange, limitandosi ai bundle verificati per la Top 5.",
@@ -1444,26 +1414,12 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   <nav class="nav" id="nav" aria-label="Sezioni dashboard">
     <button class="nav-btn active" data-target="focusDashboard" aria-current="page">Overview</button>
     <button class="nav-btn" data-target="market">Market</button>
-    <button class="nav-btn" data-target="detail">Intelligence</button>
-    <button class="nav-btn" data-target="journal">Journal</button>
-    <button class="nav-btn" data-target="timeline">Timeline</button>
-    <button class="nav-btn" data-target="evidencePanel">Evidence</button>
   </nav>
 
   <section class="focus-only" id="focusDashboard" aria-live="polite">
     <div class="top5-head"><div><div class="top5-title">Top 5 signals</div></div></div>
     <div id="top5Grid" class="top5-grid"></div>
     <div id="liveDataFallback" class="live-data-grid" hidden></div>
-  </section>
-
-  <section class="live-intelligence" id="liveIntelligence" aria-live="polite">
-    <div class="live-kpi-grid">
-      <article class="live-kpi" id="liveKpiPrice"><div class="k">Prezzo</div><div class="v num" id="kpiPrice">—</div><div class="meta" id="kpiPriceMeta">stream · —</div></article>
-      <article class="live-kpi" id="liveKpiRegime"><div class="k">Market Regime</div><div class="v" id="kpiRegime">Unknown</div><div class="meta" id="kpiRegimeMeta">confidence · —</div></article>
-      <article class="live-kpi" id="liveKpiRisk"><div class="k">Risk Exposure</div><div class="v" id="kpiRisk">DD — · Lev —</div><div class="meta" id="kpiRiskMeta">RiskEngine · current unavailable</div></article>
-      <article class="live-kpi" id="liveKpiEfficiency"><div class="k">Execution Efficiency</div><div class="v" id="kpiEfficiency">SLIP — · LAT —</div><div class="meta" id="kpiEfficiencyMeta">telemetry · —</div></article>
-    </div>
-    <div class="live-telemetry-stamp" id="liveTelemetryStamp" style="margin-top:8px">LIVE DATA · —</div>
   </section>
 
   <section class="legacy-hidden decision-deck" id="decisionDeck" aria-live="polite">
@@ -1614,13 +1570,6 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   </div>
 </aside>
 
-  <section class="panel cognition-panel" id="liveCognitionPanel" aria-live="polite">
-    <div class="panel-head">
-      <div><div class="title">Live AI Cognition</div><div class="small">Trace operativa dei gate e delle evidenze disponibili; non rappresenta il ragionamento privato del modello.</div></div>
-      <div class="live-telemetry-stamp" id="cognitionStamp">—</div>
-    </div>
-    <div id="cognitionConsole" class="cognition-console">In attesa del primo stato live…</div>
-  </section>
   <div class="footer" id="footer"></div>
 </div>
 
@@ -1909,16 +1858,15 @@ function renderFocus(data){
     return;
   }
   box.innerHTML=picks.map((r,i)=>{
-    const d=r.decision||{};
     const confidenceNumber=Number(r.confidence);
     const confidenceMeter=Number.isFinite(confidenceNumber)?Math.max(0,Math.min(100,confidenceNumber*100)):0;
     return '<article class="pick-card pick-'+(r.signal==="LONG"?"long":"short")+(i===0?' pick-primary':'')+'" style="--pick-delay:'+(Math.min(i,4)*45)+'ms" data-focus-symbol="'+esc(r.symbol)+'" tabindex="0" role="button" aria-label="Apri '+esc(r.symbol)+' nel market inspector">'+
       '<div class="pick-head"><div><div class="pick-rank">#'+(i+1)+'</div><div class="pick-symbol">'+esc(r.symbol)+'</div></div><span class="pick-signal '+cls(r.signal)+'">'+esc(r.signal)+'</span></div>'+
       '<div class="pick-stats">'+
-      '<div class="pick-stat"><div class="k">Price</div><div class="v">'+num(r.realtime_price??r.price,2)+'</div></div>'+
+      '<div class="pick-stat"><div class="k">Price</div><div class="v">'+num(r.price,2)+'</div></div>'+
       '<div class="pick-stat pick-stat-meter"><div class="k">Confidence</div><div class="v">'+pct(r.confidence,1)+'</div><span class="signal-meter" aria-hidden="true" style="--meter:'+confidenceMeter.toFixed(1)+'%"></span></div>'+
-      '<div class="pick-stat"><div class="k">Edge</div><div class="v">'+pct(d.robust_directional_edge,2)+'</div></div>'+
-      '<div class="pick-stat"><div class="k">Score</div><div class="v">'+num(d.score,2)+'</div></div>'+
+      '<div class="pick-stat"><div class="k">Expected</div><div class="v">'+pct(r.expected_return,2)+'</div></div>'+
+      '<div class="pick-stat"><div class="k">Horizon</div><div class="v">'+esc(r.horizon_bars==null?"—":String(r.horizon_bars)+" bars")+'</div></div>'+
       '</div>'+
       '<div class="pick-chart"><canvas data-pick-chart="'+esc(r.symbol)+'"></canvas></div>'+
       '</article>';
@@ -1926,6 +1874,7 @@ function renderFocus(data){
   bindFocusCards();
   loadFocusHistories(picks);
 }
+
 function bindFocusCards(){
   document.querySelectorAll(".pick-card[data-focus-symbol]").forEach(card=>{
     const open=()=>{
@@ -1998,24 +1947,17 @@ function renderRadar(signals){
 
 function renderDetail(signals){
   $("detailRows").innerHTML=signals.map(r=>{
-    const d=r.decision||{}, b=r.bundle||{};
-    const robust=(d.expected_return_lcb==null)?"—":num(d.expected_return_lcb,4)+" / "+num(d.expected_return_ucb,4);
-    const duration=d.trade_window_direction?esc(d.trade_window_direction)+" · "+pct(d.trade_window_confidence,0):"—";
-    const why=(r.reason_codes||[]).map(x=>'<span class="reason">'+esc(x)+'</span>').join("");
+    const why=r.reason?'<span class="reason">'+esc(r.reason)+'</span>':"";
     return '<tr class="interactive-row" data-symbol="'+esc(r.symbol)+'" tabindex="0" role="button" aria-label="Apri '+esc(r.symbol)+' nel market inspector">'+
       '<td><strong>'+esc(r.symbol)+'</strong></td>'+
-      '<td><span class="signal '+cls(r.signal)+'">'+esc(r.signal||"WAIT")+'</span><div class="small">'+esc(r.status||"WAIT")+'</div></td>'+
-      '<td class="num">'+num(r.realtime_price??r.price,2)+'</td>'+
-      '<td class="num">'+robust+'</td>'+
-      '<td class="num">'+num(d.score,3)+'</td>'+
-      '<td class="num">'+pct(d.meta_success,0)+'</td>'+
-      '<td class="num">'+(d.analog_n==null?"—":esc(d.analog_n))+" · "+pct(d.analog_agreement,0)+'</td>'+
-      '<td>'+esc(d.regime||"—")+'</td>'+
-      '<td>'+duration+'</td>'+
-      '<td class="num">'+age(d.data_age_minutes)+'</td>'+
+      '<td><span class="signal '+cls(r.signal)+'">'+esc(r.signal||"FLAT")+'</span></td>'+
+      '<td class="num">'+num(r.price,2)+'</td>'+
+      '<td class="num">'+pct(r.confidence,1)+'</td>'+
+      '<td class="num">'+pct(r.expected_return,2)+'</td>'+
+      '<td>'+esc(r.horizon_bars==null?"—":String(r.horizon_bars)+" bars")+'</td>'+
       '<td>'+why+'</td>'+
     '</tr>';
-  }).join("")||'<tr><td colspan="11" class="small">Nessun dato.</td></tr>';
+  }).join("")||'<tr><td colspan="7" class="small">Nessun dato.</td></tr>';
 }
 
 function renderJournal(data){
@@ -2083,28 +2025,26 @@ function renderDecisionDeck(signals){
   const trace=$("traceGrid"), reasons=$("deckReasons");
   if(!active){
     deckSignal.textContent="—";deckSignal.className="decision-signal signal-flat";
-    deckMeta.textContent="Seleziona un risultato dalla Top 5.";
+    deckMeta.textContent="Nessun risultato.";
     $("deckAsset").textContent="—";$("deckPrice").textContent="—";$("deckConfidence").textContent="—";$("deckEdge").textContent="—";
     trace.innerHTML="";reasons.innerHTML="";return;
   }
-  const d=active.decision||{};
-  const sig=active.signal||"WAIT";
+  const sig=active.signal||"FLAT";
   deckSignal.textContent=sig;deckSignal.className="decision-signal "+cls(sig);
   deck.className="decision-deck signal-live-"+sig.toLowerCase();
   deck.classList.remove("decision-flash");void deck.offsetWidth;deck.classList.add("decision-flash");
-  deckMeta.textContent=sig==="LONG"?"Bias LONG · risultato del modello":sig==="SHORT"?"Bias SHORT · risultato del modello":"Nessun segnale attivo";
+  deckMeta.textContent=sig==="LONG"?"LONG · direct signal":sig==="SHORT"?"SHORT · direct signal":"FLAT · no actionable setup";
   $("deckAsset").textContent=active.symbol||"—";
-  $("deckPrice").textContent=num(active.realtime_price??active.price,2);
+  $("deckPrice").textContent=num(active.price,2);
   $("deckConfidence").textContent=pct(active.confidence,1);
-  $("deckEdge").textContent=d.expected_return_lcb==null?"—":num(d.expected_return_lcb,4)+" / "+num(d.expected_return_ucb,4);
-  reasons.innerHTML=(active.reason_codes||[]).slice(0,8).map(x=>'<span class="reason">'+esc(x)+'</span>').join("");
+  $("deckEdge").textContent=pct(active.expected_return,2);
+  reasons.innerHTML=active.reason?'<span class="reason">'+esc(active.reason)+'</span>':"";
   const nodes=[
-    ["p(up)",d.p_up==null?"—":pct(d.p_up,1)],
-    ["Meta success",d.meta_success==null?"—":pct(d.meta_success,0)],
-    ["Memory",d.analog_n==null?"—":String(d.analog_n)+" · "+pct(d.analog_agreement,0)],
-    ["Duration",d.trade_window_confidence==null?"—":pct(d.trade_window_confidence,0)+" · "+esc(d.trade_window_direction||"—")],
-    ["Expected return",d.expected_return==null?"—":pct(d.expected_return,2)],
-    ["Score",d.score==null?"—":num(d.score,3)]
+    ["Signal",sig],
+    ["Confidence",pct(active.confidence,1)],
+    ["Expected return",pct(active.expected_return,2)],
+    ["Horizon",active.horizon_bars==null?"—":String(active.horizon_bars)+" bars"],
+    ["Actionable",active.actionable?"YES":"NO"]
   ];
   trace.innerHTML=nodes.map(n=>'<div class="trace-node"><strong>'+esc(n[0])+'</strong><span>'+esc(n[1])+'</span></div>').join("");
 }
@@ -2174,41 +2114,33 @@ function openInspector(symbol){
   const active=((state.data&&state.data.signals)||[]).find(x=>x.symbol===symbol);
   const content=$("inspectorContent"), drawer=$("inspectorDrawer");
   if(!content||!drawer)return;
-  $("inspectorSubtitle").textContent=(active?.symbol||symbol||"—")+" · signal details";
+  $("inspectorSubtitle").textContent=(active?.symbol||symbol||"—")+" · signal";
   if(!active){
     content.innerHTML='<div class="timeline-empty">Nessun risultato disponibile per '+esc(symbol||"asset")+'.</div>';
   }else{
-    const d=active.decision||{};
-    const signal=active.signal||"WAIT";
+    const signal=active.signal||"FLAT";
     const trace=[
-      ["p(up)",d.p_up==null?"—":pct(d.p_up,1)],
+      ["Signal",signal],
       ["Confidence",active.confidence==null?"—":pct(active.confidence,1)],
-      ["Robust edge",d.robust_directional_edge==null?"—":pct(d.robust_directional_edge,2)],
-      ["Expected return",d.expected_return==null?"—":pct(d.expected_return,2)],
-      ["Score",d.score==null?"—":num(d.score,3)],
-      ["Meta success",d.meta_success==null?"—":pct(d.meta_success,0)],
-      ["Memory",d.analog_n==null?"—":String(d.analog_n)+" · "+pct(d.analog_agreement,0)],
-      ["Duration",d.trade_window_confidence==null?"—":pct(d.trade_window_confidence,0)+" · "+String(d.trade_window_direction||"—")],
-      ["Regime",d.regime||"—"],
-      ["Data age",d.data_age_minutes==null?"—":age(d.data_age_minutes)]
+      ["Expected return",active.expected_return==null?"—":pct(active.expected_return,2)],
+      ["Price",active.price==null?"—":num(active.price,2)],
+      ["Horizon",active.horizon_bars==null?"—":String(active.horizon_bars)+" bars"],
+      ["Actionable",active.actionable?"YES":"NO"]
     ];
     content.innerHTML=
       '<div class="inspector-hero signal-live-'+signal.toLowerCase()+'">'+
-        '<div class="eyebrow">Signal result</div>'+
+        '<div class="eyebrow">Direct signal</div>'+
         '<div class="verdict '+cls(signal)+'">'+esc(signal)+'</div>'+
-        '<div class="decision-meta">'+esc(signal==="LONG"?"Bias LONG":signal==="SHORT"?"Bias SHORT":"No active signal")+'</div>'+
+        '<div class="decision-meta">'+esc(active.reason||"")+'</div>'+
         '<div class="inspector-grid">'+
-          '<div class="inspector-card"><div class="k">Prezzo</div><div class="v num">'+num(active.realtime_price??active.price,2)+'</div></div>'+
+          '<div class="inspector-card"><div class="k">Prezzo</div><div class="v num">'+num(active.price,2)+'</div></div>'+
           '<div class="inspector-card"><div class="k">Confidence</div><div class="v">'+pct(active.confidence,1)+'</div></div>'+
-          '<div class="inspector-card"><div class="k">Robust edge</div><div class="v">'+(d.robust_directional_edge==null?"—":pct(d.robust_directional_edge,2))+'</div></div>'+
-          '<div class="inspector-card"><div class="k">Score</div><div class="v">'+num(d.score,3)+'</div></div>'+
+          '<div class="inspector-card"><div class="k">Expected</div><div class="v">'+pct(active.expected_return,2)+'</div></div>'+
+          '<div class="inspector-card"><div class="k">Horizon</div><div class="v">'+(active.horizon_bars==null?"—":String(active.horizon_bars)+" bars")+'</div></div>'+
         '</div>'+
       '</div>'+
       '<div class="inspector-section"><h3>Signal data</h3><div class="inspector-trace">'+
         trace.map(t=>'<div class="inspector-trace-row"><strong>'+esc(t[0])+'</strong><span>'+esc(t[1])+'</span></div>').join("")+
-      '</div></div>'+
-      '<div class="inspector-section"><h3>Reasons</h3><div class="inspector-reasons">'+
-        (active.reason_codes||[]).slice(0,12).map(x=>'<span class="reason">'+esc(x)+'</span>').join("")+
       '</div></div>';
   }
   const backdrop=$("inspectorBackdrop");
