@@ -31,6 +31,54 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Generate bundled historical cache
+        shell: bash
+        run: |
+          python - <<'PY'
+          import csv
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import requests
+
+          out = Path("data/historical")
+          out.mkdir(parents=True, exist_ok=True)
+          targets = {"BTC/USDT": "BTCUSDT", "ETH/USDT": "ETHUSDT", "SOL/USDT": "SOLUSDT"}
+          target_bars = 2000
+          url = "https://api.binance.com/api/v3/klines"
+
+          for symbol, api_symbol in targets.items():
+              rows = []
+              end_time = None
+              while len(rows) < target_bars:
+                  params = {"symbol": api_symbol, "interval": "15m", "limit": min(1000, target_bars - len(rows))}
+                  if end_time is not None:
+                      params["endTime"] = end_time
+                  response = requests.get(url, params=params, timeout=30)
+                  response.raise_for_status()
+                  batch = response.json()
+                  if not batch:
+                      break
+                  rows = batch + rows
+                  end_time = int(batch[0][0]) - 1
+                  if len(batch) < params["limit"]:
+                      break
+
+              dedup = {int(row[0]): row for row in rows}
+              ordered = [dedup[k] for k in sorted(dedup)][-target_bars:]
+              if len(ordered) < 500:
+                  raise RuntimeError(f"Insufficient Binance history for {symbol}: {len(ordered)} bars")
+
+              slug = symbol.replace("/", "_").replace(":", "_")
+              path = out / f"{slug}_15m.csv"
+              with path.open("w", newline="", encoding="utf-8") as fh:
+                  writer = csv.writer(fh)
+                  writer.writerow(["timestamp", "open", "high", "low", "close", "volume"])
+                  for row in ordered:
+                      stamp = datetime.fromtimestamp(int(row[0]) / 1000, tz=timezone.utc).isoformat()
+                      writer.writerow([stamp, row[1], row[2], row[3], row[4], row[5]])
+              print(symbol, len(ordered), path)
+          PY
+
       - name: Build EXE
         shell: bash
         run: |
@@ -83,6 +131,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path release | Out-Null
           Copy-Item .\dist\SakuraSignalTerminal.exe .\release\SakuraSignalTerminal.exe
           Copy-Item .\config.yaml .\release\config.yaml
+          New-Item -ItemType Directory -Force -Path .\release\data\historical | Out-Null
+          Copy-Item .\data\historical\*.csv .\release\data\historical\
           Copy-Item .\SETUP_WINDOWS.md .\release\SETUP_WINDOWS.md
           Copy-Item .\README.md .\release\README.md
           @"
@@ -101,5 +151,6 @@ jobs:
         with:
           name: SakuraSignalTerminal-Windows-x64
           path: release/
+            data/historical/
           if-no-files-found: error
           retention-days: 14
