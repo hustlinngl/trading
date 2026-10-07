@@ -474,7 +474,7 @@ class SignalTerminal:
 
                 try:
                     outcome_update = update_live_signal_outcomes(
-                        self.settings, str(self.state_root)
+                        self.settings, str(self.state_root), exchange=self._get_exchange()
                     )
                 except Exception as exc:
                     outcome_update = {
@@ -575,6 +575,7 @@ class SignalTerminal:
                         "primary_symbol": self.settings.symbol,
                         "live_symbols": configured_symbols,
                         "market_symbols": market_symbols,
+                        "market_counts": universe_meta.get("market_counts", {}),
                         "scan_scope": universe_meta.get("universe_mode", "all_active_markets"),
                         "scan_source": "exchange" if market_symbols else "local_fallback",
                         "signal_only_mode": bool(
@@ -1575,7 +1576,8 @@ function renderMetrics(data){
     ["Dati freschi",s.fresh_data_assets??0,s.fresh_data_assets>0?"good":"warn"]
   ].map(x=>'<div class="card"><div class="metric-label">'+x[0]+'</div><div class="metric-value '+x[2]+'">'+esc(x[1])+'</div></div>').join("");
   const source=q.scan_source==="exchange"?"market map live":q.scan_source==="local_fallback"?"local fallback":"—";
-  $("stamp").textContent=(data.generated_at?new Date(data.generated_at).toLocaleTimeString():"—")+" · "+(q.exchange||"—")+" · "+source;
+  const types=Object.entries(q.market_counts||{}).sort((a,b)=>String(a[0]).localeCompare(String(b[0]))).slice(0,4).map(([k,v])=>k+" "+v).join(" · ");
+  $("stamp").textContent=(data.generated_at?new Date(data.generated_at).toLocaleTimeString():"—")+" · "+(q.exchange||"—")+" · "+source+(types?" · "+types:"");
 }
 
 function renderRadar(signals){
