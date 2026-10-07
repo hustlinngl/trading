@@ -992,6 +992,117 @@ h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
 .focus-coverage{font-size:10px;color:#66717f;font-variant-numeric:tabular-nums;white-space:nowrap}
 </style>
 </style>
+
+<style>
+/* UI polish: restrained Sakura identity + responsive safety */
+:root{
+  --ui-radius:14px;
+  --ui-radius-sm:10px;
+  --ui-border:rgba(255,255,255,.075);
+  --ui-border-strong:rgba(255,138,194,.24);
+}
+html{background:#090b0f}
+body{overflow-x:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+.wrap{position:relative;z-index:2}
+.top{gap:18px}
+.top h1{max-width:820px}
+.actions{min-width:0}
+.actions button,.actions select{min-height:38px}
+button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focus-visible{
+  outline:2px solid rgba(229,138,184,.72);
+  outline-offset:2px;
+}
+.metrics{gap:10px}
+.metric,.card,.panel{
+  border-color:var(--ui-border);
+  border-radius:var(--ui-radius);
+}
+.metric{
+  transition:transform .18s ease,border-color .18s ease,background .18s ease;
+}
+.metric:hover{
+  transform:translateY(-2px);
+  border-color:rgba(229,138,184,.18);
+}
+.nav{
+  position:sticky;
+  top:10px;
+  z-index:20;
+  padding:5px;
+  border:1px solid rgba(255,255,255,.055);
+  border-radius:13px;
+  background:rgba(9,11,15,.78);
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+}
+.nav-btn{border-radius:9px}
+.nav-btn.active{box-shadow:inset 0 -2px 0 rgba(229,138,184,.8),0 4px 18px rgba(229,138,184,.08)}
+.top5-grid{align-items:stretch}
+.pick-card{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  contain:layout paint;
+}
+.pick-card .pick-chart{margin-top:auto}
+.pick-head,.pick-stats,.pick-foot{min-width:0}
+.pick-symbol{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pick-stats{gap:8px}
+.pick-stat{min-width:0}
+.pick-stat .v{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chart-panel{overflow:hidden}
+.chart-wrap{min-width:0;overflow:hidden}
+#chart{max-width:100%;image-rendering:auto}
+.chart-tools{min-width:0;flex-wrap:wrap}
+.chart-tools select,.chart-tools button{flex:0 0 auto}
+.table-wrap{border-radius:var(--ui-radius-sm);-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+.table-wrap table{min-width:720px}
+.panel-head{gap:12px;min-width:0}
+.panel-head>div{min-width:0}
+.small{line-height:1.5}
+.pill{white-space:nowrap}
+.top5-empty{min-height:190px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+#pointer-aura{mix-blend-mode:screen}
+#anime-cursor{transform-origin:8px 8px}
+@media(max-width:1180px){
+  .wrap{padding-left:20px;padding-right:20px}
+  .top5-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  .wrap{padding:15px 12px 34px}
+  .top{gap:12px}
+  .actions{width:100%;justify-content:space-between}
+  .actions button,.actions select{flex:1 1 auto}
+  .nav{top:6px;margin-inline:-2px;overflow-x:auto;scrollbar-width:none}
+  .nav::-webkit-scrollbar{display:none}
+  .nav-btn{flex:0 0 auto}
+  .metrics{gap:8px}
+  .metric{padding:11px}
+  .metric .value{font-size:17px}
+  .decision-deck{gap:10px}
+  .trace-grid{grid-template-columns:1fr 1fr}
+  .top5-grid{grid-template-columns:1fr;gap:10px}
+  .pick-head{padding:14px 14px 9px}
+  .pick-foot{padding:9px 14px 12px}
+  .pick-chart{height:190px}
+  .chart-panel{min-height:420px}
+  #chart{height:350px}
+}
+@media(max-width:460px){
+  .actions{display:grid;grid-template-columns:1fr 1fr}
+  .actions .stamp{grid-column:1/-1;order:-1}
+  .trace-grid{grid-template-columns:1fr}
+  .pick-stats{grid-template-columns:1fr 1fr}
+  .focus-only .top5-title{font-size:22px}
+  .chart-panel{min-height:390px}
+  #chart{height:315px}
+}
+@media(prefers-reduced-motion:reduce){
+  .metric,.pick-card{transition:none!important}
+  .nav{scroll-behavior:auto}
+}
+</style>
+
 </head>
 <body>
 <canvas id="ambient-canvas" aria-hidden="true"></canvas>
@@ -1712,7 +1823,7 @@ function drawChart(history, signals, journal, realtimePrice){
   let lo=Math.min(...lows), hi=Math.max(...highs);
   const rp=Number(realtimePrice); if(Number.isFinite(rp)){lo=Math.min(lo,rp);hi=Math.max(hi,rp);}
   const span=Math.max(hi-lo,1e-9), extra=span*.08; lo-=extra; hi+=extra;
-  const xAt=i=>pad.l+(i/(bars.length-1))*cw;
+  const xAt=i=>bars.length===1?pad.l+cw/2:pad.l+(i/(bars.length-1))*cw;
   const yAt=v=>pad.t+(1-(v-lo)/(hi-lo))*ch;
 
   ctx.strokeStyle="rgba(132,146,164,.14)";ctx.lineWidth=1;
