@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.26
+- Reworked the primary dashboard as a signal-only results surface: no visible system metrics, connection status, universe coverage or deployment badges.
+- Simplified the decision inspector to show only signal outputs, supporting metrics and machine reasons.
+- Removed redundant diagnostic UI from the main DOM instead of merely hiding it.
+
 ## 0.9.25
 - Removed redundant Top 5/history capsules and inspector trace pills to reduce dashboard visual noise.
 - Replaced document click ripples with bounded primary-pointer ripples, eliminating synthetic `(0, 0)` keyboard-click effects in the top-left corner.
