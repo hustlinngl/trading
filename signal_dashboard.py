@@ -737,7 +737,7 @@ button:hover::after,select:hover::after{transform:translateX(120%) rotate(10deg)
 button:hover,select:hover{border-color:rgba(255,120,200,.58);box-shadow:0 0 0 1px rgba(255,120,200,.08),0 0 28px rgba(255,120,200,.14);transform:translateY(-1px)}
 button:active,select:active{transform:translateY(1px) scale(.985)}
 button:focus-visible,select:focus-visible{outline:none;border-color:var(--pink);box-shadow:0 0 0 2px rgba(255,120,200,.17),0 0 28px rgba(255,120,200,.18)}
-.nav{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px;margin:0 0 12px;border:1px solid rgba(255,120,200,.13);border-radius:14px;background:rgba(15,9,21,.56);backdrop-filter:blur(16px);box-shadow:var(--glow-pink)}
+.nav{position:sticky;top:10px;z-index:20;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px;margin:0 0 16px;border:1px solid rgba(255,120,200,.13);border-radius:14px;background:rgba(15,9,21,.72);backdrop-filter:blur(16px);box-shadow:var(--glow-pink)}
 .nav-btn{font-size:10px;letter-spacing:.14em;text-transform:uppercase;padding:8px 11px;color:var(--muted);background:transparent;border-color:transparent;box-shadow:none}
 .nav-btn:hover{color:var(--text);background:rgba(255,120,200,.07)}
 .nav-btn.active{color:#fff;border-color:rgba(255,120,200,.34);background:linear-gradient(180deg,rgba(255,120,200,.12),rgba(255,120,200,.04));box-shadow:inset 0 0 18px rgba(255,120,200,.06),0 0 18px rgba(255,120,200,.13)}
@@ -1007,6 +1007,9 @@ h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
 .sub{max-width:820px;font-size:13px;color:#858f9c}
 .actions button{background:#121820;border-color:#28303b;border-radius:9px;box-shadow:none;padding:8px 12px}
 .actions button:hover{border-color:#3c4654;box-shadow:0 4px 16px rgba(0,0,0,.18);transform:none}
+.nav{position:sticky;top:10px;z-index:20;padding:6px;background:rgba(14,18,24,.88);border-color:#242c36;box-shadow:0 10px 26px rgba(0,0,0,.18)}
+.nav-btn{border-radius:7px;padding:7px 10px}
+.nav-btn.active{background:#171d25;border-color:#313b49;box-shadow:inset 0 0 0 1px rgba(229,138,184,.10);color:#f3f5f8}
 .actions button::after{display:none}
 .connection-stamp{display:inline-flex;align-items:center;gap:7px;color:#77818e;font-size:10px;letter-spacing:.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
 .connection-stamp::before{content:"";width:6px;height:6px;border-radius:50%;background:#66717d;box-shadow:0 0 0 3px rgba(102,113,125,.08)}
@@ -1205,8 +1208,9 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
     </div>
   </div>
 
-  <nav class="nav legacy-hidden" id="nav" aria-label="Sezioni dashboard">
-    <button class="nav-btn active" data-target="market">Market</button>
+  <nav class="nav" id="nav" aria-label="Sezioni dashboard">
+    <button class="nav-btn active" data-target="focusDashboard">Overview</button>
+    <button class="nav-btn" data-target="market">Market</button>
     <button class="nav-btn" data-target="detail">Intelligence</button>
     <button class="nav-btn" data-target="journal">Journal</button>
     <button class="nav-btn" data-target="timeline">Timeline</button>
@@ -1456,8 +1460,14 @@ function initNavigation(){
   const buttons=Array.from(document.querySelectorAll(".nav-btn"));
   const ids=buttons.map(b=>b.dataset.target).filter(Boolean);
   const setActive=id=>buttons.forEach(b=>b.classList.toggle("active",b.dataset.target===id));
+  const reveal=id=>{
+    const el=$(id);
+    if(!el)return null;
+    if(el.classList.contains("legacy-hidden"))el.classList.remove("legacy-hidden");
+    return el;
+  };
   buttons.forEach(b=>b.addEventListener("click",()=>{
-    const el=$(b.dataset.target);if(!el)return;
+    const el=reveal(b.dataset.target);if(!el)return;
     el.scrollIntoView({behavior:"smooth",block:"start"});setActive(b.dataset.target);
   }));
   if("IntersectionObserver" in window){
@@ -1575,7 +1585,10 @@ function bindFocusCards(){
       openInspector(symbol);
       renderDecisionDeck((state.data&&state.data.signals)||[]);
       const market=$("market");
-      if(market)market.scrollIntoView({behavior:"smooth",block:"start"});
+      if(market){
+        market.classList.remove("legacy-hidden");
+        market.scrollIntoView({behavior:"smooth",block:"start"});
+      }
       loadHistory(symbol);
     };
     card.onclick=open;
