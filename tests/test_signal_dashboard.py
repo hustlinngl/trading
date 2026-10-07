@@ -589,3 +589,12 @@ def test_signal_terminal_inspector_is_accessible_and_lifecycle_wired():
     assert 'drawer.classList.add("legacy-hidden")' in html
     assert 'state.inspectorReturnFocus' in html
     assert 'e.key!=="Tab"' in html
+
+def test_signal_terminal_interactive_rows_use_canonical_market_list():
+    import signal_dashboard as terminal_mod
+
+    html = terminal_mod.HTML
+    assert 'input.options' not in html
+    assert 'new Set(state.marketSymbols||[])' in html
+    assert 'role="button" aria-label="Apri '+esc(r.symbol)+' nel market inspector' in html
+    assert 'row.onkeydown=e=>' in html
