@@ -4,6 +4,7 @@ import time
 from typing import Iterable
 from pathlib import Path
 import pandas as pd
+import numpy as np
 
 def timeframe_offset(timeframe: str):
     tf = str(timeframe).strip().lower()
@@ -14,6 +15,22 @@ def timeframe_offset(timeframe: str):
     n, unit = int(m.group(1)), m.group(2)
     unit = {'m':'min'}.get(unit, unit)
     return pd.tseries.frequencies.to_offset(f'{n}{unit}')
+
+def _deduplicate_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    dup_mask=df.index.duplicated(keep=False)
+    if not dup_mask.any():
+        return df.sort_index()
+    dupes=df.loc[dup_mask].sort_index()
+    compare_cols=[c for c in ('open','high','low','close','volume') if c in dupes.columns]
+    for ts, group in dupes.groupby(level=0, sort=False):
+        first=group.iloc[0]
+        for col in compare_cols:
+            vals=pd.to_numeric(group[col],errors='coerce').to_numpy(float)
+            if not bool(np.all((np.isclose(vals, vals[0], rtol=1e-10, atol=1e-12, equal_nan=True)))):
+                raise ValueError(f"Conflicting duplicate OHLCV timestamp: {ts} column={col}")
+    return df[~df.index.duplicated(keep='last')].sort_index()
 
 try:
     import ccxt
@@ -53,9 +70,9 @@ def fetch_ohlcv(exchange, symbol: str, timeframe: str, limit: int = 8000, since:
         time.sleep(max(float(getattr(exchange, 'rateLimit', 0)) / 1000.0, 0.0))
     df = pd.DataFrame(all_rows, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
     if df.empty: raise RuntimeError(f'No OHLCV returned for {symbol} {timeframe}')
-    df = df.drop_duplicates('timestamp').sort_values('timestamp')
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
     df = df.set_index('timestamp').astype(float)
+    df = _deduplicate_ohlcv(df)
     return df if include_unclosed else drop_unclosed_tail(df, timeframe)
 
 def drop_unclosed_tail(df: pd.DataFrame, timeframe: str, now: pd.Timestamp | None = None) -> pd.DataFrame:
@@ -75,8 +92,11 @@ def cache_ohlcv(df: pd.DataFrame, path: str | Path) -> None:
     df.to_parquet(tmp, index=True)
     tmp.replace(p)
 
-def load_cached(path: str | Path) -> pd.DataFrame:
-    return pd.read_parquet(path).sort_index()
+def load_cached(path: str | Path, timeframe: str | None = None, *, drop_unclosed: bool = True) -> pd.DataFrame:
+    df=pd.read_parquet(path).sort_index()
+    if df.index.has_duplicates:
+        df=_deduplicate_ohlcv(df)
+    return drop_unclosed_tail(df,timeframe) if drop_unclosed and timeframe else df
 
 def fetch_ohlcv_incremental(exchange, symbol: str, timeframe: str, cache_path: str | Path, target_bars: int = 8000, include_unclosed: bool = False) -> pd.DataFrame:
     path = Path(cache_path)
@@ -84,7 +104,7 @@ def fetch_ohlcv_incremental(exchange, symbol: str, timeframe: str, cache_path: s
         df = fetch_ohlcv(exchange, symbol, timeframe, target_bars, include_unclosed=include_unclosed)
         cache_ohlcv(df, path)
         return df
-    cached = load_cached(path)
+    cached = load_cached(path, timeframe=timeframe, drop_unclosed=not include_unclosed)
     if cached.empty:
         df = fetch_ohlcv(exchange, symbol, timeframe, target_bars, include_unclosed=include_unclosed)
         cache_ohlcv(df, path)
@@ -101,7 +121,7 @@ def fetch_ohlcv_incremental(exchange, symbol: str, timeframe: str, cache_path: s
             if fresh.empty:
                 break
             combined = pd.concat([combined, fresh]).sort_index()
-            combined = combined[~combined.index.duplicated(keep='last')]
+            combined = _deduplicate_ohlcv(combined)
             last = int(fresh.index[-1].timestamp() * 1000)
             next_cursor = last + tf_ms
             if next_cursor <= cursor or len(fresh) < need:
@@ -116,7 +136,9 @@ def fetch_ohlcv_incremental(exchange, symbol: str, timeframe: str, cache_path: s
         cache_ohlcv(combined, path)
         return combined
     except Exception:
-        return cached.iloc[-target_bars:]
+        # Preserve last known-good cache, but keep it subject to the closed-bar policy.
+        fallback=cached.iloc[-target_bars:]
+        return drop_unclosed_tail(fallback,timeframe) if not include_unclosed else fallback
 
 def asof_join(base: pd.DataFrame, source: pd.DataFrame, *, source_time: str = "timestamp", columns: Iterable[str] | None = None, lag: pd.Timedelta | None = None, tolerance: pd.Timedelta | None = None, suffix: str = "") -> pd.DataFrame:
     if base.empty or source.empty:
