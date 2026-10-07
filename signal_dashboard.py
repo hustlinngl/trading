@@ -11,8 +11,10 @@ serves signals and tracks their subsequent outcomes.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
+import os
 import sys
 import threading
 import time
@@ -33,6 +35,17 @@ ROOT = _runtime_root()
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
+
+
+def _state_root(resource_root: Path) -> Path:
+    """Return a writable runtime directory without making the app require an elevated install."""
+    if not getattr(sys, "frozen", False):
+        return resource_root
+    if os.name == "nt":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local")
+    else:
+        base = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state")
+    return base / "SakuraSignalTerminal"
 
 from ai_trading_lab import __version__
 from ai_trading_lab.config import Settings, load_settings
@@ -104,12 +117,14 @@ class SignalTerminal:
     ):
         self.settings = settings
         self.root = Path(root).resolve()
+        self.state_root = _state_root(self.root)
         self.refresh_seconds = max(10, int(refresh_seconds))
         self.history_bars = max(80, int(history_bars))
         self._lock = threading.Lock()
         self._cached_state: dict | None = None
         self._cached_at = 0.0
-        self.root.joinpath("logs").mkdir(parents=True, exist_ok=True)
+        self.state_root.joinpath("logs").mkdir(parents=True, exist_ok=True)
+        self.state_root.joinpath("data", "history").mkdir(parents=True, exist_ok=True)
 
     def _bundle_snapshot(self, symbol: str) -> dict:
         bundle = resolve_signal_bundle(self.settings, self.root, symbol)
@@ -216,42 +231,96 @@ class SignalTerminal:
         except Exception as exc:
             return {"symbol": symbol, "error": f"{type(exc).__name__}:{exc}"}
 
+    @staticmethod
+    def _history_slug(symbol: str, timeframe: str) -> str:
+        return symbol.replace("/", "_").replace(":", "_") + "_" + timeframe
+
+    def _history_from_csv(self, path: Path, bars: int, source: str) -> dict:
+        if not path.exists():
+            return {"symbol": "", "bars": [], "error": "history_cache_missing"}
+        rows = []
+        with path.open("r", encoding="utf-8", newline="") as fh:
+            reader = csv.DictReader(fh)
+            for row in reader:
+                try:
+                    ts_raw = row.get("timestamp") or row.get("datetime") or row.get(reader.fieldnames[0])
+                    stamp = datetime.fromisoformat(str(ts_raw).replace("Z", "+00:00"))
+                    if stamp.tzinfo is None:
+                        stamp = stamp.replace(tzinfo=timezone.utc)
+                    rows.append({
+                        "t": int(stamp.timestamp() * 1000),
+                        "o": float(row["open"]),
+                        "h": float(row["high"]),
+                        "l": float(row["low"]),
+                        "c": float(row["close"]),
+                        "v": float(row["volume"]),
+                    })
+                except (KeyError, TypeError, ValueError, IndexError):
+                    continue
+        rows = rows[-bars:]
+        return {
+            "symbol": path.stem.rsplit("_", 1)[0].replace("_", "/"),
+            "timeframe": self.settings.timeframe,
+            "bars": rows,
+            "source": source,
+            "cache_path": str(path),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
     def _history(self, symbol: str, limit: int | None = None) -> dict:
-        bars = max(80, min(1000, int(limit or self.history_bars)))
+        bars = max(80, min(4000, int(limit or self.history_bars)))
+        slug = self._history_slug(symbol, self.settings.timeframe)
+        bundled = self.root / "data" / "historical" / f"{slug}.csv"
+        writable = self.state_root / "data" / "history" / f"{slug}.csv"
         try:
             exchange = exchange_client(
                 getattr(self.settings, "exchange", "binance"), sandbox=False
             )
-            frame = fetch_ohlcv(
-                exchange, symbol, self.settings.timeframe, bars
-            )
-            if frame is None or frame.empty:
-                return {"symbol": symbol, "bars": [], "error": "empty_data"}
-            candles = [
-                {
-                    "t": int(ts.timestamp() * 1000),
-                    "o": float(open_),
-                    "h": float(high),
-                    "l": float(low),
-                    "c": float(close),
-                    "v": float(volume),
+            frame = fetch_ohlcv(exchange, symbol, self.settings.timeframe, bars)
+            if frame is not None and not frame.empty:
+                writable.parent.mkdir(parents=True, exist_ok=True)
+                frame.tail(bars).to_csv(writable, index_label="timestamp")
+                candles = [
+                    {
+                        "t": int(ts.timestamp() * 1000),
+                        "o": float(open_),
+                        "h": float(high),
+                        "l": float(low),
+                        "c": float(close),
+                        "v": float(volume),
+                    }
+                    for ts, open_, high, low, close, volume in frame.tail(bars)[
+                        ["open", "high", "low", "close", "volume"]
+                    ].itertuples(index=True, name=None)
+                ]
+                return {
+                    "symbol": symbol,
+                    "timeframe": self.settings.timeframe,
+                    "bars": candles,
+                    "source": "network",
+                    "cache_path": str(writable),
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
                 }
-                for ts, open_, high, low, close, volume in frame.tail(bars)[
-                    ["open", "high", "low", "close", "volume"]
-                ].itertuples(index=True, name=None)
-            ]
-            return {
-                "symbol": symbol,
-                "timeframe": self.settings.timeframe,
-                "bars": candles,
-                "generated_at": datetime.now(timezone.utc).isoformat(),
-            }
         except Exception as exc:
-            return {
-                "symbol": symbol,
-                "bars": [],
-                "error": f"{type(exc).__name__}:{exc}",
-            }
+            network_error = f"{type(exc).__name__}:{exc}"
+        else:
+            network_error = "empty_data"
+
+        for path, source in ((writable, "local_cache"), (bundled, "bundled")):
+            if path.exists():
+                fallback = self._history_from_csv(path, bars, source)
+                if fallback.get("bars"):
+                    fallback["network_error"] = network_error
+                    return fallback
+
+        return {
+            "symbol": symbol,
+            "timeframe": self.settings.timeframe,
+            "bars": [],
+            "source": "unavailable",
+            "error": network_error,
+            "hint": "No historical cache is available. Reconnect to the internet or rebuild the portable package.",
+        }
 
     def _journal(self) -> list[dict]:
         path = self.root / "logs" / "live_signal_history.jsonl"
@@ -296,12 +365,12 @@ class SignalTerminal:
                 assessments = scan_top5(
                     self.settings, str(self.root), symbols=symbols
                 )
-                write_live_snapshot(assessments, str(self.root))
-                append_live_signal_history(assessments, str(self.root))
+                write_live_snapshot(assessments, str(self.state_root))
+                append_live_signal_history(assessments, str(self.state_root))
 
                 try:
                     outcome_update = update_live_signal_outcomes(
-                        self.settings, str(self.root)
+                        self.settings, str(self.state_root)
                     )
                 except Exception as exc:
                     outcome_update = {
@@ -1677,7 +1746,16 @@ def main():
         )
         return
 
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(terminal))
+    try:
+        server = ThreadingHTTPServer((args.host, args.port), make_handler(terminal))
+    except OSError as exc:
+        if args.port != DEFAULT_PORT:
+            raise
+        # A stale terminal or another local service may already occupy 8765.
+        server = ThreadingHTTPServer((args.host, 0), make_handler(terminal))
+        args.port = int(server.server_address[1])
+        if sys.stdout is not None:
+            print(f"Port {DEFAULT_PORT} was busy ({exc}); using {args.port}.")
     url = (
         f"http://{args.host if args.host not in {'0.0.0.0','::'} else '127.0.0.1'}:"
         f"{args.port}/"
