@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 from .features import make_features
+from .labels import triple_barrier_labels
 from .growth import GrowthRegistry
 from .experience_graph import ExperienceGraph
 from .causal_memory import MatchedEventMemory
@@ -66,7 +67,9 @@ class CognitionEngine:
         return [Hypothesis(hashlib.sha256((family+"|"+thesis).encode()).hexdigest()[:12],thesis,family,complexity,utcnow(),evidence) for family,thesis,complexity in bases]
 
     def evaluate_feature_families(self,df):
-        x,y,ret=make_features(df,self.settings.horizon_bars,external_feature_lag_bars=getattr(self.settings,"external_feature_lag_bars",1))
+        x,_,_=make_features(df,self.settings.horizon_bars,external_feature_lag_bars=getattr(self.settings,"external_feature_lag_bars",1))
+        tb=triple_barrier_labels(df,self.settings.horizon_bars,self.settings.pt_atr,self.settings.sl_atr)
+        y=tb['tb_label'].gt(0).astype(float).where(tb['tb_label'].notna()); ret=tb['tb_return']
         if x.empty: return []
         valid=y.notna() & ret.notna(); x=x.loc[valid]; y=y.loc[valid].astype(int); ret=ret.loc[valid].astype(float)
         if len(x)<200: return []
