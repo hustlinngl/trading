@@ -62,3 +62,26 @@ def test_short_signal_uses_upper_bound_for_directional_uncertainty():
     action, reasons = live_signal_gate(robust, settings)
     assert action == "SHORT"
     assert reasons == []
+
+
+def test_short_economic_hurdle_includes_borrow():
+    from ai_trading_lab.policy import decide_actions
+    settings = replace(
+        load_settings("config.yaml"),
+        short_borrow_bps_per_bar=20.0,
+        max_holding_bars=96,
+    )
+    idx = pd.date_range("2026-01-01", periods=1, freq="15min", tz="UTC")
+    pred = pd.DataFrame({
+        "p_up": [0.08],
+        "expected_return": [-0.015],
+        "expected_return_lcb": [-0.020],
+        "expected_return_ucb": [-0.010],
+        "model_disagreement": [0.0],
+        "return_disagreement": [0.0],
+    }, index=idx)
+    analog = pd.DataFrame({"agreement":[0.9],"edge":[-0.01],"dispersion":[0.0],"n":[32]}, index=idx)
+    regime = pd.Series(["high_vol_down"], index=idx)
+    action, score = decide_actions(pred, regime, analog, np.array([0.9]), settings)
+    assert action.iloc[0] in {"SHORT","FLAT"}
+    assert score.attrs["economic_hurdle_bps"] >= 20.0 * 96
