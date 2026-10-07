@@ -13,7 +13,7 @@ from ai_trading_lab.efficiency import (
 from ai_trading_lab.live import LiveAssessment
 from ai_trading_lab.live_tracker import LiveTracker
 from ai_trading_lab.state_fusion import fuse_live_dashboard_state
-from ai_trading_lab.streaming import StreamEvent
+from ai_trading_lab.streaming import BinancePublicStream, StreamEvent
 
 
 def test_live_tracker_async_queue_merges_and_exposes_state():
@@ -40,7 +40,7 @@ def test_live_tracker_async_queue_merges_and_exposes_state():
             time.sleep(0.01)
 
         assert state["symbol"] == "BTC/USDT"
-        assert state["price"] == 100.0
+        assert state["price"] == 100.1
         assert state["ask"] == 100.2
         assert state["mid"] == 100.1
         assert state["sequence"] == 1
@@ -75,6 +75,18 @@ def test_live_tracker_realtime_price_prefers_quote_mid_over_last_trade():
     assert state["mid"] == 100.1
     assert state["last_trade_price"] == 100.4
     assert state["trade_side"] == "SELL"
+
+
+def test_binance_public_stream_routes_market_types_to_matching_endpoints():
+    spot = BinancePublicStream("BTC/USDT")
+    usdm = BinancePublicStream("ETH/USDT:USDT")
+    coinm = BinancePublicStream("BTC/USD:BTC")
+    dated_coinm = BinancePublicStream("BTC/USD:BTC-251226")
+
+    assert "stream.binance.com:9443/stream" in spot.url()
+    assert "fstream.binance.com/public/stream" in usdm.url()
+    assert "dstream.binance.com/stream" in coinm.url()
+    assert "btcusd_251226@bookticker" in dated_coinm.url()
 
 
 def test_live_scan_uses_bounded_parallel_workers(monkeypatch, tmp_path):
