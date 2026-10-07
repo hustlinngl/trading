@@ -15,7 +15,12 @@ def triple_barrier_labels(df: pd.DataFrame, horizon: int = 8, pt_atr: float = 1.
         label=0; realized=close[end_i]/entry-1
         for j in range(entry_i,end_i+1):
             hit_up=high[j]>=upper; hit_down=low[j]<=lower
-            if hit_up and hit_down: label=-1; realized=lower/entry-1; break
+            if hit_up and hit_down:
+                # Intrabar OHLC cannot tell which barrier was touched first.
+                # Mark the outcome ambiguous instead of injecting a directional bias.
+                label=np.nan
+                realized=np.nan
+                break
             if hit_up: label=1; realized=upper/entry-1; break
             if hit_down: label=-1; realized=lower/entry-1; break
         out[i]=label; ret[i]=realized
