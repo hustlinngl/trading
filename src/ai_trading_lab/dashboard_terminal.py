@@ -50,11 +50,7 @@ def _state_root(resource_root: Path) -> Path:
 from ai_trading_lab import __version__
 from ai_trading_lab.config import Settings, load_settings
 from ai_trading_lab.data import exchange_client, fetch_ohlcv
-from ai_trading_lab.deployment import (
-    bundle_artifact_fingerprint,
-    bundle_compatibility,
-    resolve_signal_bundle,
-)
+from ai_trading_lab.deployment import bundle_compatibility, resolve_signal_bundle
 from ai_trading_lab.live import (
     LiveAssessment,
     append_live_signal_history,
@@ -134,20 +130,6 @@ class SignalTerminal:
             max_queue=20_000,
             max_symbols=64,
         )
-        self._risk_engine = RiskEngine(
-            initial_cash=float(getattr(settings, "initial_cash", 10_000.0)),
-            risk_per_trade=float(getattr(settings, "risk_per_trade", 0.005)),
-            max_position_pct=float(getattr(settings, "max_position_pct", 0.25)),
-            max_daily_loss_pct=float(getattr(settings, "max_daily_loss_pct", 0.02)),
-            stop_atr_mult=float(getattr(settings, "stop_atr_mult", 1.8)),
-            rr=float(getattr(settings, "take_profit_rr", 2.2)),
-            fee_bps=float(getattr(settings, "fee_bps", 0.0)),
-            slippage_bps=float(getattr(settings, "slippage_bps", 0.0)),
-            max_participation_pct=float(getattr(settings, "max_participation_pct", 0.10)),
-            impact_bps_per_sqrt=float(getattr(settings, "impact_bps_per_sqrt", 0.0)),
-            short_borrow_bps_per_bar=float(getattr(settings, "short_borrow_bps_per_bar", 0.0)),
-            max_holding_bars=int(getattr(settings, "max_holding_bars", 96)),
-        )
         self._scan_thread = None
         self._scan_started_at = 0.0
         self._scan_progress: dict[str, object] = {}
@@ -168,133 +150,6 @@ class SignalTerminal:
     def close(self) -> None:
         self._live_tracker.close()
 
-    def _risk_context(self) -> dict:
-        """Read published risk telemetry when available; never invent live exposure."""
-        for candidate in (
-            self.state_root / "logs" / "risk_state.json",
-            self.state_root / "data" / "risk_state.json",
-        ):
-            if candidate.exists():
-                value = _read_json(candidate)
-                if value:
-                    return value
-        return {}
-
-    def _cognition_snapshot(self, symbol: str) -> dict:
-        cached = self._cached_state or {}
-        row = next(
-            (
-                item for item in (cached.get("signals") or [])
-                if str(item.get("symbol")) == str(symbol)
-            ),
-            None,
-        )
-        if not isinstance(row, dict):
-            lines = [
-                "Policy gate → nessun verdetto modello disponibile per questo asset."
-            ]
-            return {
-                "source": "policy.live_signal_gate",
-                "symbol": symbol,
-                "lines": lines,
-                "signature": f"{symbol}:empty",
-            }
-
-        decision = row.get("decision") or {}
-        signal = str(row.get("signal") or "WAIT")
-        p_up = decision.get("p_up")
-        p_dir = None
-        try:
-            if p_up is not None:
-                p_dir = float(p_up) if signal != "SHORT" else 1.0 - float(p_up)
-        except (TypeError, ValueError):
-            p_dir = None
-
-        edge = decision.get("robust_directional_edge")
-        score = decision.get("score")
-        regime = decision.get("regime") or "unknown"
-        lines = []
-        if p_dir is not None and edge is not None and score is not None:
-            lines.append(
-                f"Policy gate → {signal} · p_dir={p_dir:.1%} · "
-                f"robust_edge={float(edge):+.3%} · score={float(score):.2f}"
-            )
-        else:
-            lines.append(f"Policy gate → {signal} · gate metrics parziali")
-        lines.append(f"Regime prior → {regime}")
-
-        analog_edge = decision.get("analog_edge")
-        analog_agreement = decision.get("analog_agreement")
-        if analog_edge is not None or analog_agreement is not None:
-            evidence = "Memory evidence → "
-            if analog_edge is not None:
-                evidence += f"edge={float(analog_edge):+.3%} "
-            if analog_agreement is not None:
-                evidence += f"agreement={float(analog_agreement):.1%}"
-            lines.append(evidence.rstrip())
-
-        reasons = row.get("reason_codes") or []
-        if reasons:
-            lines.append("Gate reasons → " + " · ".join(str(x) for x in reasons[:4]))
-
-        signature = "|".join(lines)
-        return {
-            "source": "policy.live_signal_gate",
-            "symbol": symbol,
-            "lines": lines,
-            "signature": signature,
-            "updated_at": cached.get("generated_at"),
-        }
-
-    def _live_dashboard_payload(self, symbol: str | None = None) -> dict:
-        """Return the latest fused state without coupling rendering to the stream."""
-        selected = str(symbol or self.settings.symbol).strip().upper()
-        self._live_tracker.add_symbols([selected])
-        self._live_tracker.start()
-        stream_state = dict(self._live_tracker.get_current_state(selected))
-
-        cached = self._cached_state or {}
-        row = next(
-            (
-                item for item in (cached.get("signals") or [])
-                if str(item.get("symbol")) == selected
-            ),
-            {},
-        )
-        decision = row.get("decision") or {}
-        if stream_state.get("price") is None:
-            stream_state["price"] = (
-                row.get("realtime_price")
-                if isinstance(row, dict)
-                else None
-            )
-        quote = row.get("quote") if isinstance(row, dict) else {}
-        if isinstance(quote, dict):
-            stream_state.setdefault("bid", quote.get("bid"))
-            stream_state.setdefault("ask", quote.get("ask"))
-
-        risk_context = self._risk_context()
-        if "configured_slippage_bps" not in risk_context:
-            risk_context["configured_slippage_bps"] = float(
-                getattr(self.settings, "slippage_bps", 0.0)
-            )
-
-        return fuse_live_dashboard_state(
-            symbol=selected,
-            price=stream_state.get("price"),
-            market_snapshot=stream_state,
-            regime_context={
-                "raw_label": decision.get("regime"),
-                "persistence": decision.get("regime_persistence"),
-                "confidence": decision.get("regime_confidence"),
-                "source": "engine.regimes",
-            },
-            risk_engine=self._risk_engine,
-            risk_context=risk_context,
-            execution_telemetry=None,
-            cognition=self._cognition_snapshot(selected),
-        )
-
     def _get_exchange(self):
         """Reuse one read-only CCXT client; offline failure falls back to bundled data."""
         if self._exchange is not None:
@@ -308,54 +163,6 @@ class SignalTerminal:
             self._exchange = None
             self._exchange_error = f"{type(exc).__name__}:{exc}"
         return self._exchange
-
-    def _bundle_snapshot(self, symbol: str) -> dict:
-        bundle = resolve_signal_bundle(self.settings, self.root, symbol)
-        info = {
-            "symbol": symbol,
-            "bundle": str(bundle),
-            "compatible": False,
-            "compatibility": "not_checked",
-            "manifest_ready": False,
-            "training_rows": None,
-            "training_end": None,
-            "data_fingerprint": None,
-            "model_semantics_fingerprint": None,
-            "deployment_semantics_fingerprint": None,
-            "artifact_fingerprint": None,
-            "holdout": {},
-        }
-        meta = _read_json(bundle / "base_training_meta.json")
-        manifest = _read_json(bundle / "deployment_manifest.json")
-        holdout = _read_json(bundle / "base_holdout_report.json")
-        info.update(
-            {
-                "training_rows": meta.get("rows"),
-                "training_end": meta.get("end"),
-                "data_fingerprint": meta.get("data_fingerprint"),
-                "model_semantics_fingerprint": meta.get("model_semantics_fingerprint"),
-                "deployment_semantics_fingerprint": meta.get(
-                    "deployment_semantics_fingerprint"
-                ),
-                "manifest_ready": bool(manifest.get("ready", False)),
-                "holdout": holdout.get(
-                    "holdout", holdout if isinstance(holdout, dict) else {}
-                ),
-            }
-        )
-        try:
-            info["artifact_fingerprint"] = bundle_artifact_fingerprint(bundle)
-        except Exception:
-            pass
-        try:
-            compatible, reason = bundle_compatibility(
-                self.settings, bundle, symbol
-            )
-            info["compatible"] = bool(compatible)
-            info["compatibility"] = reason
-        except Exception as exc:
-            info["compatibility"] = f"{type(exc).__name__}:{exc}"
-        return info
 
     @staticmethod
     def _timeframe_minutes(timeframe: str) -> float:
@@ -837,8 +644,6 @@ class SignalTerminal:
                     "terminal_ready": False,
                 },
                 "signals": [],
-                "journal": self._journal(),
-                "outcome_update": {},
                 "error": f"{type(exc).__name__}:{exc}",
                 "notes": [
                     "Il terminale ha eseguito un fail-closed.",
@@ -1575,7 +1380,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
 
 <script>
 const $ = (id) => document.getElementById(id);
-const state = { data:null, history:null, selected:null, historyRequest:0, focusRequest:0, focusHistories:{}, live:null, cognitionSignature:"" };
+const state = { data:null, history:null, selected:null, historyRequest:0, focusRequest:0, focusHistories:{} };
 
 function initAmbientFX(){
   const canvas=$("ambient-canvas");
@@ -1790,25 +1595,6 @@ function renderLiveCognition(cognition){
   if(consoleEl)consoleEl.textContent=lines.join("\\n");
   patchLiveNode("cognitionStamp",cognition&&cognition.updated_at?new Date(cognition.updated_at).toLocaleTimeString():"LIVE");
 }
-function applyLiveDelta(payload){
-  if(!payload||typeof payload!=="object")return;
-  state.live=payload;
-  const market=payload.market||{},regime=payload.regime||{},risk=payload.risk||{},efficiency=payload.efficiency||{};
-  const symbol=String(payload.symbol||state.selected||"—");
-  patchLiveNode("kpiPrice",liveNum(payload.price??market.price,2));
-  patchLiveNode("kpiPriceMeta","stream · "+symbol);
-  patchLiveNode("kpiRegime",String(regime.label||"Unknown"),regime.direction==="DOWN"?"bad":regime.direction==="UP"?"good":"warn");
-  patchLiveNode("kpiRegimeMeta","confidence · "+livePct(regime.confidence,1)+" · "+(regime.source||"—"));
-  patchLiveNode("kpiRisk","DD "+livePct(risk.drawdown,2)+" · Lev "+(risk.leverage==null?"—":liveNum(risk.leverage,2)+"x"));
-  patchLiveNode("kpiRiskMeta",risk.current_exposure_available?"RiskEngine · live exposure":"RiskEngine · telemetry unavailable");
-  const slip=efficiency.slippage_bps==null?"—":liveNum(efficiency.slippage_bps,2)+"bp";
-  const lat=efficiency.latency_ms==null?"—":liveNum(efficiency.latency_ms,0)+"ms";
-  patchLiveNode("kpiEfficiency","SLIP "+slip+" · LAT "+lat);
-  patchLiveNode("kpiEfficiencyMeta",efficiency.execution_available?("execution telemetry · n="+(efficiency.sample_count||0)):(efficiency.source||"telemetry unavailable"));
-  patchLiveNode("liveTelemetryStamp","LIVE DATA · "+symbol+" · seq "+(market.sequence||0));
-  renderLiveCognition(payload.cognition||{});
-}
-
 function age(v){return v==null||Number.isNaN(Number(v))?"—":Number(v).toFixed(1)+"m";}
 function cls(sig){return sig==="LONG"?"signal-long":sig==="SHORT"?"signal-short":sig==="WAIT"?"signal-wait":"signal-flat";}
 function drawPickChart(canvas,history,signal){
@@ -2400,23 +2186,9 @@ let refreshBusy=false;
 let refreshTimer=null;
 let livePollBusy=false;
 let livePollTimer=null;
-async function pollLiveDelta(){
-  if(livePollBusy){livePollTimer=setTimeout(pollLiveDelta,350);return;}
-  livePollBusy=true;
-  try{
-    const symbol=state.selected||((state.data&&state.data.config&&state.data.config.primary_symbol)||"");
-    const res=await fetch("/api/live?symbol="+encodeURIComponent(symbol),{cache:"no-store"});
-    if(!res.ok)throw new Error("live status "+res.status);
-    applyLiveDelta(await res.json());
-  }catch(_){
-    // Preserve the last known state; live telemetry is fail-soft.
-  }finally{
-    livePollBusy=false;
-    clearTimeout(livePollTimer);
-    livePollTimer=setTimeout(pollLiveDelta,350);
-  }
+function startLiveDeltaLoop(){
+  // Signal state is refreshed through /api/state; no separate telemetry channel exists.
 }
-function startLiveDeltaLoop(){clearTimeout(livePollTimer);pollLiveDelta();}
 async function refresh(force=false){
   if(refreshBusy)return;
   refreshBusy=true;
@@ -2470,7 +2242,7 @@ initSakuraMusic();
 initAmbientFX();
 initAlphaMotion();
 refresh(true);
-startLiveDeltaLoop();
+// direct signal refresh is driven by refresh();
 </script>
 </body>
 </html>
@@ -2505,18 +2277,6 @@ def make_handler(terminal: SignalTerminal):
             if parsed.path == "/api/health":
                 body = json.dumps(
                     terminal.health(), separators=(",", ":")
-                ).encode("utf-8")
-                self._send(
-                    body, content_type="application/json; charset=utf-8"
-                )
-                return
-            if parsed.path == "/api/live":
-                query = parse_qs(parsed.query)
-                symbol = query.get("symbol", [terminal.settings.symbol])[0]
-                body = json.dumps(
-                    terminal._live_dashboard_payload(symbol),
-                    separators=(",", ":"),
-                    allow_nan=False,
                 ).encode("utf-8")
                 self._send(
                     body, content_type="application/json; charset=utf-8"
