@@ -104,7 +104,7 @@ def _promote_asset_bundle(asset_dir: str | Path, champion_dir: str | Path = "mod
     src = Path(asset_dir)
     dst = Path(champion_dir)
     dst.mkdir(parents=True, exist_ok=True)
-    for name in ("signal_model.joblib", "analog_memory.joblib", "regime_detector.joblib", "meta_regime_detector.joblib", "meta_policy.joblib", "feature_efficiency.joblib", "base_training_meta.json", "deployment_manifest.json"):
+    for name in ("signal_model.joblib", "analog_memory.joblib", "regime_detector.joblib", "meta_regime_detector.joblib", "meta_policy.joblib", "feature_efficiency.joblib", "trade_window_specialist.joblib", "trade_window_training_report.json", "base_training_meta.json", "base_holdout_report.json", "deployment_manifest.json"):
         path = src / name
         if path.exists():
             shutil.copy2(path, dst / name)
@@ -117,8 +117,6 @@ def train_base_asset(df, settings, *, promote_champion: bool = False):
     asset_dir = asset_model_dir(settings.symbol)
     asset_dir.mkdir(parents=True, exist_ok=True)
     eng.save(asset_dir)
-    if promote_champion:
-        _promote_asset_bundle(asset_dir)
     (asset_dir / "base_training_meta.json").write_text(json.dumps({
         "symbol": settings.symbol, "rows": int(len(df)),
         "start": str(df.index.min()), "end": str(df.index.max()),
@@ -127,6 +125,8 @@ def train_base_asset(df, settings, *, promote_champion: bool = False):
         "trained_at": datetime.now(timezone.utc).isoformat(),
     }, indent=2), encoding="utf-8")
     refresh_deployment_manifest(settings)
+    if promote_champion:
+        _promote_asset_bundle(asset_dir)
     return asset_dir, art
 
 
@@ -385,7 +385,7 @@ def main():
         from .dataset import read_market_file
         df = read_market_file(args.data_path)
     elif cache_path.exists():
-        df=load_cached(cache_path)
+        df=load_cached(cache_path, timeframe=s.timeframe)
     else:
         ex = exchange_client(getattr(s, 'exchange', 'binance'), sandbox=False)
         df=fetch_ohlcv(ex,s.symbol,s.timeframe,s.lookback_bars); cache_ohlcv(df,cache_path)
