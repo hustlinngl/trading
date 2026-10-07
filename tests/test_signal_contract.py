@@ -108,3 +108,17 @@ def test_public_contract_does_not_leak_internal_fields():
     assert "regime" not in public
     assert "analog_edge" not in public
     assert "meta_success" not in public
+
+
+def test_engine_rejects_a_missing_required_feature_before_prediction():
+    import pandas as pd
+    from types import SimpleNamespace
+
+    from ai_trading_lab.engine import AdaptiveEngine
+
+    engine = AdaptiveEngine.__new__(AdaptiveEngine)
+    engine.model = SimpleNamespace(feature_cols=["feature_a", "feature_b"])
+    features = pd.DataFrame({"feature_a": [1.0]})
+
+    with pytest.raises(ValueError, match=r"missing_live_features:feature_b"):
+        engine.predict_frame(features, strict=True)
