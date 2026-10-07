@@ -191,7 +191,7 @@ jobs:
           Copy-Item .\SETUP_WINDOWS.md .\release\SETUP_WINDOWS.md
           Copy-Item .\README.md .\release\README.md
           @"
-          Sakura Signal Terminal 0.9.27
+          Sakura Signal Terminal 0.9.28
           
           Launch SakuraSignalTerminal.exe.
           The executable is read-only: it exposes no order endpoints.
