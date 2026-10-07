@@ -1,4 +1,4 @@
-# Research status — 0.9.15
+# Research status — 0.9.16
 
 ## Current state
 
@@ -24,6 +24,8 @@ The system is deliberately research-first. No result in this repository should b
 The 0.9.15 hardening pass restores the missing benchmark command, fixes master-tuning cache partitioning, repairs paper/live inference, wires strict signal safety gates, makes configured cost-stress multipliers effective, and adds CI/regression coverage.
 
 The current code remains suitable for research and paper/signal operation. A production-grade market edge remains **unproven** until fresh multi-year, multi-asset real-data evidence passes the full protocol.
+
+The 0.9.16 pre-alpha terminal is now the stable read-only observation layer: realtime ticker data is visually overlaid, while model inference continues to use the closed-candle path. Signal history is tracked prequentially so the next alpha UI can build on a stable, provenance-aware data contract.
 
 ## Required deployment gate
 
