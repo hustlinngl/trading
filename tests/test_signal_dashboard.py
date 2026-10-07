@@ -19,6 +19,17 @@ def test_dashboard_responsive_ui_and_chart_edge_case():
     assert "focus-visible" in html
 
 
+def test_dashboard_market_explorer_ui():
+    import signal_dashboard as terminal_mod
+
+    html = terminal_mod.HTML
+    assert 'id="marketSymbols"' in html
+    assert 'id="loadAsset"' in html
+    assert 'id="asset" list="marketSymbols"' in html
+    assert "state.marketSymbols" in html
+    assert "openSelectedAsset" in html
+
+
 def test_signal_terminal_builds_read_only_state(tmp_path, monkeypatch):
     import signal_dashboard as terminal_mod
 
