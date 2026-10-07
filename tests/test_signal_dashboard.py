@@ -119,3 +119,34 @@ def test_signal_terminal_realtime_quotes_are_best_effort(tmp_path, monkeypatch):
     assert out["BTC/USDT"]["price"] == 123.45
     assert out["BTC/USDT"]["bid"] == 123.40
     assert out["BTC/USDT"]["ask"] == 123.50
+
+
+def test_signal_terminal_bulk_ticker_path_and_browser_escape(tmp_path, monkeypatch):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    settings.live_symbols = ("BTC/USDT",)
+    class FakeExchange:
+        def fetch_tickers(self, symbols):
+            return {
+                "BTC/USDT": {
+                    "last": 321.0,
+                    "bid": 320.9,
+                    "ask": 321.1,
+                    "timestamp": 123,
+                    "quoteVolume": 1000.0,
+                }
+            }
+
+        def fetch_ticker(self, symbol):
+            raise AssertionError("bulk ticker path should avoid per-symbol fallback")
+
+    monkeypatch.setattr(
+        terminal_mod, "exchange_client", lambda *args, **kwargs: FakeExchange()
+    )
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path)
+    out = terminal._quotes(["BTC/USDT"])
+    assert out["BTC/USDT"]["price"] == 321.0
+    assert '\"function esc' not in terminal_mod.HTML
+    assert 'c==="&amp;"' not in terminal_mod.HTML
+    assert 'function esc(v){return String(v??"").replace(/[&<>"]/g' in terminal_mod.HTML
