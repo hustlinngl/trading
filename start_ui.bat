@@ -4,13 +4,13 @@ cd /d "%~dp0"
 
 where py >nul 2>nul
 if %errorlevel%==0 (
-  py -3 -m pip install -e ".[dashboard]"
+  py -3 -m pip install -e .
   if errorlevel 1 exit /b %errorlevel%
-  py -3 -m streamlit run app.py
+  py -3 signal_dashboard.py
   exit /b %errorlevel%
 )
 
-python -m pip install -e ".[dashboard]"
+python -m pip install -e .
 if errorlevel 1 exit /b %errorlevel%
-python -m streamlit run app.py
+python signal_dashboard.py
 endlocal
