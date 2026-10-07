@@ -134,7 +134,6 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
         lcb=float(last.get("expected_return_lcb", last.get("expected_return", 0.0)))
         ucb=float(last.get("expected_return_ucb", last.get("expected_return", 0.0)))
         robust_edge=lcb if signal=="LONG" else (-ucb if signal=="SHORT" else 0.0)
-        robust_edge-=float(funding.get("funding_cost_return",0.0) or 0.0)
         score=float(last.get("score", 0.0))
         tw_conf=float(last.get("trade_window_confidence", 0.0))
         probability_floor=max(
