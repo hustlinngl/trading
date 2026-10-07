@@ -18,6 +18,7 @@ class LiveAssessment:
     symbol:str; timestamp:str; status:str; signal:str; confidence:float; expected_return:float; price:float; reason_codes:list[str]; data_fingerprint:str
     details:dict[str, object] = field(default_factory=dict)
     correlation_returns:pd.Series|None = field(default=None, repr=False, compare=False)
+    horizon_bars: int = 8
 
     def to_dict(self):
         # Only the direct signal contract crosses the live/dashboard boundary.
@@ -28,7 +29,7 @@ class LiveAssessment:
             confidence=self.confidence,
             expected_return=self.expected_return,
             price=self.price,
-            horizon_bars=int(getattr(self, "_horizon_bars", 1)),
+            horizon_bars=int(self.horizon_bars),
             reason=";".join(str(x) for x in self.reason_codes),
         ).to_dict()
         payload["status"]=self.status
@@ -227,9 +228,8 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
             symbol,stamp,"SIGNAL" if signal!="FLAT" else "WAIT",signal,
             confidence,float(last.get("expected_return",0.0)),price,
             (reasons + ([str(last.get("trade_window_reason"))] if tw.get("trade_window_reason") not in {None, "ok", "disabled"} and str(last.get("trade_window_reason")) else []) or quality_reasons),fp,
-            details,correlation_returns=correlation_returns,
+            details,correlation_returns=correlation_returns,horizon_bars=int(getattr(settings,"horizon_bars",8)),
         )
-        object.__setattr__(assessment,"_horizon_bars",int(getattr(settings,"horizon_bars",8)))
         return assessment
     except Exception as exc:
         return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[f"runtime:{type(exc).__name__}:{exc}"],fp)
