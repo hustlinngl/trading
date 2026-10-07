@@ -1374,66 +1374,14 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
     </div>
   </div>
 
-  <nav class="nav" id="nav" aria-label="Sezioni dashboard">
-    <button class="nav-btn active" data-target="focusDashboard" aria-current="page">Signals</button>
-    <button class="nav-btn" data-target="market">Market</button>
-  </nav>
-
   <section class="focus-only" id="focusDashboard" aria-live="polite">
     <div class="top5-head"><div><div class="top5-title">Top 5 signals</div></div></div>
     <div id="top5Grid" class="top5-grid"></div>
     <div id="liveDataFallback" class="live-data-grid" hidden></div>
   </section>
 
-  <section class="legacy-hidden decision-deck" id="decisionDeck" aria-live="polite">
-    <div class="decision-hero">
-      <div class="decision-top">
-        <div>
-          <div class="eyebrow">Decision deck</div>
-          <div id="deckSignal" class="decision-signal signal-wait">WAIT</div>
-          <div id="deckMeta" class="decision-meta">Seleziona un asset per ispezionare il verdetto.</div>
-        </div>
-      </div>
-      <div class="decision-stats">
-        <div class="mini-stat"><div class="k">Prezzo</div><div class="v num" id="deckPrice">—</div></div>
-        <div class="mini-stat"><div class="k">Confidence</div><div class="v" id="deckConfidence">—</div></div>
-        <div class="mini-stat"><div class="k">Robust edge</div><div class="v" id="deckEdge">—</div></div>
-      </div>
-      <div class="reason-strip" id="deckReasons"></div>
-
-      <div class="operator-stage" aria-hidden="true">
-        <div class="operator-scan"></div>
-        <svg viewBox="0 0 140 140" fill="none">
-          <defs>
-            <linearGradient id="opHair" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#ffb0e0"/><stop offset=".55" stop-color="#ff78c8"/><stop offset="1" stop-color="#c85cff"/>
-            </linearGradient>
-            <linearGradient id="opSuit" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#34283e"/><stop offset="1" stop-color="#17131e"/>
-            </linearGradient>
-          </defs>
-          <circle cx="73" cy="67" r="45" fill="rgba(255,120,200,.035)" stroke="rgba(255,120,200,.18)" stroke-dasharray="2 6"/>
-          <path d="M37 70c0-28 13-44 34-44 23 0 35 18 38 42-6-7-13-11-21-11-6 0-12 2-18 7-6-7-13-10-20-9-4 0-8 5-13 15Z" fill="url(#opHair)"/>
-          <path d="M48 61c4-11 12-17 24-17 12 0 20 7 25 18l-4 24c-5 11-12 17-22 17-11 0-19-6-24-17l1-25Z" fill="#f7d2cb"/>
-          <path d="M53 61c5-8 11-12 18-12 9 0 16 4 22 12-5-3-10-4-15-4-7 0-14 2-21 7l-4-3Z" fill="#ff8fd1"/>
-          <ellipse cx="63" cy="72" rx="3.2" ry="4.2" fill="#37253a"/><ellipse cx="84" cy="72" rx="3.2" ry="4.2" fill="#37253a"/>
-          <circle cx="64" cy="71" r="1.1" fill="#fff"/><circle cx="85" cy="71" r="1.1" fill="#fff"/>
-          <path d="M69 83c3 2 7 2 10 0" stroke="#a95380" stroke-width="1.6" stroke-linecap="round"/>
-          <path d="M45 90c7 10 18 14 30 14 11 0 22-5 30-14 4 3 8 9 11 17l8 23H32l7-23c2-7 4-13 6-17Z" fill="url(#opSuit)" stroke="rgba(255,120,200,.22)"/>
-          <path d="M69 104l4 8 5-8 7 13-12 13-11-13 7-13Z" fill="#ff78c8" fill-opacity=".22"/>
-          <path d="M31 126h78" stroke="#7de8ff" stroke-opacity=".35" stroke-width="1"/>
-          <path d="M111 39l12 8-8 3 7 9-15-4 4-8-8-4 8-4Z" fill="#7de8ff" fill-opacity=".16" stroke="#7de8ff" stroke-opacity=".4"/>
-        </svg>
-        <span class="operator-caption">OPERATOR // WATCHING</span>
-      </div>    </div>
-    <div class="trace">
-      <div class="trace-head"><div><div class="title">Decision trace</div><div class="small">Ogni blocco è una condizione osservabile del gate.</div></div><div class="small" id="deckAsset">—</div></div>
-      <div class="trace-grid" id="traceGrid"></div>
-    </div>
-  </section>
-
   <div class="layout">
-    <div class="legacy-hidden panel chart-panel" id="market">
+    <div class="panel chart-panel" id="market">
       <div class="panel-head">
         <div>
           <div class="title">Market cockpit</div>
@@ -1473,52 +1421,6 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
         </table>
       </div>
     </div>
-  </div>
-
-
-  <div class="legacy-hidden panel" id="timeline">
-    <div class="panel-head">
-      <div>
-        <div class="title">Signal timeline</div>
-        <div class="small">Prediction → observation → maturity → outcome. La timeline mostra cosa il modello ha dichiarato e cosa è già stato osservato.</div>
-      </div>
-      <div class="small" id="timelineStatus">—</div>
-    </div>
-    <div class="timeline-shell">
-      <div id="signalTimeline" class="signal-timeline"></div>
-    </div>
-  </div>
-
-  <div class="legacy-hidden panel" id="detail">
-    <div class="panel-head">
-      <div><div class="title">Signal detail</div><div class="small">Stessa decisione usata dal motore: robust edge, meta, memoria, regime e duration gate.</div></div>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr><th>Asset</th><th>Segnale</th><th>Prezzo</th><th>Robust edge</th><th>Score</th><th>Meta</th><th>Memoria</th><th>Regime</th><th>Duration</th><th>Dati</th><th>Provenienza</th></tr>
-        </thead>
-        <tbody id="detailRows"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="legacy-hidden panel" id="journal">
-    <div class="panel-head">
-      <div><div class="title">Signal journal</div><div class="small">Ogni segnale resta osservabile fino alla maturazione del suo orizzonte; gli esiti sono risolti con candele successive.</div></div>
-      <div class="small" id="journalStatus"></div>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Ora</th><th>Asset</th><th>Segnale</th><th>Conf.</th><th>Atteso</th><th>Esito</th><th>Realizzato</th><th>Holding</th></tr></thead>
-        <tbody id="journalRows"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="legacy-hidden panel" id="evidencePanel">
-    <div class="panel-head"><div><div class="title">Training / deployment evidence</div><div class="small">Un segnale è ammissibile solo con bundle compatibile e provenance coerente.</div></div></div>
-    <div class="grid3" id="evidence"></div>
   </div>
 
 
@@ -1851,128 +1753,6 @@ function populateAssets(signals, extraSymbols=[]){
 }
 
 
-function renderRadar(signals){
-  $("radarRows").innerHTML=signals.map(r=>{
-    const price=r.realtime_price??r.price;
-    return '<tr class="interactive-row" data-symbol="'+esc(r.symbol)+'" tabindex="0" role="button" aria-label="Apri '+esc(r.symbol)+' nel market inspector"><td><strong>'+esc(r.symbol)+'</strong><div class="small">'+num(price,2)+'</div></td>'+
-      '<td><span class="signal '+cls(r.signal)+'">'+esc(r.signal||"WAIT")+'</span></td>'+
-      '<td class="num">'+pct(r.confidence,1)+'</td></tr>';
-  }).join("")||'<tr><td colspan="3" class="small">Nessun asset disponibile.</td></tr>';
-}
-
-function renderDetail(signals){
-  $("detailRows").innerHTML=signals.map(r=>{
-    const d=r.decision||{}, b=r.bundle||{};
-    const robust=(d.expected_return_lcb==null)?"—":num(d.expected_return_lcb,4)+" / "+num(d.expected_return_ucb,4);
-    const duration=d.trade_window_direction?esc(d.trade_window_direction)+" · "+pct(d.trade_window_confidence,0):"—";
-    const why=(r.reason_codes||[]).map(x=>'<span class="reason">'+esc(x)+'</span>').join("");
-    return '<tr class="interactive-row" data-symbol="'+esc(r.symbol)+'" tabindex="0" role="button" aria-label="Apri '+esc(r.symbol)+' nel market inspector">'+
-      '<td><strong>'+esc(r.symbol)+'</strong></td>'+
-      '<td><span class="signal '+cls(r.signal)+'">'+esc(r.signal||"WAIT")+'</span><div class="small">'+esc(r.status||"WAIT")+'</div></td>'+
-      '<td class="num">'+num(r.realtime_price??r.price,2)+'</td>'+
-      '<td class="num">'+robust+'</td>'+
-      '<td class="num">'+num(d.score,3)+'</td>'+
-      '<td class="num">'+pct(d.meta_success,0)+'</td>'+
-      '<td class="num">'+(d.analog_n==null?"—":esc(d.analog_n))+" · "+pct(d.analog_agreement,0)+'</td>'+
-      '<td>'+esc(d.regime||"—")+'</td>'+
-      '<td>'+duration+'</td>'+
-      '<td class="num">'+age(d.data_age_minutes)+'</td>'+
-      '<td>'+why+'</td>'+
-    '</tr>';
-  }).join("")||'<tr><td colspan="11" class="small">Nessun dato.</td></tr>';
-}
-
-function renderJournal(data){
-  const rows=data.journal||[];
-  $("journalRows").innerHTML=rows.length?rows.slice().reverse().map(r=>{
-    const o=r.outcome||"OPEN";
-    const oc=o==="WIN"?"good":o==="LOSS"?"bad":"warn";
-    return '<tr>'+
-      '<td class="small">'+esc(r.data_timestamp?new Date(r.data_timestamp).toLocaleString():"—")+'</td>'+
-      '<td><strong>'+esc(r.symbol||"—")+'</strong></td>'+
-      '<td><span class="signal '+cls(r.signal||"WAIT")+'">'+esc(r.signal||"WAIT")+'</span></td>'+
-      '<td class="num">'+pct(r.confidence,1)+'</td>'+
-      '<td class="num">'+pct(r.expected_return,2)+'</td>'+
-      '<td class="'+oc+'"><strong>'+esc(o)+'</strong></td>'+
-      '<td class="num">'+pct(r.realized_return,2)+'</td>'+
-      '<td class="num">'+(r.holding_hours==null?"—":num(r.holding_hours,1)+"h")+'</td>'+
-    '</tr>';
-  }).join(""):'<tr><td colspan="8" class="small">Nessun segnale storico ancora registrato.</td></tr>';
-  const u=data.outcome_update||{};
-  $("journalStatus").textContent=u.error?"feedback non disponibile":("aggiornati "+(u.updated??0)+" · aperti "+(u.open??0)+" · chiusi "+(u.closed??0));
-}
-
-function renderEvidence(signals){
-  $("evidence").innerHTML=signals.map(r=>{
-    const b=r.bundle||{}, h=b.holdout||{};
-    return '<div class="info">'+
-      '<div class="label">'+esc(r.symbol)+'</div>'+
-
-      '<div class="small">training: '+esc(b.training_rows??"—")+' · holdout: '+pct(h.total_return??h.net_compounded_return,2)+'</div>'+
-      '<div class="small">dataset: '+esc((b.data_fingerprint||"—").slice(0,12))+'</div>'+
-      '<div class="small">artefatti: '+esc((b.artifact_fingerprint||"—").slice(0,12))+'</div>'+
-      '<div class="small">compatibilità: '+esc(b.compatibility||"—")+'</div>'+
-    '</div>';
-  }).join("")||'<div class="info">Nessuna evidenza bundle disponibile.</div>';
-}
-
-function bindInteractiveRows(){
-  document.querySelectorAll(".interactive-row").forEach(row=>{
-    const open=()=>{
-      const symbol=row.dataset.symbol;
-      const input=$("asset");
-      if(!symbol || !input)return;
-      const allowed=new Set(state.marketSymbols||[]);
-      if(allowed.size && !allowed.has(symbol))return;
-      state.selected=symbol;
-      input.value=symbol;
-      loadHistory(symbol);
-      const market=$("market");
-      if(market)market.scrollIntoView({behavior:"smooth",block:"start"});
-      openInspector(symbol);
-      renderTimeline((state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[]);
-    };
-    row.onclick=open;
-    row.onkeydown=e=>{
-      if((e.key==="Enter"||e.key===" ") && row.getAttribute("role")==="button"){
-        e.preventDefault();open();
-      }
-    };
-  });
-}
-
-function renderDecisionDeck(signals){
-  const active=signals.find(x=>x.symbol===state.selected)||signals[0];
-  const deckSignal=$("deckSignal"), deckMeta=$("deckMeta"), deck=$("decisionDeck");
-  const trace=$("traceGrid"), reasons=$("deckReasons");
-  if(!active){
-    deckSignal.textContent="—";deckSignal.className="decision-signal signal-flat";
-    deckMeta.textContent="Seleziona un risultato dalla Top 5.";
-    $("deckAsset").textContent="—";$("deckPrice").textContent="—";$("deckConfidence").textContent="—";$("deckEdge").textContent="—";
-    trace.innerHTML="";reasons.innerHTML="";return;
-  }
-  const d=active.decision||{};
-  const sig=active.signal||"WAIT";
-  deckSignal.textContent=sig;deckSignal.className="decision-signal "+cls(sig);
-  deck.className="decision-deck signal-live-"+sig.toLowerCase();
-  deck.classList.remove("decision-flash");void deck.offsetWidth;deck.classList.add("decision-flash");
-  deckMeta.textContent=sig==="LONG"?"Bias LONG · risultato del modello":sig==="SHORT"?"Bias SHORT · risultato del modello":"Nessun segnale attivo";
-  $("deckAsset").textContent=active.symbol||"—";
-  $("deckPrice").textContent=num(active.realtime_price??active.price,2);
-  $("deckConfidence").textContent=pct(active.confidence,1);
-  $("deckEdge").textContent=d.expected_return_lcb==null?"—":num(d.expected_return_lcb,4)+" / "+num(d.expected_return_ucb,4);
-  reasons.innerHTML=(active.reason_codes||[]).slice(0,8).map(x=>'<span class="reason">'+esc(x)+'</span>').join("");
-  const nodes=[
-    ["p(up)",d.p_up==null?"—":pct(d.p_up,1)],
-    ["Meta success",d.meta_success==null?"—":pct(d.meta_success,0)],
-    ["Memory",d.analog_n==null?"—":String(d.analog_n)+" · "+pct(d.analog_agreement,0)],
-    ["Duration",d.trade_window_confidence==null?"—":pct(d.trade_window_confidence,0)+" · "+esc(d.trade_window_direction||"—")],
-    ["Expected return",d.expected_return==null?"—":pct(d.expected_return,2)],
-    ["Score",d.score==null?"—":num(d.score,3)]
-  ];
-  trace.innerHTML=nodes.map(n=>'<div class="trace-node"><strong>'+esc(n[0])+'</strong><span>'+esc(n[1])+'</span></div>').join("");
-}
-
 function timeLabel(v){
   if(!v)return "—";
   const d=new Date(v); return Number.isFinite(d.getTime())?d.toLocaleString():String(v);
@@ -1980,59 +1760,6 @@ function timeLabel(v){
 function signalOutcomeClass(outcome){
   return outcome==="WIN"?"good":outcome==="LOSS"?"bad":outcome==="TIMEOUT"?"warn":"";
 }
-function renderTimeline(signals,journal){
-  const box=$("signalTimeline");
-  if(!box)return;
-  const selected=state.selected || (signals[0]&&signals[0].symbol);
-  const active=(signals||[]).find(x=>x.symbol===selected);
-  const records=(journal||[])
-    .filter(r=>r.symbol===selected)
-    .slice()
-    .sort((a,b)=>new Date(a.data_timestamp||a.timestamp||0)-new Date(b.data_timestamp||b.timestamp||0))
-    .slice(-8)
-    .reverse();
-  if(active && !records.some(r=>String(r.data_timestamp||r.timestamp)===String(active.timestamp))){
-    records.unshift({...active,data_timestamp:active.timestamp,outcome:"OPEN",_live:true});
-  }
-  if(!records.length){
-    box.innerHTML='<div class="timeline-empty">Nessuna traccia prequentiale disponibile per l’asset selezionato.</div>';
-    $("timelineStatus").textContent="nessun evento";
-    return;
-  }
-  $("timelineStatus").textContent=records.length+" tracce · "+(selected||"—");
-  box.innerHTML=records.map((r,i)=>{
-    const outcome=r.outcome||"OPEN";
-    const closed=outcome!=="OPEN" && outcome!=="EARLY";
-    const mature=r.holding_hours!=null || closed;
-    const signal=r.signal||"WAIT";
-    const forecast=r.expected_return==null?"—":pct(r.expected_return,2);
-    const support=r.confidence==null?"—":pct(r.confidence,1);
-    const held=r.holding_hours==null?"in corso":num(r.holding_hours,1)+"h";
-    const outcomeLabel=closed?outcome:(outcome==="EARLY"?"EARLY":"OPEN");
-    return '<article class="timeline-entry interactive-row" data-symbol="'+esc(r.symbol||selected||"")+'" tabindex="0" role="button">'+
-      '<div class="timeline-top">'+
-        '<div class="timeline-title"><span class="signal '+cls(signal)+'">'+esc(signal)+'</span><strong>'+esc(r.symbol||selected||"—")+'</strong><span class="small">confidence '+support+'</span></div>'+
-        '<div class="small">'+esc(timeLabel(r.data_timestamp||r.timestamp))+'</div>'+
-      '</div>'+
-      '<div class="timeline-stages">'+
-        '<div class="timeline-stage ready"><i class="stage-dot"></i><strong>Prediction</strong><span>edge '+esc(forecast)+' · score '+num((r.details&&r.details.score)||r.score,3)+'</span></div>'+
-        '<div class="timeline-stage '+(closed?'ready':'pending')+'"><i class="stage-dot"></i><strong>Observation</strong><span>'+esc(closed?"market observed":"waiting for later candles")+'</span></div>'+
-        '<div class="timeline-stage '+(mature?'final':'pending')+'"><i class="stage-dot"></i><strong>Maturity</strong><span>'+esc(held)+'</span></div>'+
-        '<div class="timeline-stage '+(closed?'ready':'pending')+'"><i class="stage-dot"></i><strong>Outcome</strong><span class="'+signalOutcomeClass(outcome)+'">'+esc(outcomeLabel)+'</span></div>'+
-      '</div>'+
-    '</article>';
-  }).join("");
-  bindTimelineRows();
-}
-
-function bindTimelineRows(){
-  document.querySelectorAll("#signalTimeline .interactive-row").forEach(row=>{
-    const open=()=>{const symbol=row.dataset.symbol;if(symbol)openInspector(symbol);};
-    row.onclick=open;
-    row.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();open();}};
-  });
-}
-
 function openInspector(symbol){
   state.inspectorReturnFocus=document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const active=((state.data&&state.data.signals)||[]).find(x=>x.symbol===symbol);
@@ -2171,14 +1898,13 @@ function render(data){
   if(!data.ok){
     $("radarRows").innerHTML='<tr><td colspan="3"><span class="signal signal-wait">WAIT</span></td></tr>';
     $("detailRows").innerHTML='<tr><td colspan="11" class="small">'+esc(data.error||"Terminale non disponibile")+'</td></tr>';
-    renderJournal(data); renderEvidence([]); renderDecisionDeck([]);
     return;
   }
   const signals=data.signals||[];
   const liveSymbols=((data.market_data||{}).symbols||[]).filter(Boolean);
   populateAssets(signals,liveSymbols);
   renderLiveData(data);
-  renderRadar(signals); renderDetail(signals); renderJournal(data); renderEvidence(signals); renderDecisionDeck(signals); renderTimeline(signals,data.journal||[]); bindInteractiveRows();
+  // The UI has one operational surface: signal results. Asset details live in the inspector + market cockpit.
   const notes=(data.notes||[]).join(" · ");
   $("footer").textContent=notes+" · refresh "+data.refresh_seconds+"s · scan "+data.scan_seconds+"s";
   if(!data.scan_in_progress && state.selected && !state.history)loadHistory(state.selected);
