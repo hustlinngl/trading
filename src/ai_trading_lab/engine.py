@@ -118,8 +118,12 @@ class AdaptiveEngine:
         if features is None or features.empty: return pd.DataFrame(index=getattr(features,'index',None))
         if strict:
             last=features.iloc[-1]
-            missing=[c for c in self.model.feature_cols if c in features.columns and pd.isna(last.get(c))]
-            if missing: raise ValueError('missing_live_features:' + ','.join(missing))
+            required_features=tuple(self.model.feature_cols or ())
+            missing_columns=[c for c in required_features if c not in features.columns]
+            missing_values=[c for c in required_features if c in features.columns and pd.isna(last.get(c))]
+            missing=list(dict.fromkeys(missing_columns + missing_values))
+            if missing:
+                raise ValueError('missing_live_features:' + ','.join(missing))
         base=self.model.predict(features); regime=self.regimes.transform(features); persistence=self.regimes.persistence(features); probs=self.regimes.semantic_probabilities(features); analog=self.memory.query_many(features)
         meta_detector=self.meta_regimes if self.meta_regimes is not None else self.regimes
         meta_regime=meta_detector.transform(features); meta_persistence=meta_detector.persistence(features); meta_probs=meta_detector.semantic_probabilities(features)
