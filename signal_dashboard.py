@@ -1224,8 +1224,6 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
     <button class="nav-btn" data-target="evidencePanel">Evidence</button>
   </nav>
 
-  <div class="metrics legacy-hidden" id="metrics"></div>
-
   <section class="focus-only" id="focusDashboard" aria-live="polite">
     <div class="top5-head">
       <div><div class="eyebrow">Current signals</div><div class="top5-title">Top 5</div><div class="top5-sub">Solo LONG e SHORT attivi. I dati restano separati dalla decisione del modello.</div></div>
@@ -1704,21 +1702,6 @@ function populateAssets(signals){
   if(input)input.value=state.selected||"";
 }
 
-function renderMetrics(data){
-  const s=data.summary||{};
-  const q=data.config||{};
-  $("metrics").innerHTML=[
-    ["Terminal",data.ok?"READY":"WAIT",data.ok?"good":"bad"],
-    ["Segnali",s.active_signals??0,s.active_signals>0?"good":""],
-    ["WAIT",s.waits??0,s.waits>0?"warn":""],
-    ["Universe",s.universe_total??0,s.universe_total>0?"":"warn"],
-    ["Eligible models",s.model_eligible_assets??s.model_backed_assets??0,s.model_eligible_assets>0?"":"warn"],
-    ["Dati freschi",s.fresh_data_assets??0,s.fresh_data_assets>0?"good":"warn"]
-  ].map(x=>'<div class="card"><div class="metric-label">'+x[0]+'</div><div class="metric-value '+x[2]+'">'+esc(x[1])+'</div></div>').join("");
-  const source=q.scan_source==="exchange"?"market map live":q.scan_source==="local_fallback"?"local fallback":"—";
-  const types=Object.entries(q.market_counts||{}).sort((a,b)=>String(a[0]).localeCompare(String(b[0]))).slice(0,4).map(([k,v])=>k+" "+v).join(" · ");
-
-}
 
 function renderRadar(signals){
   $("radarRows").innerHTML=signals.map(r=>{
@@ -1815,12 +1798,12 @@ function renderDecisionDeck(signals){
   const deckSignal=$("deckSignal"), deckMeta=$("deckMeta"), deck=$("decisionDeck");
   const trace=$("traceGrid"), reasons=$("deckReasons");
   if(!active){
-    deckSignal.textContent="WAIT";deckSignal.className="decision-signal signal-wait";
-    deckMeta.textContent="Nessun asset disponibile.";
+    deckSignal.textContent="—";deckSignal.className="decision-signal signal-flat";
+    deckMeta.textContent="Seleziona un risultato dalla Top 5.";
     $("deckAsset").textContent="—";$("deckPrice").textContent="—";$("deckConfidence").textContent="—";$("deckEdge").textContent="—";
     trace.innerHTML="";reasons.innerHTML="";return;
   }
-  const d=active.decision||{}, b=active.bundle||{};
+  const d=active.decision||{};
   const sig=active.signal||"WAIT";
   deckSignal.textContent=sig;deckSignal.className="decision-signal "+cls(sig);
   deck.className="decision-deck signal-live-"+sig.toLowerCase();
@@ -1832,16 +1815,15 @@ function renderDecisionDeck(signals){
   $("deckEdge").textContent=d.expected_return_lcb==null?"—":num(d.expected_return_lcb,4)+" / "+num(d.expected_return_ucb,4);
   reasons.innerHTML=(active.reason_codes||[]).slice(0,8).map(x=>'<span class="reason">'+esc(x)+'</span>').join("");
   const nodes=[
-    ["Data",d.data_age_minutes!=null && Number(d.data_age_minutes)<=30,"fresh · "+age(d.data_age_minutes)],
-    ["Model",d.p_up!=null,"p(up) · "+pct(d.p_up,1)],
-    ["Meta",d.meta_success!=null && Number(d.meta_success)>=.5,"success · "+pct(d.meta_success,0)],
-    ["Memory",d.analog_n!=null && Number(d.analog_n)>0,"support · "+esc(d.analog_n??"—")],
-    ["Duration",!!d.trade_window_ready,d.trade_window_ready?"ready":"wait"],
-    ["Deployment",!!b.compatible&&!!b.manifest_ready,b.compatible&&b.manifest_ready?"compatible":"wait"]
+    ["p(up)",d.p_up==null?"—":pct(d.p_up,1)],
+    ["Meta success",d.meta_success==null?"—":pct(d.meta_success,0)],
+    ["Memory",d.analog_n==null?"—":String(d.analog_n)+" · "+pct(d.analog_agreement,0)],
+    ["Duration",d.trade_window_confidence==null?"—":pct(d.trade_window_confidence,0)+" · "+esc(d.trade_window_direction||"—")],
+    ["Expected return",d.expected_return==null?"—":pct(d.expected_return,2)],
+    ["Score",d.score==null?"—":num(d.score,3)]
   ];
-  trace.innerHTML=nodes.map(n=>'<div class="trace-node"><strong>'+n[0]+'</strong><span>'+n[2]+'</span></div>').join("");
+  trace.innerHTML=nodes.map(n=>'<div class="trace-node"><strong>'+esc(n[0])+'</strong><span>'+esc(n[1])+'</span></div>').join("");
 }
-
 
 function timeLabel(v){
   if(!v)return "—";
@@ -1984,7 +1966,6 @@ function initInspector(){
 
 function render(data){
   state.data=data;
-  renderMetrics(data);
   if(!data.ok){
     $("radarRows").innerHTML='<tr><td colspan="3"><span class="signal signal-wait">WAIT</span></td></tr>';
     $("detailRows").innerHTML='<tr><td colspan="11" class="small">'+esc(data.error||"Terminale non disponibile")+'</td></tr>';
