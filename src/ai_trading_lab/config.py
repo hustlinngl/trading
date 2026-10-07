@@ -91,6 +91,8 @@ class Settings:
     live_max_symbols: int = 0
     live_market_types: tuple[str, ...] = ("spot", "swap", "future", "margin", "option")
     live_default_refresh_seconds: int = 60
+    # Bounded I/O concurrency for full-universe live assessments.
+    live_scan_workers: int = 6
     seed: int = 42
     walk_forward_train_bars: int = 3000
     walk_forward_test_bars: int = 500
@@ -258,6 +260,7 @@ def load_settings(path: str | Path = ROOT / "config.yaml") -> Settings:
         live_max_symbols=int(d.get("live_max_symbols", 0)),
         live_market_types=tuple(d.get("live_market_types", ("spot", "swap", "future", "margin", "option")) or ("spot", "swap", "future", "margin")),
         live_default_refresh_seconds=int(d.get("live_default_refresh_seconds", 60)),
+        live_scan_workers=max(1, min(8, int(d.get("live_scan_workers", 6)))),
         seed=int(d.get("seed", 42)),
         walk_forward_train_bars=int(d.get("walk_forward_train_bars", 3000)),
         walk_forward_test_bars=int(d.get("walk_forward_test_bars", 500)),
