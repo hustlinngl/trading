@@ -9,3 +9,9 @@ data/*.parquet
 logs/*.csv
 logs/*.json
 logs/*.jsonl
+
+# Windows packaging
+build/
+dist/
+*.spec
+release/
