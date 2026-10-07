@@ -545,10 +545,8 @@ class SignalTerminal:
                 active = sum(
                     str(x.get("signal")) in {"LONG", "SHORT"} for x in signals
                 )
-                compatible = sum(
-                    bool((x.get("bundle") or {}).get("compatible"))
-                    and bool((x.get("bundle") or {}).get("manifest_ready"))
-                    for x in signals
+                compatible = int(
+                    universe_meta.get("universe_model_eligible", len(signals))
                 )
                 fresh = sum(
                     float((x.get("decision") or {}).get("data_age_minutes", 1e9))
@@ -598,10 +596,13 @@ class SignalTerminal:
                         "ineligible_model_assets": int(universe_meta.get("universe_ineligible_model", 0)),
                         "uncovered_assets": int(universe_meta.get("universe_uncovered", 0)),
                         "active_signals": active,
-                        "waits": len(signals) - active,
+                        "waits": int(universe_meta.get("universe_waits", max(0, universe_meta.get("universe_evaluated", len(signals)) - active))),
                         "compatible_bundles": compatible,
                         "fresh_data_assets": fresh,
-                        "terminal_ready": bool(signals) and compatible > 0,
+                        "assessment_failures": int(universe_meta.get("assessment_failures", 0)),
+                        "assessments_reused": int(universe_meta.get("assessments_reused", 0)),
+                        "assessments_refreshed": int(universe_meta.get("assessments_refreshed", 0)),
+                        "terminal_ready": compatible > 0,
                     },
                     "signals": signals,
                     "journal": self._journal(),
@@ -1477,8 +1478,8 @@ function renderFocus(data){
     const summary=data.summary||{};
     const coverage=$("focusCoverage");
     if(coverage){
-      const total=Number(summary.universe_total??0), backed=Number(summary.model_backed_assets??0), eligible=Number(summary.model_eligible_assets??backed), evaluated=Number(summary.assets_scanned??0);
-      coverage.textContent=total ? "Universe "+total+" · models "+backed+" · eligible "+eligible+" · evaluated "+evaluated : "Discovering markets…";
+      const total=Number(summary.universe_total??0), backed=Number(summary.model_backed_assets??0), eligible=Number(summary.model_eligible_assets??backed), evaluated=Number(summary.assets_scanned??0), waits=Number(summary.waits??0);
+      coverage.textContent=total ? "Universe "+total+" · models "+backed+" · eligible "+eligible+" · evaluated "+evaluated+" · wait "+waits : "Discovering markets…";
     }
     box.innerHTML='<div class="top5-empty"><div class="eyebrow">Scanning</div><h2 style="margin:8px 0 6px">Analisi dell\'universo in corso</h2><div class="small">Il motore sta valutando i mercati con bundle verificati. La superficie si aggiorna appena il ranking è pronto.</div></div>';
     status.textContent="scanning";status.className="pill warn";
@@ -1494,7 +1495,7 @@ function renderFocus(data){
     box.innerHTML='<div class="top5-empty"><div class="eyebrow">No active signals</div><h2 style="margin:8px 0 6px">Nessun segnale</h2><div class="small">Il gate corrente non trova un LONG o SHORT abbastanza solido da mostrare.</div></div>';
     const summary=data.summary||{};
     const coverage=$("focusCoverage");
-    if(coverage) coverage.textContent="Universe "+(summary.universe_total??0)+" · eligible "+(summary.model_eligible_assets??summary.model_backed_assets??0)+" · evaluated "+(summary.assets_scanned??0);
+    if(coverage) coverage.textContent="Universe "+(summary.universe_total??0)+" · eligible "+(summary.model_eligible_assets??summary.model_backed_assets??0)+" · evaluated "+(summary.assets_scanned??0)+" · wait "+(summary.waits??0);
     status.textContent="0 signals";status.className="pill warn";return;
   }
   const summary=data.summary||{};
