@@ -1890,43 +1890,42 @@ function openInspector(symbol){
   const active=((state.data&&state.data.signals)||[]).find(x=>x.symbol===symbol);
   const content=$("inspectorContent"), drawer=$("inspectorDrawer");
   if(!content||!drawer)return;
-  $("inspectorSubtitle").textContent=(active?.symbol||symbol||"—")+" · decision trace";
+  $("inspectorSubtitle").textContent=(active?.symbol||symbol||"—")+" · signal details";
   if(!active){
-    content.innerHTML='<div class="timeline-empty">Nessun dato attivo disponibile per '+esc(symbol||"asset")+'.</div>';
+    content.innerHTML='<div class="timeline-empty">Nessun risultato disponibile per '+esc(symbol||"asset")+'.</div>';
   }else{
-    const d=active.decision||{}, b=active.bundle||{}, h=b.holdout||{};
+    const d=active.decision||{};
     const signal=active.signal||"WAIT";
     const trace=[
-      ["Data",d.data_age_minutes!=null && Number(d.data_age_minutes)<=30,"fresh · "+age(d.data_age_minutes)],
-      ["Model",d.p_up!=null,"p(up) · "+pct(d.p_up,1)],
-      ["Meta",d.meta_success!=null && Number(d.meta_success)>=.5,"success · "+pct(d.meta_success,0)],
-      ["Memory",d.analog_n!=null && Number(d.analog_n)>0,"support · "+esc(d.analog_n??"—")],
-      ["Duration",!!d.trade_window_ready,d.trade_window_ready?"ready":"wait"],
-      ["Deployment",!!b.compatible&&!!b.manifest_ready,b.compatible&&b.manifest_ready?"compatible":"wait"]
+      ["p(up)",d.p_up==null?"—":pct(d.p_up,1)],
+      ["Confidence",active.confidence==null?"—":pct(active.confidence,1)],
+      ["Robust edge",d.robust_directional_edge==null?"—":pct(d.robust_directional_edge,2)],
+      ["Expected return",d.expected_return==null?"—":pct(d.expected_return,2)],
+      ["Score",d.score==null?"—":num(d.score,3)],
+      ["Meta success",d.meta_success==null?"—":pct(d.meta_success,0)],
+      ["Memory",d.analog_n==null?"—":String(d.analog_n)+" · "+pct(d.analog_agreement,0)],
+      ["Duration",d.trade_window_confidence==null?"—":pct(d.trade_window_confidence,0)+" · "+String(d.trade_window_direction||"—")],
+      ["Regime",d.regime||"—"],
+      ["Data age",d.data_age_minutes==null?"—":age(d.data_age_minutes)]
     ];
     content.innerHTML=
       '<div class="inspector-hero signal-live-'+signal.toLowerCase()+'">'+
-        '<div class="eyebrow">Selected verdict</div>'+
+        '<div class="eyebrow">Signal result</div>'+
         '<div class="verdict '+cls(signal)+'">'+esc(signal)+'</div>'+
-        '<div class="decision-meta">'+esc(signal==="LONG"?"Bias LONG ammesso dal gate.":signal==="SHORT"?"Bias SHORT ammesso dal gate.":"Nessun edge robusto ammesso dal gate.")+'</div>'+
+        '<div class="decision-meta">'+esc(signal==="LONG"?"Bias LONG":signal==="SHORT"?"Bias SHORT":"No active signal")+'</div>'+
         '<div class="inspector-grid">'+
           '<div class="inspector-card"><div class="k">Prezzo</div><div class="v num">'+num(active.realtime_price??active.price,2)+'</div></div>'+
           '<div class="inspector-card"><div class="k">Confidence</div><div class="v">'+pct(active.confidence,1)+'</div></div>'+
-          '<div class="inspector-card"><div class="k">Robust edge</div><div class="v num">'+(d.expected_return_lcb==null?"—":num(d.expected_return_lcb,4)+" / "+num(d.expected_return_ucb,4))+'</div></div>'+
-          '<div class="inspector-card"><div class="k">Holdout</div><div class="v">'+pct(h.total_return??h.net_compounded_return,2)+'</div></div>'+
+          '<div class="inspector-card"><div class="k">Robust edge</div><div class="v">'+(d.robust_directional_edge==null?"—":pct(d.robust_directional_edge,2))+'</div></div>'+
+          '<div class="inspector-card"><div class="k">Score</div><div class="v">'+num(d.score,3)+'</div></div>'+
         '</div>'+
       '</div>'+
-      '<div class="inspector-section"><h3>Machine reasons</h3><div class="inspector-reasons">'+
+      '<div class="inspector-section"><h3>Signal data</h3><div class="inspector-trace">'+
+        trace.map(t=>'<div class="inspector-trace-row"><strong>'+esc(t[0])+'</strong><span>'+esc(t[1])+'</span></div>').join("")+
+      '</div></div>'+
+      '<div class="inspector-section"><h3>Reasons</h3><div class="inspector-reasons">'+
         (active.reason_codes||[]).slice(0,12).map(x=>'<span class="reason">'+esc(x)+'</span>').join("")+
-      '</div></div>'+
-      '<div class="inspector-section"><h3>Decision trace</h3><div class="inspector-trace">'+
-        trace.map(t=>'<div class="inspector-trace-row"><strong>'+t[0]+'</strong><span>'+t[2]+'</span></div>').join("")+
-      '</div></div>'+
-      '<div class="inspector-section"><h3>Provenance</h3>'+
-        '<div class="inspector-card"><div class="k">Training</div><div class="v">'+esc(b.training_rows??"—")+' rows</div><div class="small">'+esc(b.training_end??"—")+'</div></div>'+
-        '<div class="inspector-card" style="margin-top:8px"><div class="k">Compatibility</div><div class="small" style="margin-top:5px">'+esc(b.compatibility||"—")+'</div></div>'+
-        '<div class="inspector-code" style="margin-top:8px">dataset: '+esc(b.data_fingerprint||"—")+'<br>artifact: '+esc(b.artifact_fingerprint||"—")+'</div>'+
-      '</div>';
+      '</div></div>';
   }
   const backdrop=$("inspectorBackdrop");
   if(backdrop){backdrop.classList.remove("legacy-hidden");backdrop.setAttribute("aria-hidden","false");}
