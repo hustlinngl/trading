@@ -9,8 +9,15 @@ from .data import timeframe_offset
 
 
 def make_risk(settings, *, stop_atr_mult=None, take_profit_rr=None, cost_multiplier: float = 1.0, max_holding_bars=None):
+    semantics = validate_execution_alignment(settings)
+    if stop_atr_mult is not None and abs(float(stop_atr_mult) - semantics.stop_atr_mult) > 1e-9:
+        raise ValueError("execution_stop_override_mismatch")
+    if take_profit_rr is not None and abs(float(take_profit_rr) - semantics.take_profit_rr) > 1e-9:
+        raise ValueError("execution_take_profit_override_mismatch")
+    if max_holding_bars is not None and int(max_holding_bars) != semantics.horizon_bars:
+        raise ValueError("execution_holding_override_mismatch")
     cm = float(cost_multiplier)
-    holding = int(settings.max_holding_bars if max_holding_bars is None else max_holding_bars)
+    holding = semantics.horizon_bars
     return RiskEngine(
         settings.initial_cash,
         settings.risk_per_trade,
@@ -43,7 +50,7 @@ def run_configured_backtest(market: pd.DataFrame, actions: pd.Series, settings, 
         funding_interval_bars = max(1, int(round(pd.Timedelta(hours=float(getattr(settings, "funding_interval_hours", 8.0))) / bar_delta)))
     except Exception:
         funding_interval_bars = max(1, int(getattr(settings, "funding_interval_bars", 32)))
-    holding = int(settings.max_holding_bars if max_holding_bars is None else max_holding_bars)
+    holding = semantics.horizon_bars
     bt_risk = risk or make_risk(
         settings,
         stop_atr_mult=stop_atr_mult,
@@ -63,6 +70,7 @@ def run_configured_backtest(market: pd.DataFrame, actions: pd.Series, settings, 
         impact_bps_per_sqrt=float(getattr(settings, 'impact_bps_per_sqrt', 1.5)) * cm,
         force_daily_loss_exit=getattr(settings, 'force_daily_loss_exit', True),
         short_borrow_bps_per_bar=float(getattr(settings, 'short_borrow_bps_per_bar', 0.0)) * cm,
+        require_short_borrow_cost=bool(getattr(settings,'require_short_borrow_cost',True)),
         funding_rate_column=funding_column,
         funding_interval_bars=funding_interval_bars,
         funding_bps_per_bar=float(getattr(settings, "funding_bps_per_bar", 0.0)) * cm,
