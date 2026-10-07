@@ -1,6 +1,6 @@
 # Adaptive AI Trading Lab
 
-Release **0.9.14** — hardened research, strict paper/live inference and reproducible diagnostics.
+Release **0.9.15** — hardened research, strict paper/live inference and reproducible diagnostics.
 
 This repository is a research-first adaptive trading platform for real market data, purged walk-forward validation, pristine holdouts, cost-aware event-driven backtesting, autonomous research and guarded paper/signal workflows.
 
@@ -12,7 +12,7 @@ This repository is a research-first adaptive trading platform for real market da
 - Economic edge hurdles, impact-aware risk sizing and event-driven execution simulation.
 - Autonomous research memory, experience graph, matched-event studies and prequential shadow learning.
 - Strict paper/live signal gates that default to WAIT unless evidence, freshness and model-consensus requirements are satisfied.
-- Deployment evidence is provenance-bound to the exact model semantics and dataset fingerprint; stale evidence fails closed.
+- Deployment evidence is bound to model, runtime/economic semantics, dataset fingerprint and executable artifact hashes; stale or mixed-generation evidence fails closed.
 - Deterministic benchmark controls and CI checks for compile, tests, CLI startup and benchmark execution.
 
 ## Safe operating model
