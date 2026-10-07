@@ -152,6 +152,7 @@ def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
         checks={**base_checks,**duration_checks}
     else:
         checks=base_checks
+    ready=all(bool(v) for v in checks.values())
     return_manifest={
         "symbol":str(getattr(settings,"symbol","")),
         "timeframe":str(getattr(settings,"timeframe","")),
