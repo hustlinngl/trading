@@ -1,3 +1,9 @@
+## 0.9.33
+- Extended live market discovery/quote display from the small configured symbol list to the full active exchange universe.
+- `bootstrap-live-data` now discovers all active spot/swap/future markets by default when no explicit `--symbols` list is supplied.
+- Added resumable historical bootstrapping: fresh existing CSVs are reused instead of redownloaded.
+- Added `--all-symbols` and `--market-types` controls for explicit full-universe history generation.
+
 ## 0.9.32
 - Fixed the anime cursor click feedback so the click animation can never overwrite the pointer-position transform and jump to the top-left corner.
 - Exposed realtime market quotes in `/api/state` even when no model-backed signal is available, so the dashboard still shows useful live market data.
