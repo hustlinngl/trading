@@ -124,6 +124,7 @@ class SignalTerminal:
         self._cached_state: dict | None = None
         self._cached_at = 0.0
         self._exchange = None
+        self._assessment_cache = {}
         self.state_root.joinpath("logs").mkdir(parents=True, exist_ok=True)
         self.state_root.joinpath("data", "history").mkdir(parents=True, exist_ok=True)
 
@@ -373,7 +374,11 @@ class SignalTerminal:
                     )
                 )
                 assessments, universe_meta = scan_top5(
-                    self.settings, str(self.root), exchange=self._get_exchange(), return_meta=True
+                    self.settings,
+                    str(self.root),
+                    exchange=self._get_exchange(),
+                    cache=self._assessment_cache,
+                    return_meta=True,
                 )
                 # Tickers are presentation-only; never poll the entire scan universe.
                 symbols = list(dict.fromkeys(
@@ -887,6 +892,10 @@ h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
 .click-ripple{border-color:rgba(229,138,184,.38);box-shadow:none}
 @media(max-width:1050px){.top5-grid{grid-template-columns:repeat(2,minmax(280px,1fr))}}
 @media(max-width:700px){.wrap{padding:20px 14px 34px}.top5-grid{grid-template-columns:1fr}.pick-chart{height:150px}}
+<style>
+.focus-head-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:flex-end}
+.focus-coverage{font-size:10px;color:#66717f;font-variant-numeric:tabular-nums;white-space:nowrap}
+</style>
 </style>
 </head>
 <body>
@@ -947,7 +956,7 @@ h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
   <section class="focus-only" id="focusDashboard" aria-live="polite">
     <div class="top5-head">
       <div><div class="eyebrow">Current signals</div><div class="top5-title">Top 5</div><div class="top5-sub">Solo LONG e SHORT attivi. I dati restano separati dalla decisione del modello.</div></div>
-      <span id="focusStatus" class="pill warn">SCANSIONE…</span>
+      <div class="focus-head-meta"><span id="focusCoverage" class="focus-coverage">Universe —</span><span id="focusStatus" class="pill warn">Scanning…</span></div>
     </div>
     <div id="top5Grid" class="top5-grid"></div>
   </section>
@@ -1240,12 +1249,22 @@ function renderFocus(data){
   if(!box)return;
   if(!data.ok){
     box.innerHTML='<div class="top5-empty"><div class="eyebrow">Offline</div><h2 style="margin:8px 0 6px">Market data unavailable</h2><div class="small">'+esc(data.error||"Il terminale locale non è disponibile.")+'</div></div>';
+    const coverage=$("focusCoverage"); if(coverage) coverage.textContent="Universe unavailable";
     status.textContent="offline";status.className="pill warn";return;
   }
   const picks=(data.signals||[]).filter(x=>x.signal==="LONG"||x.signal==="SHORT").slice(0,5);
   if(!picks.length){
     box.innerHTML='<div class="top5-empty"><div class="eyebrow">No active signals</div><h2 style="margin:8px 0 6px">Nessun segnale</h2><div class="small">Il gate corrente non trova un LONG o SHORT abbastanza solido da mostrare.</div></div>';
+    const summary=data.summary||{};
+    const coverage=$("focusCoverage");
+    if(coverage) coverage.textContent="Universe "+(summary.universe_total??0)+" · models "+(summary.model_backed_assets??0)+" · evaluated "+(summary.assets_scanned??0);
     status.textContent="0 signals";status.className="pill warn";return;
+  }
+  const summary=data.summary||{};
+  const coverage=$("focusCoverage");
+  if(coverage){
+    const total=Number(summary.universe_total??0), backed=Number(summary.model_backed_assets??0), evaluated=Number(summary.assets_scanned??0);
+    coverage.textContent="Universe "+total+" · models "+backed+" · evaluated "+evaluated;
   }
   status.textContent=picks.length+" signal"+(picks.length===1?"":"s");status.className="pill good";
   box.innerHTML=picks.map((r,i)=>{
@@ -1255,8 +1274,8 @@ function renderFocus(data){
       '<div class="pick-stats">'+
       '<div class="pick-stat"><div class="k">Price</div><div class="v">'+num(r.realtime_price??r.price,2)+'</div></div>'+
       '<div class="pick-stat"><div class="k">Confidence</div><div class="v">'+pct(r.confidence,1)+'</div></div>'+
-      '<div class="pick-stat"><div class="k">Expected</div><div class="v">'+pct(r.expected_return,2)+'</div></div>'+
-      '<div class="pick-stat"><div class="k">Age</div><div class="v">'+age(d.data_age_minutes)+'</div></div>'+
+      '<div class="pick-stat"><div class="k">Edge</div><div class="v">'+pct(d.robust_directional_edge,2)+'</div></div>'+
+      '<div class="pick-stat"><div class="k">Score</div><div class="v">'+num(d.score,2)+'</div></div>'+
       '</div>'+
       '<div class="pick-chart"><canvas data-pick-chart="'+esc(r.symbol)+'"></canvas></div>'+
       '<div class="pick-foot"><span>15m · closed candles</span><span class="history-badge" data-history-badge="'+esc(r.symbol)+'">240 bars</span></div>'+
