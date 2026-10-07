@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.19
+- Full-universe discovery now treats active exchange metadata as authoritative and avoids inventing coverage from stale configured/local symbols when the exchange map is available.
+- Signal ranking is normalized to the active probability, robust-edge, score and trade-window gates rather than fixed unrelated scales.
+- Dashboard scans no longer hold the state lock across network/model work; repeated state requests remain responsive during a broad scan.
+- Market explorer/history routes now use the discovered active market map, with explicit exchange/local-fallback provenance in the state payload.
+- Added regressions for non-blocking scans and exchange-authoritative universe coverage.
+
 ## 0.9.18
 - Full-universe live scanner: discovers active spot/margin/swap/future/option markets, checks deployment compatibility and ranks the best five model-backed signals.
 - Added closed-candle assessment reuse and non-blocking dashboard scans so broad coverage does not freeze the UI.
