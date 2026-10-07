@@ -179,6 +179,20 @@ def test_signal_terminal_alpha_decision_deck_is_wired():
     assert "data-target=\"detail\"" in html
 
 
+def test_signal_terminal_alpha_art_direction_layer_is_wired():
+    import signal_dashboard as terminal_mod
+
+    html = terminal_mod.HTML
+    assert 'id="timeline"' in html
+    assert 'id="signalTimeline"' in html
+    assert 'id="inspectorDrawer"' in html
+    assert 'id="chartCrosshair"' in html
+    assert "renderTimeline" in html
+    assert "openInspector" in html
+    assert "Prediction" in html
+    assert "Outcome" in html
+
+
 def test_signal_terminal_alpha_ambient_fx_is_wired():
     import signal_dashboard as terminal_mod
 
