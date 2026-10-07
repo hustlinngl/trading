@@ -373,3 +373,64 @@ def test_scan_top5_return_meta_reports_universe_coverage(monkeypatch, tmp_path):
     assert meta["universe_model_backed"] == 2
     assert meta["universe_evaluated"] == 2
     assert meta["universe_mode"] == "all_active_markets"
+
+
+def test_scan_top5_reuses_same_closed_candle_assessment(monkeypatch, tmp_path):
+    import ai_trading_lab.live as live_mod
+    import pandas as pd
+
+    settings = load_settings("config.yaml")
+    settings.live_symbols = ("BTC/USDT", "ETH/USDT")
+
+    monkeypatch.setattr(
+        live_mod,
+        "discover_live_universe",
+        lambda *args, **kwargs: {
+            "symbols": ["BTC/USDT", "ETH/USDT"],
+            "discovered_markets": 2,
+            "model_backed_markets": 2,
+            "market_counts": {"spot": 2},
+        },
+    )
+    calls = {"n": 0}
+    stamp = pd.Timestamp.now(tz="UTC").floor("15min").isoformat()
+
+    def fake_assess(settings, root, symbol, exchange=None, skip_network=False):
+        calls["n"] += 1
+        return LiveAssessment(symbol, stamp, "SIGNAL", "LONG", 0.9, 0.01, 1.0, [], "fp")
+
+    monkeypatch.setattr(live_mod, "assess_symbol", fake_assess)
+    cache = {}
+    live_mod.scan_top5(settings, tmp_path, exchange=object(), cache=cache)
+    live_mod.scan_top5(settings, tmp_path, exchange=object(), cache=cache)
+
+    assert calls["n"] == 2
+
+
+def test_scan_top5_prefers_stronger_robust_selection_score(monkeypatch, tmp_path):
+    import ai_trading_lab.live as live_mod
+
+    settings = load_settings("config.yaml")
+
+    monkeypatch.setattr(
+        live_mod,
+        "discover_live_universe",
+        lambda *args, **kwargs: {
+            "symbols": ["A/USDT", "B/USDT"],
+            "discovered_markets": 2,
+            "model_backed_markets": 2,
+            "market_counts": {"spot": 2},
+        },
+    )
+    def fake_assess(settings, root, symbol, exchange=None, skip_network=False):
+        score = 0.8 if symbol == "A/USDT" else 0.3
+        return LiveAssessment(
+            symbol, "2026-10-07T00:00:00+00:00", "SIGNAL", "LONG",
+            0.85, 0.01, 1.0, [], "fp",
+            {"selection_score": score, "robust_directional_edge": score / 20.0},
+        )
+
+    monkeypatch.setattr(live_mod, "assess_symbol", fake_assess)
+    picks = live_mod.scan_top5(settings, tmp_path, exchange=object())
+
+    assert [p.symbol for p in picks] == ["A/USDT", "B/USDT"]
