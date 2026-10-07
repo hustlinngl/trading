@@ -17,7 +17,6 @@ from .signal_contract import compile_direct_signal
 class LiveAssessment:
     symbol:str; timestamp:str; status:str; signal:str; confidence:float; expected_return:float; price:float; reason_codes:list[str]; data_fingerprint:str
     details:dict[str, object] = field(default_factory=dict)
-    correlation_returns:pd.Series|None = field(default=None, repr=False, compare=False)
     horizon_bars:int = 8
 
     def to_dict(self):
@@ -75,61 +74,6 @@ def _market_type(exchange,symbol):
         return "spot"
 
 
-def _funding_snapshot(exchange,symbol,settings):
-    market_type=_market_type(exchange,symbol)
-    if market_type not in {"swap","future","perpetual"}:
-        return {"market_type":market_type,"funding_rate":None,"funding_cost_return":0.0,"funding_data_missing":False}
-    try:
-        if not getattr(exchange,"has",{}).get("fetchFundingRate"):
-            return {"market_type":market_type,"funding_rate":None,"funding_cost_return":0.0,"funding_data_missing":True}
-        snapshot=exchange.fetch_funding_rate(symbol) or {}
-        rate=snapshot.get("fundingRate")
-        if rate is None:
-            return {"market_type":market_type,"funding_rate":None,"funding_cost_return":0.0,"funding_data_missing":True}
-        rate=float(rate)
-        bar_delta=timeframe_offset(getattr(settings,"timeframe","15m"))
-        bar_hours=max(bar_delta.total_seconds()/3600.0,1e-9)
-        holding_hours=max(float(getattr(settings,"max_holding_bars",getattr(settings,"horizon_bars",8)))*bar_hours,bar_hours)
-        funding_hours=float(snapshot.get("fundingInterval") or getattr(settings,"funding_interval_hours",8.0)*3600.0)/3600.0
-        intervals=max(1,int(np.ceil(holding_hours/max(funding_hours,1e-9))))
-        return {"market_type":market_type,"funding_rate":rate,"funding_cost_return":abs(rate)*intervals,"funding_intervals":intervals,"funding_data_missing":False}
-    except Exception as exc:
-        return {"market_type":market_type,"funding_rate":None,"funding_cost_return":0.0,"funding_data_missing":True,"funding_error":f"{type(exc).__name__}:{exc}"}
-
-
-def _abs_return_correlation(a,b,min_observations):
-    if a is None or b is None:
-        return 1.0
-    try:
-        joined=pd.concat([a.rename("a"),b.rename("b")],axis=1,join="inner").dropna()
-        if len(joined)<int(min_observations):
-            return 1.0
-        corr=float(joined["a"].corr(joined["b"]))
-        return abs(corr) if np.isfinite(corr) else 1.0
-    except Exception:
-        return 1.0
-
-
-def _select_portfolio(candidates,settings):
-    cap=float(np.clip(getattr(settings,"live_max_pairwise_return_correlation",0.80),0.0,1.0))
-    min_obs=max(2,int(getattr(settings,"live_min_correlation_observations",48)))
-    selected=[]; rejected=0
-    for item in candidates:
-        max_corr=max((_abs_return_correlation(item.correlation_returns,x.correlation_returns,min_obs) for x in selected),default=0.0)
-        if selected and max_corr>cap:
-            rejected+=1
-            continue
-        if item.details is None:
-            item.details={}
-        item.details["portfolio_max_correlation"]=float(max_corr)
-        item.details["portfolio_correlation_cap"]=cap
-        item.details["portfolio_correlation_observations"]=min_obs
-        selected.append(item)
-        if len(selected)>=5:
-            break
-    return selected,rejected
-
-
 def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=False):
     symbol=symbol or settings.symbol
     df=None
@@ -165,12 +109,6 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
         if age_minutes > float(getattr(settings,"live_max_data_age_minutes",30.0)):
             return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[f"stale_data:{age_minutes:.1f}m"],fp,{"data_age_minutes":age_minutes})
 
-        funding=_funding_snapshot(exchange,symbol,settings)
-        if funding["funding_data_missing"] and bool(getattr(settings,"require_funding_data_for_derivatives",True)) and funding["market_type"] in {"swap","future","perpetual"}:
-            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,["funding_data_missing"],fp,{"market_type":funding["market_type"],**funding})
-
-        correlation_returns=pd.to_numeric(df["close"],errors="coerce").pct_change().dropna().tail(max(2,int(getattr(settings,"live_portfolio_correlation_bars",96))))
-
         model_dir=resolve_signal_bundle(settings,root,symbol)
         if not (model_dir/"signal_model.joblib").exists():
             return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,["model_missing"],fp,{"bundle":str(model_dir)})
@@ -189,7 +127,6 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
         tw = assess_trade_window(df, settings, tw_path, symbol=symbol)
         for key, value in tw.items():
             last[key] = value
-        last['funding_cost_return']=float(funding.get('funding_cost_return',0.0) or 0.0)
         signal,reasons=live_signal_gate(last,settings)
         p=float(last.get("p_up",0.5))
         confidence=p if signal=="LONG" else (1.0-p if signal=="SHORT" else 0.0)
@@ -223,7 +160,7 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
             "meta_success","model_disagreement","return_disagreement","regime",
             "regime_persistence","analog_edge","analog_agreement","analog_dispersion","analog_n",
             "trade_window_available","trade_window_ready","trade_window_direction",
-            "trade_window_confidence","trade_window_reason","funding_rate","funding_cost_return","funding_intervals",
+            "trade_window_confidence","trade_window_reason",
         )
         details={k:last.get(k) for k in detail_keys if k in last.index}
         details.update({
@@ -232,16 +169,12 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
             "compatibility": "ok",
             "robust_directional_edge": robust_edge,
             "selection_score": selection_score,
-            "market_type": funding.get("market_type","spot"),
-            "funding_data_missing": bool(funding.get("funding_data_missing",False)),
-            "funding_rate": funding.get("funding_rate"),
-            "funding_cost_return": float(funding.get("funding_cost_return",0.0) or 0.0),
         })
         return LiveAssessment(
             symbol,stamp,"SIGNAL" if signal!="FLAT" else "WAIT",signal,
             confidence,float(last.get("expected_return",0.0)),price,
             (reasons + ([str(last.get("trade_window_reason"))] if tw.get("trade_window_reason") not in {None, "ok", "disabled"} and str(last.get("trade_window_reason")) else []) or quality_reasons),fp,
-            details,correlation_returns=correlation_returns,
+            details,
         )
     except Exception as exc:
         return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[f"runtime:{type(exc).__name__}:{exc}"],fp)
@@ -461,14 +394,13 @@ def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, re
 
     out.sort(
         key=lambda x: (
-            float((x.details or {}).get("selection_score", 0.0)),
-            float((x.details or {}).get("robust_directional_edge", 0.0)),
             float(x.confidence),
+            abs(float(x.expected_return)),
             str(x.timestamp),
         ),
         reverse=True,
     )
-    picks, portfolio_rejected_correlated = _select_portfolio(out,settings)
+    picks = out[:5]
     if return_meta:
         return picks, {
             "universe_total": int(universe["discovered_markets"]),
@@ -489,11 +421,6 @@ def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, re
             "scan_completed": int(evaluated),
             "scan_total": int(total_candidates),
             "scan_workers": int(workers or 0),
-            "portfolio_correlation_cap": float(getattr(settings,"live_max_pairwise_return_correlation",0.80)),
-            "portfolio_correlation_lookback_bars": int(getattr(settings,"live_portfolio_correlation_bars",96)),
-            "portfolio_min_correlation_observations": int(getattr(settings,"live_min_correlation_observations",48)),
-            "portfolio_selected": int(len(picks)),
-            "portfolio_rejected_correlated": int(portfolio_rejected_correlated),
         }
     return picks
 
