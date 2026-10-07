@@ -152,6 +152,9 @@ def auto_update(df,settings,model_dir="models"):
             "duration_report":duration_report,
         }
         state_path.write_text(json.dumps(state,indent=2,default=str),encoding="utf-8")
+        result["deployment_manifest"]=deployment_manifest
+        result["deployment_ready"]=bool(deployment_manifest.get("ready",False))
+        result["duration_report"]=duration_report
         try:
             GrowthRegistry(getattr(settings,"memory_db","data/memory.sqlite")).add_model_version("signal","promoted",score,stats,str(mdir))
         except Exception:
