@@ -135,6 +135,9 @@ def deployment_semantics_fingerprint(settings) -> str:
         "base_min_holdout_profit_factor": float(getattr(settings, "base_min_holdout_profit_factor", 1.0)),
         "base_max_holdout_drawdown": float(getattr(settings, "base_max_holdout_drawdown", -0.25)),
         "base_min_holdout_utility": float(getattr(settings, "base_min_holdout_utility", 0.0)),
+        "final_holdout_frac": float(getattr(settings, "final_holdout_frac", 0.15)),
+        "trade_window_max_holdout_drawdown": float(getattr(settings, "trade_window_max_holdout_drawdown", -0.25)),
+        "trade_window_min_holdout_utility": float(getattr(settings, "trade_window_min_holdout_utility", 0.0)),
     }
     payload = json.dumps(fields, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()[:24]
