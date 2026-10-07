@@ -82,7 +82,8 @@ jobs:
             --name SakuraSignalTerminal \
             --paths src \
             --collect-submodules ai_trading_lab \
-            --collect-all xgboost \
+            --collect-data xgboost \
+            --collect-binaries xgboost \
             --collect-all lightgbm \
             signal_dashboard.py
 
@@ -104,7 +105,8 @@ jobs:
             --name SakuraSignalTerminalSmoke `
             --paths src `
             --collect-submodules ai_trading_lab `
-            --collect-all xgboost `
+            --collect-data xgboost `
+            --collect-binaries xgboost `
             --collect-all lightgbm `
             signal_dashboard.py
 
