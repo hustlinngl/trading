@@ -1,4 +1,4 @@
-# Research status — 0.9.18
+# Research status — 0.9.35
 
 ## Current state
 
@@ -25,7 +25,11 @@ The 0.9.15 hardening pass restores the missing benchmark command, fixes master-t
 
 The current code remains suitable for research and paper/signal operation. A production-grade market edge remains **unproven** until fresh multi-year, multi-asset real-data evidence passes the full protocol.
 
-The 0.9.18 pre-alpha terminal is now the stable read-only observation layer: realtime ticker data is visually overlaid, while model inference continues to use the closed-candle path. Signal history is tracked prequentially so the next alpha UI can build on a stable, provenance-aware data contract.
+The 0.9.35 pre-alpha terminal is now the stable read-only observation layer: realtime ticker data is visually overlaid, while model inference continues to use the closed-candle path. Signal history is tracked prequentially so the next alpha UI can build on a stable, provenance-aware data contract.
+
+## Hardening status
+
+The current branch locks model supervision to the triple-barrier event definition, rejects overlapping analog-memory neighbors, persists experiment/holdout governance across scheduled runs, prices derivative funding and short-borrow assumptions, and caps live portfolio similarity by return correlation. Reused final holdouts remain available for diagnostics but are explicitly non-promotable.
 
 ## Required deployment gate
 
