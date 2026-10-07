@@ -32,17 +32,35 @@ def decide_actions(pred, regime, analog, meta_p, settings, *, regime_persistence
     return pd.Series(action,index=pred.index,name='action'),score_series
 
 def live_signal_gate(row, settings):
-    """Apply the strictest live/paper signal gates without changing research semantics."""
-    p_up = float(row.get("p_up", 0.5))
-    expected_return = float(row.get("expected_return", 0.0))
-    expected_return_lcb = float(row.get("expected_return_lcb", expected_return))
-    expected_return_ucb = float(row.get("expected_return_ucb", expected_return))
+    """Apply live/paper gates with explicit missing-data rejection."""
+    required = (
+        "p_up","expected_return","expected_return_lcb","expected_return_ucb",
+        "meta_success","score","model_disagreement","analog_n","analog_agreement",
+    )
+    missing = []
+    for key in required:
+        value = row.get(key)
+        if value is None:
+            missing.append(key)
+            continue
+        try:
+            if not np.isfinite(float(value)):
+                missing.append(key)
+        except (TypeError, ValueError):
+            missing.append(key)
+    if missing:
+        return "FLAT", ["missing_prediction:" + ",".join(missing)]
+
+    p_up = float(row["p_up"])
+    expected_return = float(row["expected_return"])
+    expected_return_lcb = float(row["expected_return_lcb"])
+    expected_return_ucb = float(row["expected_return_ucb"])
     action = str(row.get("action", "FLAT"))
     direction = 1.0 if p_up >= 0.5 else -1.0
     p_direction = p_up if direction > 0 else 1.0 - p_up
-    # For LONG, the conservative bound is LCB. For SHORT, the conservative
-    # directional bound is -UCB because less-negative returns are the adverse case.
+    funding_drag = max(0.0, float(row.get("funding_cost_return", 0.0) or 0.0))
     robust_expected_return = expected_return_lcb if direction > 0 else -expected_return_ucb
+    robust_expected_return -= funding_drag
     reasons = []
 
     if action not in {"LONG", "SHORT"}:
@@ -57,15 +75,15 @@ def live_signal_gate(row, settings):
             reasons.append("signal_probability")
         if robust_expected_return < float(getattr(settings, "signal_min_expected_return", 0.003)):
             reasons.append("signal_expected_return")
-        if float(row.get("meta_success", 0.5)) < float(getattr(settings, "signal_meta_threshold", 0.62)):
+        if float(row["meta_success"]) < float(getattr(settings, "signal_meta_threshold", 0.62)):
             reasons.append("signal_meta")
-        if float(row.get("score", 0.0)) < float(getattr(settings, "signal_min_score", 0.22)):
+        if float(row["score"]) < float(getattr(settings, "signal_min_score", 0.22)):
             reasons.append("signal_score")
-        if float(row.get("model_disagreement", 0.0)) > float(getattr(settings, "signal_max_disagreement", 0.05)):
+        if float(row["model_disagreement"]) > float(getattr(settings, "signal_max_disagreement", 0.05)):
             reasons.append("model_disagreement")
-        if int(row.get("analog_n", 0)) < int(getattr(settings, "signal_memory_min_neighbors", 16)):
+        if int(float(row["analog_n"])) < int(getattr(settings, "signal_memory_min_neighbors", 16)):
             reasons.append("memory_neighbors")
-        if float(row.get("analog_agreement", 0.0)) < float(getattr(settings, "signal_memory_min_agreement", 0.70)):
+        if float(row["analog_agreement"]) < float(getattr(settings, "signal_memory_min_agreement", 0.70)):
             reasons.append("memory_agreement")
 
     if bool(getattr(settings, "trade_window_required_for_signal", False)):
@@ -85,8 +103,6 @@ def live_signal_gate(row, settings):
     if reasons:
         return "FLAT", reasons
     return ("LONG" if direction > 0 else "SHORT"), []
-
-
 def make_actions(engine,features,settings,probability_threshold=None,min_expected_return=None,decision_threshold=None,meta_threshold=None):
     pred=engine.model.predict(features); regime=engine.regimes.transform(features); regime_persistence=engine.regimes.persistence(features); regime_probs=engine.regimes.semantic_probabilities(features); analog=engine.memory.query_many(features)
     meta_x=MetaPolicy.frame(pred,features,regime,analog,regime_persistence=regime_persistence,regime_probs=regime_probs); meta_p=engine.meta.predict_proba(meta_x)
