@@ -33,7 +33,6 @@ class LiveAssessment:
             reason=";".join(str(x) for x in self.reason_codes),
         ).to_dict()
         payload["status"]=self.status
-        payload["data_fingerprint"]=self.data_fingerprint
         return payload
 
 def _load_bundled_history(root, symbol, timeframe, limit):
