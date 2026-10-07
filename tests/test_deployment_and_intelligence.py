@@ -86,3 +86,57 @@ def test_bundle_compatibility_rejects_training_semantics_mismatch(tmp_path):
     assert not ok
     assert reason == "model_semantics_mismatch"
     assert model_semantics_fingerprint(settings)
+
+
+def test_bundle_compatibility_rejects_stale_manifest_provenance(tmp_path):
+    import json
+    from ai_trading_lab.deployment import model_semantics_fingerprint
+    settings = load_settings("config.yaml")
+    bundle = asset_bundle_dir(tmp_path, "BTC/USDT")
+    bundle.mkdir(parents=True)
+    fp = "dataset-current"
+    sem = model_semantics_fingerprint(settings)
+    (bundle / "base_training_meta.json").write_text(
+        json.dumps({"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"model_semantics_fingerprint":sem}),
+        encoding="utf-8",
+    )
+    (bundle / "deployment_manifest.json").write_text(
+        json.dumps({"ready":True,"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":"dataset-old","model_semantics_fingerprint":sem}),
+        encoding="utf-8",
+    )
+    ok, reason = bundle_compatibility(settings, bundle, "BTC/USDT")
+    assert not ok
+    assert reason == "deployment_manifest_data_mismatch"
+
+
+def test_refresh_deployment_manifest_requires_matching_evidence(tmp_path):
+    import json
+    from ai_trading_lab.deployment import model_semantics_fingerprint, refresh_deployment_manifest
+    settings = load_settings("config.yaml")
+    bundle = asset_bundle_dir(tmp_path, "BTC/USDT")
+    bundle.mkdir(parents=True)
+    fp = "dataset-current"
+    sem = model_semantics_fingerprint(settings)
+    (bundle / "signal_model.joblib").write_bytes(b"model")
+    (bundle / "trade_window_specialist.joblib").write_bytes(b"window")
+    (bundle / "base_training_meta.json").write_text(
+        json.dumps({"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"model_semantics_fingerprint":sem}),
+        encoding="utf-8",
+    )
+    base_stats = {
+        "total_return":0.05,"benchmark_return":0.0,"sharpe_like":1.0,"sortino_like":1.0,
+        "trades":25,"profit_factor":1.4,"max_drawdown":-0.10,"top_trade_share":0.10,
+    }
+    duration_stats = {**base_stats,"trades":15}
+    (bundle / "base_holdout_report.json").write_text(
+        json.dumps({"symbol":"BTC/USDT","data_fingerprint":fp,"holdout":base_stats}),
+        encoding="utf-8",
+    )
+    (bundle / "trade_window_training_report.json").write_text(
+        json.dumps({"production_ready":True,"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"holdout":{"backtest":duration_stats}}),
+        encoding="utf-8",
+    )
+    manifest = refresh_deployment_manifest(settings, tmp_path)
+    assert manifest["ready"] is True
+    assert manifest["data_fingerprint"] == fp
+    assert manifest["model_semantics_fingerprint"] == sem
