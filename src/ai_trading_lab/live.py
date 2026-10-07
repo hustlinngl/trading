@@ -95,11 +95,23 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
         robust_edge=lcb if signal=="LONG" else (-ucb if signal=="SHORT" else 0.0)
         score=float(last.get("score", 0.0))
         tw_conf=float(last.get("trade_window_confidence", 0.0))
+        probability_floor=max(
+            float(getattr(settings, "signal_confidence_threshold", 0.82)),
+            float(getattr(settings, "signal_probability_threshold", 0.72)),
+        )
+        edge_floor=float(getattr(settings, "signal_min_expected_return", 0.003))
+        score_floor=float(getattr(settings, "signal_min_score", 0.22))
+        tw_floor=float(getattr(settings, "trade_window_min_confidence", 0.80))
+        # Rank the margin above the active gates, not an unrelated absolute scale.
+        edge_strength=max(0.0, min(1.0, (robust_edge-edge_floor)/max(edge_floor*4.0, 0.006)))
+        confidence_strength=max(0.0, min(1.0, (confidence-probability_floor)/max(1.0-probability_floor, 1e-6)))
+        score_strength=max(0.0, min(1.0, (score-score_floor)/max(1.0-score_floor, 1e-6)))
+        tw_strength=max(0.0, min(1.0, (tw_conf-tw_floor)/max(1.0-tw_floor, 1e-6)))
         selection_score=(
-            0.50 * max(0.0, min(1.0, robust_edge / 0.03))
-            + 0.25 * max(0.0, min(1.0, (confidence - 0.72) / 0.28))
-            + 0.15 * max(0.0, min(1.0, score / 0.50))
-            + 0.10 * max(0.0, min(1.0, tw_conf))
+            0.50 * edge_strength
+            + 0.25 * confidence_strength
+            + 0.15 * score_strength
+            + 0.10 * tw_strength
         )
         detail_keys=(
             "p_up","expected_return","expected_return_lcb","expected_return_ucb","score",
@@ -128,19 +140,22 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
 def discover_live_universe(settings, root=".", exchange=None, symbols=None):
     """Build the complete live universe before ranking.
 
-    The exchange is authoritative for currently active markets. Local model bundles are
-    then used as the second eligibility layer: a market without a matching trained bundle
-    cannot produce a truthful model signal, so it is counted as discovered but not scored.
-    A zero live_max_symbols means unlimited model-backed coverage.
+    When exchange metadata is available it is authoritative: only currently active,
+    supported market types are candidates. Local bundles are an eligibility layer, not
+    a substitute for a missing live market. When offline, configured/local assets are
+    retained as an explicit fallback universe.
     """
     configured = list(dict.fromkeys(symbols or getattr(settings, "live_symbols", ()) or [settings.symbol]))
     discovered = []
     market_counts = {}
+    exchange_ready = False
     ex = exchange
     if ex is not None:
         try:
             markets = getattr(ex, "markets", {}) or {}
             allowed_types = set(getattr(settings, "live_market_types", ("spot", "swap", "future", "margin", "option")))
+            if isinstance(markets, dict):
+                exchange_ready = bool(markets)
             for market in markets.values():
                 if not isinstance(market, dict) or market.get("active") is False:
                     continue
@@ -155,7 +170,7 @@ def discover_live_universe(settings, root=".", exchange=None, symbols=None):
                 discovered.append(symbol)
                 market_counts[mtype] = market_counts.get(mtype, 0) + 1
         except Exception:
-            pass
+            exchange_ready = False
 
     # Offline fallback: include every locally known model/historical asset.
     roots = (Path(root) / "models" / "assets", Path(root) / "data" / "historical")
@@ -172,7 +187,8 @@ def discover_live_universe(settings, root=".", exchange=None, symbols=None):
             if stem.endswith(("_USDT", "_USDC", "_FDUSD")):
                 local.append(stem.replace("_", "/"))
 
-    universe = list(dict.fromkeys(configured + discovered + local))
+    universe_sources = discovered if exchange_ready else (configured + local)
+    universe = list(dict.fromkeys(universe_sources))
     model_backed = []
     eligible = []
     for symbol in universe:
@@ -193,6 +209,7 @@ def discover_live_universe(settings, root=".", exchange=None, symbols=None):
     return {
         "symbols": eligible,
         "discovered_markets": len(universe),
+        "exchange_market_metadata": bool(exchange_ready),
         "model_backed_markets": len(model_backed),
         "model_eligible_markets": len(eligible),
         "ineligible_model_markets": max(0, len(model_backed) - len(eligible)),
@@ -269,7 +286,8 @@ def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, re
             "universe_uncovered": int(universe.get("uncovered_markets", 0)),
             "universe_evaluated": int(len(candidates)),
             "market_counts": universe["market_counts"],
-            "universe_mode": "all_active_markets",
+            "exchange_market_metadata": bool(universe.get("exchange_market_metadata", False)),
+            "universe_mode": "all_active_markets" if universe.get("exchange_market_metadata") else "local_fallback_universe",
             "assessments_reused": int(reused),
             "assessments_refreshed": int(refreshed),
         }
