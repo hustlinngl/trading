@@ -89,7 +89,7 @@ class Settings:
     live_lookback_bars: int = 600
     # 0 means scan every discovered active market with a compatible local model.
     live_max_symbols: int = 0
-    live_market_types: tuple[str, ...] = ("spot", "swap", "future", "margin")
+    live_market_types: tuple[str, ...] = ("spot", "swap", "future", "margin", "option")
     live_default_refresh_seconds: int = 60
     seed: int = 42
     walk_forward_train_bars: int = 3000
@@ -256,7 +256,7 @@ def load_settings(path: str | Path = ROOT / "config.yaml") -> Settings:
         poll_seconds=int(d.get("poll_seconds", 60)),
         live_lookback_bars=int(d.get("live_lookback_bars", 600)),
         live_max_symbols=int(d.get("live_max_symbols", 0)),
-        live_market_types=tuple(d.get("live_market_types", ("spot", "swap", "future", "margin")) or ("spot", "swap", "future", "margin")),
+        live_market_types=tuple(d.get("live_market_types", ("spot", "swap", "future", "margin", "option")) or ("spot", "swap", "future", "margin")),
         live_default_refresh_seconds=int(d.get("live_default_refresh_seconds", 60)),
         seed=int(d.get("seed", 42)),
         walk_forward_train_bars=int(d.get("walk_forward_train_bars", 3000)),
