@@ -979,7 +979,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
 .pick-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:0 18px 12px}.pick-stat{padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.025)}
 .pick-stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.pick-stat .v{margin-top:3px;font-weight:700}.pick-chart{height:220px;padding:0 8px 8px}.pick-chart canvas{display:block;width:100%;height:100%}
 .pick-foot{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 18px 15px;border-top:1px solid rgba(255,255,255,.05);font-size:11px;color:var(--muted)}
-.history-badge{padding:4px 8px;border-radius:999px;background:rgba(125,232,255,.06);border:1px solid rgba(125,232,255,.12);color:#9eeeff}
+.history-source{color:#697481;font-variant-numeric:tabular-nums}
 .pick-card{cursor:pointer;position:relative;isolation:isolate}
 .pick-card::after{content:"↗";position:absolute;right:14px;top:11px;font-size:12px;color:#596473;opacity:0;transform:translate(-2px,2px);transition:opacity .16s ease,transform .16s ease}
 .pick-card:hover::after,.pick-card:focus-visible::after{opacity:1;transform:none}
@@ -1018,6 +1018,13 @@ h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
 .connection-stamp::before{content:"";width:6px;height:6px;border-radius:50%;background:#66717d;box-shadow:0 0 0 3px rgba(102,113,125,.08)}
 .connection-stamp.online::before{background:#55d79a;box-shadow:0 0 0 3px rgba(85,215,154,.08),0 0 10px rgba(85,215,154,.22);animation:statusBreath 2.4s ease-in-out infinite}
 .connection-stamp.offline::before{background:#f2768e;box-shadow:0 0 0 3px rgba(242,118,142,.08)}
+.music-toggle{background:transparent!important;border-color:transparent!important;box-shadow:none!important;color:#737e8b;font-size:10px;letter-spacing:.04em;padding:8px 7px;min-height:38px}
+.music-toggle:hover{color:#d8a7c2;border-color:rgba(229,138,184,.18)!important;background:rgba(229,138,184,.045)!important}
+.music-toggle[aria-pressed="true"]{color:#e58ab8;text-shadow:0 0 10px rgba(229,138,184,.2)}
+.focus-status{font-size:10px;color:#66717f;font-variant-numeric:tabular-nums;white-space:nowrap}
+.focus-status.good{color:#55d79a}
+.focus-status.warn{color:#e7bc62}
+.history-source{color:#697481;font-variant-numeric:tabular-nums}
 @keyframes statusBreath{0%,100%{opacity:.72;transform:scale(.92)}50%{opacity:1;transform:scale(1)}}
 .section-reveal{animation:sectionReveal .24s cubic-bezier(.2,.8,.2,1) both}
 @keyframes sectionReveal{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
@@ -1212,6 +1219,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
         <div class="operator-copy"><strong>SAKURA</strong><span>WATCHER // ONLINE</span></div>
       </div>
       <span id="stamp" class="connection-stamp" aria-live="polite">Connessione…</span>
+      <button id="sakuraMusic" class="music-toggle" type="button" aria-label="Attiva musica Sakura lo-fi" aria-pressed="false">♪ Sakura</button>
       <button id="refresh" type="button" aria-label="Aggiorna stato e segnali">Refresh</button>
     </div>
   </div>
@@ -1230,7 +1238,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   <section class="focus-only" id="focusDashboard" aria-live="polite">
     <div class="top5-head">
       <div><div class="eyebrow">Current signals</div><div class="top5-title">Top 5</div><div class="top5-sub">Solo LONG e SHORT attivi. I dati restano separati dalla decisione del modello.</div></div>
-      <div class="focus-head-meta"><span id="focusCoverage" class="focus-coverage">Universe —</span><span id="focusStatus" class="pill warn">Scanning…</span></div>
+      <div class="focus-head-meta"><span id="focusCoverage" class="focus-coverage">Universe —</span><span id="focusStatus" class="focus-status">Scanning…</span></div>
     </div>
     <div id="top5Grid" class="top5-grid"></div>
   </section>
@@ -1455,13 +1463,95 @@ function initAlphaMotion(){
   },{passive:true});
   document.addEventListener("pointerleave",()=>{cursor.style.opacity="0";aura.style.opacity="0"});
   document.addEventListener("pointerenter",e=>{tx=e.clientX;ty=e.clientY;cursor.style.opacity="1";aura.style.opacity="1"});
-  document.addEventListener("click",e=>{
+  document.addEventListener("pointerdown",e=>{
+    if(!e.isPrimary || e.button!==0 || e.clientX<0 || e.clientY<0)return;
     cursor.classList.remove("click");void cursor.offsetWidth;cursor.classList.add("click");
     const ripple=document.createElement("span");
     ripple.className="click-ripple";
     ripple.style.left=e.clientX+"px";ripple.style.top=e.clientY+"px";
     document.body.appendChild(ripple);setTimeout(()=>ripple.remove(),560);
   },{passive:true});
+}
+
+let sakuraAudio=null;
+let sakuraMaster=null;
+let sakuraTimer=null;
+let sakuraStep=0;
+let sakuraEnabled=false;
+
+function scheduleSakuraNote(ctx,frequency,when,duration,volume,type="triangle"){
+  if(!sakuraMaster)return;
+  const osc=ctx.createOscillator(), gain=ctx.createGain();
+  osc.type=type;
+  osc.frequency.setValueAtTime(frequency,when);
+  osc.detune.setValueAtTime((Math.random()-.5)*5,when);
+  gain.gain.setValueAtTime(0.0001,when);
+  gain.gain.exponentialRampToValueAtTime(Math.max(.0002,volume),when+.07);
+  gain.gain.exponentialRampToValueAtTime(.0001,when+duration);
+  osc.connect(gain).connect(sakuraMaster);
+  osc.start(when);osc.stop(when+duration+.03);
+}
+
+async function startSakuraMusic(){
+  if(sakuraEnabled)return;
+  const AudioCtx=window.AudioContext||window.webkitAudioContext;
+  if(!AudioCtx)return;
+  sakuraAudio=sakuraAudio||new AudioCtx();
+  if(sakuraAudio.state==="suspended")await sakuraAudio.resume();
+  sakuraMaster=sakuraMaster||sakuraAudio.createGain();
+  sakuraMaster.gain.value=.035;
+  const filter=sakuraAudio.createBiquadFilter();
+  filter.type="lowpass";filter.frequency.value=2600;filter.Q.value=.35;
+  sakuraMaster.connect(filter).connect(sakuraAudio.destination);
+  sakuraEnabled=true;
+  sakuraStep=0;
+  const melody=[261.63,329.63,392.0,523.25,392.0,329.63,293.66,392.0,440.0,523.25,440.0,349.23];
+  const tick=()=>{
+    if(!sakuraEnabled)return;
+    const now=sakuraAudio.currentTime+.02;
+    const note=melody[sakuraStep%melody.length];
+    scheduleSakuraNote(sakuraAudio,note,now,.95,.095,"triangle");
+    if(sakuraStep%4===0)scheduleSakuraNote(sakuraAudio,note/2,now,1.4,.018,"sine");
+    if(sakuraStep%6===3)scheduleSakuraNote(sakuraAudio,note*1.498,now+.01,.55,.018,"sine");
+    sakuraStep++;
+  };
+  tick();
+  sakuraTimer=window.setInterval(tick,900);
+  const button=$("sakuraMusic");
+  if(button){button.textContent="♫ Sakura";button.setAttribute("aria-pressed","true");button.setAttribute("aria-label","Disattiva musica Sakura lo-fi");}
+}
+
+function stopSakuraMusic(){
+  sakuraEnabled=false;
+  if(sakuraTimer){clearInterval(sakuraTimer);sakuraTimer=null;}
+  const button=$("sakuraMusic");
+  if(button){button.textContent="♪ Sakura";button.setAttribute("aria-pressed","false");button.setAttribute("aria-label","Attiva musica Sakura lo-fi");}
+}
+
+function initSakuraMusic(){
+  const button=$("sakuraMusic");
+  if(!button)return;
+  button.addEventListener("click",async e=>{
+    e.stopPropagation();
+    if(sakuraEnabled)stopSakuraMusic();else{try{await startSakuraMusic();}catch(_){}}
+  });
+  if(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+  let primed=false;
+  const prime=async()=>{
+    if(primed)return;primed=true;
+    try{
+      if(!localStorage.getItem("sakuraMusicDisabled"))await startSakuraMusic();
+    }catch(_){}
+    document.removeEventListener("pointerdown",prime,true);
+  };
+  const disablePersist=()=>{
+    try{localStorage.setItem("sakuraMusicDisabled","1");}catch(_){}
+  };
+  document.addEventListener("pointerdown",e=>{
+    if(e.target&&e.target.closest&&e.target.closest("#sakuraMusic"))return;
+    prime();
+  },{capture:true,passive:true});
+  button.addEventListener("dblclick",disablePersist);
 }
 
 function initNavigation(){
@@ -1543,7 +1633,7 @@ function renderFocus(data){
     const p=data.scan_progress||{};
     const done=Number(p.evaluated??0), total=Number(p.total??summary.assets_scanned??0), signals=Number(p.signals??0);
     const pctDone=total>0?Math.round(done/total*100):0;
-    status.textContent=(total?done+"/"+total+" · ":"")+"scanning";status.className="pill warn";
+    status.textContent=(total?done+"/"+total+" · ":"")+"scanning";status.className="focus-status warn";
     if(done>0){
       box.innerHTML='<div class="top5-empty"><div class="eyebrow">Scanning · '+pctDone+'%</div><h2 style="margin:8px 0 6px">Analisi dell\'universo in corso</h2><div class="small">Valutati '+done+' / '+total+' mercati · '+signals+' segnali candidati · '+Number(p.waits??0)+' WAIT.</div><div class="scan-progress"><span style="width:'+pctDone+'%"></span></div></div>';
     }
@@ -1552,7 +1642,7 @@ function renderFocus(data){
   if(!data.ok){
     box.innerHTML='<div class="top5-empty"><div class="eyebrow">Offline</div><h2 style="margin:8px 0 6px">Market data unavailable</h2><div class="small">'+esc(data.error||"Il terminale locale non è disponibile.")+'</div></div>';
     const coverage=$("focusCoverage"); if(coverage) coverage.textContent="Universe unavailable";
-    status.textContent="offline";status.className="pill warn";return;
+    status.textContent="offline";status.className="focus-status warn";return;
   }
   const picks=(data.signals||[]).filter(x=>x.signal==="LONG"||x.signal==="SHORT").slice(0,5);
   if(!picks.length){
@@ -1560,7 +1650,7 @@ function renderFocus(data){
     const summary=data.summary||{};
     const coverage=$("focusCoverage");
     if(coverage) coverage.textContent="Universe "+(summary.universe_total??0)+" · eligible "+(summary.model_eligible_assets??summary.model_backed_assets??0)+" · evaluated "+(summary.assets_scanned??0)+" · wait "+(summary.waits??0);
-    status.textContent="0 signals";status.className="pill warn";return;
+    status.textContent="0 signals";status.className="focus-status warn";return;
   }
   const summary=data.summary||{};
   const coverage=$("focusCoverage");
@@ -1568,7 +1658,7 @@ function renderFocus(data){
     const total=Number(summary.universe_total??0), eligible=Number(summary.model_eligible_assets??summary.model_backed_assets??0), evaluated=Number(summary.assets_scanned??0);
     coverage.textContent="Universe "+total+" · eligible "+eligible+" · evaluated "+evaluated;
   }
-  status.textContent=picks.length+" signal"+(picks.length===1?"":"s");status.className="pill good";
+  status.textContent=picks.length+" signal"+(picks.length===1?"":"s");status.className="focus-status good";
   box.innerHTML=picks.map((r,i)=>{
     const d=r.decision||{};
     return '<article class="pick-card pick-'+(r.signal==="LONG"?"long":"short")+(i===0?' pick-primary':'')+'" data-focus-symbol="'+esc(r.symbol)+'" tabindex="0" role="button" aria-label="Apri '+esc(r.symbol)+' nel market inspector">'+
@@ -1580,7 +1670,7 @@ function renderFocus(data){
       '<div class="pick-stat"><div class="k">Score</div><div class="v">'+num(d.score,2)+'</div></div>'+
       '</div>'+
       '<div class="pick-chart"><canvas data-pick-chart="'+esc(r.symbol)+'"></canvas></div>'+
-      '<div class="pick-foot"><span>15m · closed candles</span><span class="history-badge" data-history-badge="'+esc(r.symbol)+'">240 bars</span></div>'+
+      '<div class="pick-foot"><span>15m · closed candles</span><span class="history-source" data-history-badge="'+esc(r.symbol)+'">history —</span></div>'+
       '</article>';
   }).join("");
   bindFocusCards();
@@ -2155,6 +2245,7 @@ window.addEventListener("resize",()=>{
   });
 },{passive:true});
 initInspector();
+initSakuraMusic();
 initAmbientFX();
 initAlphaMotion();
 refresh(true);
