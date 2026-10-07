@@ -129,6 +129,7 @@ class SignalTerminal:
         self._scan_thread = None
         self._scan_started_at = 0.0
         self._scan_progress: dict[str, object] = {}
+        self._market_snapshot_path = self.state_root / "logs" / "live_market_universe.json"
         self.state_root.joinpath("logs").mkdir(parents=True, exist_ok=True)
         self.state_root.joinpath("data", "history").mkdir(parents=True, exist_ok=True)
 
@@ -400,6 +401,72 @@ class SignalTerminal:
         payload["signal_class"] = _signal_class(str(payload.get("signal", "WAIT")))
         return payload
 
+    def _load_market_snapshot(self) -> dict:
+        path = self._market_snapshot_path
+        if not path.exists():
+            return {}
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                return {}
+            symbols = [
+                str(symbol).strip()
+                for symbol in payload.get("symbols", [])
+                if str(symbol).strip()
+            ]
+            payload["symbols"] = list(dict.fromkeys(symbols))
+            return payload
+        except (OSError, ValueError, TypeError):
+            return {}
+
+    def _save_market_snapshot(self, symbols: list[str], universe_meta: dict) -> None:
+        payload = {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "exchange": getattr(self.settings, "exchange", "binance"),
+            "timeframe": getattr(self.settings, "timeframe", "15m"),
+            "source": universe_meta.get("universe_mode", "all_active_markets"),
+            "symbols": list(dict.fromkeys(
+                str(symbol).strip() for symbol in symbols if str(symbol).strip()
+            )),
+            "market_counts": _json_safe(universe_meta.get("market_counts", {})),
+            "universe_total": int(universe_meta.get("universe_total", len(symbols))),
+        }
+        path = self._market_snapshot_path
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        try:
+            tmp.write_text(
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            tmp.replace(path)
+        except OSError:
+            try:
+                if tmp.exists():
+                    tmp.unlink()
+            except OSError:
+                pass
+
+    def _allowed_live_symbols(self, cached: dict | None = None) -> set[str]:
+        cached = cached or self._cached_state or {}
+        configured = (
+            getattr(self.settings, "live_symbols", ())
+            or (self.settings.symbol,)
+        )
+        discovered = set(
+            (cached.get("config") or {}).get("market_symbols") or []
+        )
+        snapshot = set(self._load_market_snapshot().get("symbols") or [])
+        active = {
+            str(x.get("symbol"))
+            for x in (cached.get("signals") or [])
+            if isinstance(x, dict) and x.get("symbol")
+        }
+        return {
+            str(symbol).strip()
+            for symbol in (set(configured) | discovered | snapshot | active)
+            if str(symbol).strip()
+        }
+
     def _bootstrap_state(self) -> dict:
         return {
             "ok": True,
@@ -434,7 +501,19 @@ class SignalTerminal:
                 "fresh_data_assets": 0,
                 "terminal_ready": False,
             },
+            market_snapshot = self._load_market_snapshot()
             "signals": [],
+            "market_data": {
+                "generated_at": market_snapshot.get("generated_at"),
+                "exchange": market_snapshot.get("exchange", getattr(self.settings, "exchange", "binance")),
+                "available": False,
+                "error": None,
+                "symbols": list(market_snapshot.get("symbols") or []),
+                "quotes": {},
+                "source": "persisted_universe" if market_snapshot else "none",
+                "universe_total": int(market_snapshot.get("universe_total", 0) or 0),
+                "market_counts": market_snapshot.get("market_counts", {}),
+            },
             "journal": self._journal(),
             "outcome_update": {},
             "notes": ["Scansione completa dell'universo attivo in corso."],
@@ -521,6 +600,8 @@ class SignalTerminal:
             symbols = list(dict.fromkeys(
                 market_symbols or configured_symbols or [x.symbol for x in assessments]
             ))
+            if market_symbols:
+                self._save_market_snapshot(market_symbols, universe_meta)
             write_live_snapshot(assessments, str(self.state_root))
             append_live_signal_history(assessments, str(self.state_root))
 
@@ -544,6 +625,11 @@ class SignalTerminal:
                 "error": self._exchange_error,
                 "symbols": list(symbols),
                 "quotes": _json_safe(quotes),
+                "source": "exchange" if market_symbols else "local_fallback",
+                "universe_total": int(universe_meta.get("universe_total", len(symbols))),
+                "market_counts": _json_safe(universe_meta.get("market_counts", {})),
+                "quote_count": int(sum(1 for value in quotes.values() if isinstance(value, dict) and value.get("price") is not None)),
+                "quote_error_count": int(sum(1 for value in quotes.values() if isinstance(value, dict) and value.get("error"))),
             }
             signals = []
             for assessment in assessments:
@@ -694,6 +780,7 @@ class SignalTerminal:
                 },
                 "summary": {
                     "assets_scanned": 0,
+                    "universe_total": int((self._load_market_snapshot() or {}).get("universe_total", 0) or 0),
                     "active_signals": 0,
                     "waits": 0,
                     "compatible_bundles": 0,
@@ -701,6 +788,15 @@ class SignalTerminal:
                     "terminal_ready": False,
                 },
                 "signals": [],
+                "market_data": {
+                    "generated_at": (self._load_market_snapshot() or {}).get("generated_at"),
+                    "exchange": getattr(self.settings, "exchange", "binance"),
+                    "available": self._get_exchange() is not None,
+                    "error": self._exchange_error,
+                    "symbols": list((self._load_market_snapshot() or {}).get("symbols") or []),
+                    "quotes": {},
+                    "source": "persisted_universe",
+                },
                 "journal": self._journal(),
                 "outcome_update": {},
                 "error": f"{type(exc).__name__}:{exc}",
@@ -2327,16 +2423,7 @@ def make_handler(terminal: SignalTerminal):
                 query = parse_qs(parsed.query)
                 symbol = query.get("symbol", [terminal.settings.symbol])[0]
                 cached = terminal._cached_state or {}
-                configured = (
-                    getattr(terminal.settings, "live_symbols", ())
-                    or (terminal.settings.symbol,)
-                )
-                active_symbols = [
-                    x.get("symbol") for x in cached.get("signals", [])
-                    if isinstance(x, dict) and x.get("symbol")
-                ]
-                discovered = set((cached.get("config") or {}).get("market_symbols") or [])
-                allowed = set(configured) | discovered | {str(x) for x in active_symbols}
+                allowed = terminal._allowed_live_symbols(cached)
                 if symbol not in allowed:
                     self._send(
                         b'{"error":"symbol_not_configured"}',
@@ -2355,16 +2442,7 @@ def make_handler(terminal: SignalTerminal):
                 query = parse_qs(parsed.query)
                 symbol = query.get("symbol", [terminal.settings.symbol])[0]
                 cached = terminal._cached_state or {}
-                configured = (
-                    getattr(terminal.settings, "live_symbols", ())
-                    or (terminal.settings.symbol,)
-                )
-                active_symbols = [
-                    x.get("symbol") for x in cached.get("signals", [])
-                    if isinstance(x, dict) and x.get("symbol")
-                ]
-                discovered = set((cached.get("config") or {}).get("market_symbols") or [])
-                allowed = set(configured) | discovered | {str(x) for x in active_symbols}
+                allowed = terminal._allowed_live_symbols(cached)
                 if symbol not in allowed:
                     self._send(
                         b'{"error":"symbol_not_configured","bars":[]}',
