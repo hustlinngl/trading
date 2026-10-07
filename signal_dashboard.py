@@ -272,6 +272,18 @@ class SignalTerminal:
         slug = self._history_slug(symbol, self.settings.timeframe)
         bundled = self.root / "data" / "historical" / f"{slug}.csv"
         writable = self.state_root / "data" / "history" / f"{slug}.csv"
+
+        # The dashboard must render reliably even when Binance REST is blocked/offline.
+        # Prefer a recent writable cache, then the bundled verified snapshot.
+        for path, source in ((writable, "local_cache"), (bundled, "bundled")):
+            if path.exists():
+                try:
+                    result = self._history_from_csv(path, bars, source)
+                    if result.get("bars"):
+                        return result
+                except (OSError, ValueError, KeyError):
+                    pass
+
         try:
             exchange = exchange_client(
                 getattr(self.settings, "exchange", "binance"), sandbox=False
@@ -305,13 +317,6 @@ class SignalTerminal:
             network_error = f"{type(exc).__name__}:{exc}"
         else:
             network_error = "empty_data"
-
-        for path, source in ((writable, "local_cache"), (bundled, "bundled")):
-            if path.exists():
-                fallback = self._history_from_csv(path, bars, source)
-                if fallback.get("bars"):
-                    fallback["network_error"] = network_error
-                    return fallback
 
         return {
             "symbol": symbol,
