@@ -1792,10 +1792,16 @@ def make_handler(terminal: SignalTerminal):
             if parsed.path == "/api/quote":
                 query = parse_qs(parsed.query)
                 symbol = query.get("symbol", [terminal.settings.symbol])[0]
-                allowed = set(
+                cached = terminal._cached_state or {}
+                configured = (
                     getattr(terminal.settings, "live_symbols", ())
                     or (terminal.settings.symbol,)
                 )
+                active_symbols = [
+                    x.get("symbol") for x in cached.get("signals", [])
+                    if isinstance(x, dict) and x.get("symbol")
+                ]
+                allowed = set(configured) | {str(x) for x in active_symbols}
                 if symbol not in allowed:
                     self._send(
                         b'{"error":"symbol_not_configured"}',
@@ -1813,10 +1819,16 @@ def make_handler(terminal: SignalTerminal):
             if parsed.path == "/api/history":
                 query = parse_qs(parsed.query)
                 symbol = query.get("symbol", [terminal.settings.symbol])[0]
-                allowed = set(
+                cached = terminal._cached_state or {}
+                configured = (
                     getattr(terminal.settings, "live_symbols", ())
                     or (terminal.settings.symbol,)
                 )
+                active_symbols = [
+                    x.get("symbol") for x in cached.get("signals", [])
+                    if isinstance(x, dict) and x.get("symbol")
+                ]
+                allowed = set(configured) | {str(x) for x in active_symbols}
                 if symbol not in allowed:
                     self._send(
                         b'{"error":"symbol_not_configured","bars":[]}',
