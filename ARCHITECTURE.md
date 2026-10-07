@@ -1,4 +1,4 @@
-# Adaptive AI Trading Lab — V6 architecture (0.9.17)
+# Adaptive AI Trading Lab — V6 architecture (0.9.18)
 
 The project is a research system that can grow itself without self-authorizing live trading.
 
