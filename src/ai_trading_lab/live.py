@@ -173,24 +173,30 @@ def discover_live_universe(settings, root=".", exchange=None, symbols=None):
                 local.append(stem.replace("_", "/"))
 
     universe = list(dict.fromkeys(configured + discovered + local))
-    bundle_root = Path(root) / "models" / "assets"
-    scoreable = []
+    model_backed = []
+    eligible = []
     for symbol in universe:
         try:
             bundle = resolve_signal_bundle(settings, root, symbol)
-            if (bundle / "signal_model.joblib").exists():
-                scoreable.append(symbol)
+            if not (bundle / "signal_model.joblib").exists():
+                continue
+            model_backed.append(symbol)
+            compatible, _ = bundle_compatibility(settings, bundle, symbol)
+            if compatible:
+                eligible.append(symbol)
         except Exception:
             continue
 
     limit = int(getattr(settings, "live_max_symbols", 0))
     if limit > 0:
-        scoreable = scoreable[:limit]
+        eligible = eligible[:limit]
     return {
-        "symbols": scoreable,
+        "symbols": eligible,
         "discovered_markets": len(universe),
-        "model_backed_markets": len(scoreable),
-        "uncovered_markets": max(0, len(universe) - len(scoreable)),
+        "model_backed_markets": len(model_backed),
+        "model_eligible_markets": len(eligible),
+        "ineligible_model_markets": max(0, len(model_backed) - len(eligible)),
+        "uncovered_markets": max(0, len(universe) - len(model_backed)),
         "market_counts": market_counts,
     }
 
@@ -258,6 +264,8 @@ def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, re
         return picks, {
             "universe_total": int(universe["discovered_markets"]),
             "universe_model_backed": int(universe["model_backed_markets"]),
+            "universe_model_eligible": int(universe.get("model_eligible_markets", len(candidates))),
+            "universe_ineligible_model": int(universe.get("ineligible_model_markets", 0)),
             "universe_uncovered": int(universe.get("uncovered_markets", 0)),
             "universe_evaluated": int(len(candidates)),
             "market_counts": universe["market_counts"],
