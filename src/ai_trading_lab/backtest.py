@@ -80,7 +80,8 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
                  intrabar_barriers: bool = True, impact_bps_per_sqrt: float = 1.5,
                  force_daily_loss_exit: bool = True, short_borrow_bps_per_bar: float = 0.0,
                  funding_rate_column: str = 'funding_rate', funding_interval_bars: int = 32,
-                 funding_bps_per_bar: float = 0.0, apply_funding: bool = False) -> BacktestResult:
+                 funding_bps_per_bar: float = 0.0, apply_funding: bool = False,
+                 require_short_borrow_cost: bool = False) -> BacktestResult:
     """Event-driven single-asset simulator with strict decision/execution semantics."""
     if not signal.index.equals(df.index):
         signal = signal.reindex(df.index).fillna('FLAT')
@@ -116,7 +117,7 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
         gross = side * (exit_fill - float(entry)) * qty
         fee_cash = abs(qty * exit_fill) * fee
         cash += gross - fee_cash
-        pnl_net = gross - fee_cash - entry_fee - borrow_cost
+        pnl_net = gross - fee_cash - entry_fee - borrow_cost - funding_cost
         trades.append({
             'timestamp': ts, 'entry_timestamp': entry_ts,
             'side': 'LONG' if side > 0 else 'SHORT',
@@ -164,6 +165,9 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
 
         if side == 0 and i > 0 and pending in {'LONG', 'SHORT'}:
             direction = 1 if pending == 'LONG' else -1
+            if direction < 0 and require_short_borrow_cost and float(short_borrow_bps_per_bar) <= 0.0:
+                equity_curve.append(mark(close))
+                continue
             approved = risk.size(cash, open_, atr, direction)
             if approved.allowed:
                 max_participation = float(getattr(risk, 'max_participation_pct', 0.0) or 0.0)
