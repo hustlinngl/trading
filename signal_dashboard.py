@@ -1375,7 +1375,10 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   </div>
 
   <section class="focus-only" id="focusDashboard" aria-live="polite">
-    <div class="top5-head"><div><div class="top5-title">Top 5 signals</div></div></div>
+    <div class="top5-head">
+      <div><div class="top5-title">Top 5 signals</div><div class="small">Solo risultati che superano i gate correnti.</div></div>
+      <div id="signalSummary" class="signal-summary" aria-live="polite"></div>
+    </div>
     <div id="top5Grid" class="top5-grid"></div>
     <div id="liveDataFallback" class="live-data-grid" hidden></div>
   </section>
@@ -1422,7 +1425,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
     <button class="inspector-close" id="inspectorClose" aria-label="Chiudi inspector">×</button>
   </div>
   <div class="inspector-scroll" id="inspectorContent">
-    <div class="timeline-empty">Seleziona un asset da Radar o Intelligence.</div>
+    <div class="timeline-empty">Seleziona un segnale.</div>
   </div>
 </aside>
 
@@ -1431,7 +1434,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
 
 <script>
 const $ = (id) => document.getElementById(id);
-const state = { data:null, history:null, selected:null, historyRequest:0, focusRequest:0, focusHistories:{} };
+const state = { data:null, history:null, selected:null, historyRequest:0, focusRequest:0, focusHistories:{}, focusHistoryAt:{} };
 
 function initAmbientFX(){
   const canvas=$("ambient-canvas");
@@ -1648,8 +1651,24 @@ function drawPickChart(canvas,history,signal){
   ctx.textAlign="right";ctx.fillText(new Date(bars[bars.length-1].t).toLocaleDateString(),W-pad.r,H-5);
 }
 
+function renderSignalSummary(data){
+  const el=$("signalSummary");
+  if(!el)return;
+  const s=data.summary||{};
+  const m=data.market_data||{};
+  const active=Number(s.active_signals||0);
+  const markets=Number(s.universe_total||m.universe_total||0);
+  const quotes=Number(m.quote_count||0);
+  const source=m.source==="exchange"?"LIVE":"CACHE";
+  const quoteLabel=quotes?source+" · "+quotes+" quote":"DATA —";
+  el.innerHTML=
+    '<span class="summary-pill '+(active?'hot':'')+'"><strong>'+active+'</strong> active</span>'+
+    '<span class="summary-pill"><strong>'+markets+'</strong> markets</span>'+
+    '<span class="summary-pill"><strong>'+esc(quoteLabel)+'</strong></span>';
+}
 function renderFocus(data){
   state.data=data;
+  renderSignalSummary(data);
   const box=$("top5Grid");
   if(!box)return;
   if(data.scan_in_progress){
@@ -1707,7 +1726,9 @@ function bindFocusCards(){
 
 async function loadFocusHistories(picks){
   const request=++state.focusRequest;
-  const results=await Promise.all(picks.map(async r=>{
+  const now=Date.now();
+  const due=picks.filter(r=>!state.focusHistories[r.symbol] || now-(state.focusHistoryAt[r.symbol]||0)>60000);
+  const results=await Promise.all(due.map(async r=>{
     try{
       const res=await fetch("/api/history?symbol="+encodeURIComponent(r.symbol)+"&limit=240",{cache:"no-store"});
       return [r.symbol,await res.json()];
@@ -1716,7 +1737,10 @@ async function loadFocusHistories(picks){
     }
   }));
   if(request!==state.focusRequest)return;
-  state.focusHistories=Object.fromEntries(results);
+  for(const [symbol,history] of results){
+    state.focusHistories[symbol]=history;
+    state.focusHistoryAt[symbol]=now;
+  }
   picks.forEach(r=>{
     const h=state.focusHistories[r.symbol]||{};
     const canvas=Array.from(document.querySelectorAll("[data-pick-chart]")).find(el=>el.dataset.pickChart===r.symbol);
