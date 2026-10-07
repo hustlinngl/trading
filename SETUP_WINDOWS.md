@@ -28,3 +28,16 @@ python -m ai_trading_lab.main doctor
 For reproducible EXE builds see `BUILD_WINDOWS_EXE.md`.
 
 The terminal is read-only and paper/sandbox-oriented by default. Never commit API keys; use environment variables or GitHub Actions Secrets.
+
+## Live data bootstrap
+
+For the read-only dashboard, public market data does not require exchange API keys. After installing the project, verify the runtime and bootstrap a local closed-candle cache:
+
+```powershell
+python -m ai_trading_lab.main doctor
+python -m ai_trading_lab.main bootstrap-live-data --symbols BTC/USDT,ETH/USDT,BNB/USDT,SOL/USDT,XRP/USDT --live-bars 600
+python signal_dashboard.py
+```
+
+The dashboard refreshes realtime quotes through the configured public exchange adapter. The `bootstrap-live-data` command creates `data/historical/<SYMBOL>_<TIMEFRAME>.csv`; live model inference still requires a compatible trained bundle under `models/assets/<SYMBOL>/`.
+
