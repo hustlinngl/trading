@@ -55,7 +55,7 @@ The dashboard is a read-only market-data terminal. To make it immediately useful
 
 ```powershell
 python -m ai_trading_lab.main doctor
-python -m ai_trading_lab.main bootstrap-live-data --symbols BTC/USDT,ETH/USDT,BNB/USDT,SOL/USDT,XRP/USDT --live-bars 600
+python -m ai_trading_lab.main bootstrap-live-data --live-bars 600
 python signal_dashboard.py
 ```
 
