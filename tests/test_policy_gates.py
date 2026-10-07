@@ -58,7 +58,7 @@ def test_short_signal_uses_upper_bound_for_directional_uncertainty():
     assert action == "FLAT"
     assert "signal_expected_return" in reasons
 
-    robust = row(p_up=0.10, expected_return=-0.006, expected_return_lcb=-0.012, expected_return_ucb=-0.002)
+    robust = row(p_up=0.10, expected_return=-0.006, expected_return_lcb=-0.012, expected_return_ucb=-0.004)
     action, reasons = live_signal_gate(robust, settings)
     assert action == "SHORT"
     assert reasons == []
@@ -91,6 +91,7 @@ def test_live_assessment_empty_data_fails_closed(monkeypatch):
     import ai_trading_lab.live as live_mod
     from ai_trading_lab.live import assess_symbol
     settings = replace(load_settings("config.yaml"), symbol="BTC/USDT")
+    monkeypatch.setattr(live_mod, "exchange_client", lambda *args, **kwargs: object())
     monkeypatch.setattr(live_mod, "fetch_ohlcv", lambda *args, **kwargs: pd.DataFrame())
     result = assess_symbol(settings, root=".")
     assert result.status == "WAIT"
@@ -103,6 +104,7 @@ def test_live_assessment_fetch_failure_fails_closed(monkeypatch):
     settings = replace(load_settings("config.yaml"), symbol="BTC/USDT")
     def boom(*args, **kwargs):
         raise RuntimeError("exchange unavailable")
+    monkeypatch.setattr(live_mod, "exchange_client", lambda *args, **kwargs: object())
     monkeypatch.setattr(live_mod, "fetch_ohlcv", boom)
     result = assess_symbol(settings, root=".")
     assert result.status == "WAIT"
