@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ai_trading_lab.config import load_settings
-from ai_trading_lab.deployment import asset_bundle_dir, resolve_signal_bundle, bundle_compatibility, bundle_artifact_fingerprint
+from ai_trading_lab.deployment import asset_bundle_dir, resolve_signal_bundle, bundle_compatibility, bundle_artifact_fingerprint, ENGINE_ARTIFACTS
 from ai_trading_lab.external_intelligence import ExaClient, TavilyClient, extract_event_terms
 
 
@@ -119,7 +119,8 @@ def test_refresh_deployment_manifest_requires_matching_evidence(tmp_path):
     fp = "dataset-current"
     sem = model_semantics_fingerprint(settings)
     dep_sem = deployment_semantics_fingerprint(settings)
-    (bundle / "signal_model.joblib").write_bytes(b"model")
+    for name in ENGINE_ARTIFACTS:
+        (bundle / name).write_bytes(name.encode())
     (bundle / "trade_window_specialist.joblib").write_bytes(b"window")
     (bundle / "base_training_meta.json").write_text(
         json.dumps({"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem}),
@@ -193,7 +194,8 @@ def test_bundle_compatibility_rejects_tampered_artifact(tmp_path):
     settings = load_settings("config.yaml")
     bundle = asset_bundle_dir(tmp_path, "BTC/USDT")
     bundle.mkdir(parents=True)
-    (bundle / "signal_model.joblib").write_bytes(b"original-model")
+    for name in ENGINE_ARTIFACTS:
+        (bundle / name).write_bytes(b"original-" + name.encode())
     fp = "dataset-current"
     sem = model_semantics_fingerprint(settings)
     dep_sem = deployment_semantics_fingerprint(settings)
