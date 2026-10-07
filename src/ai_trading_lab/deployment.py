@@ -65,11 +65,11 @@ def bundle_compatibility(settings, bundle: str | Path, symbol: str) -> tuple[boo
     """Validate lightweight persisted identity metadata before live/paper inference."""
     bundle = Path(bundle)
     meta_path = bundle / "base_training_meta.json"
+    meta = {}
     if not meta_path.exists() and bool(getattr(settings, "signal_only_mode", True)):
         return False, "model_metadata_missing"
     if meta_path.exists():
         try:
-            import json
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
             if str(meta.get("symbol")) != str(symbol):
                 return False, "model_symbol_mismatch"
@@ -87,7 +87,6 @@ def bundle_compatibility(settings, bundle: str | Path, symbol: str) -> tuple[boo
         if not manifest_path.exists():
             return False, "deployment_manifest_missing"
         try:
-            import json
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             if not bool(manifest.get("ready", False)):
                 return False, "deployment_manifest_not_ready"
