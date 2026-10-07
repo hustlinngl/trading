@@ -679,7 +679,7 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
     </div>
   </div>
 
-  <div class="panel">
+  <div class="panel" id="detail">
     <div class="panel-head">
       <div><div class="title">Signal detail</div><div class="small">Stessa decisione usata dal motore: robust edge, meta, memoria, regime e duration gate.</div></div>
     </div>
