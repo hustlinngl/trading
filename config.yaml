@@ -24,6 +24,7 @@ model:
   max_holding_bars: 96
   trade_window_enabled: true
   trade_window_required_for_signal: true
+  require_deployment_manifest_for_signal: true
 risk:
   initial_cash: 10000
   risk_per_trade: 0.005
