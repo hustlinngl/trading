@@ -107,41 +107,96 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
     except Exception as exc:
         return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[f"runtime:{type(exc).__name__}:{exc}"],fp)
 
-def scan_top5(settings,root=".",symbols=None):
-    ex=None
-    network_unavailable=False
-    try:
-        ex=exchange_client(getattr(settings,"exchange","binance"),sandbox=False)
-    except Exception:
-        network_unavailable=True
+def discover_live_universe(settings, root=".", exchange=None, symbols=None):
+    """Build the complete live universe before ranking.
 
-    configured=list(symbols or getattr(settings,"live_symbols",()) or [settings.symbol])
-    asset_root=Path(root)/"models"/"assets"
-    bundled_root=Path(root)/"data"/"historical"
-    discovered=[]
+    The exchange is authoritative for currently active markets. Local model bundles are
+    then used as the second eligibility layer: a market without a matching trained bundle
+    cannot produce a truthful model signal, so it is counted as discovered but not scored.
+    A zero live_max_symbols means unlimited model-backed coverage.
+    """
+    configured = list(dict.fromkeys(symbols or getattr(settings, "live_symbols", ()) or [settings.symbol]))
+    discovered = []
+    market_counts = {}
+    ex = exchange
+    if ex is not None:
+        try:
+            markets = getattr(ex, "markets", {}) or {}
+            allowed_types = set(getattr(settings, "live_market_types", ("spot", "swap", "future", "margin")))
+            for market in markets.values():
+                if not isinstance(market, dict) or market.get("active") is False:
+                    continue
+                symbol = str(market.get("symbol") or "").strip()
+                if not symbol:
+                    continue
+                mtype = str(market.get("type") or ("swap" if market.get("swap") else "future" if market.get("future") else "spot"))
+                if allowed_types and mtype not in allowed_types:
+                    continue
+                if not bool(market.get("contract")) and mtype in {"swap", "future"}:
+                    continue
+                discovered.append(symbol)
+                market_counts[mtype] = market_counts.get(mtype, 0) + 1
+        except Exception:
+            pass
+
+    # Offline fallback: include every locally known model/historical asset.
+    roots = (Path(root) / "models" / "assets", Path(root) / "data" / "historical")
+    local = []
+    asset_root = roots[0]
     if asset_root.exists():
         for path in asset_root.iterdir():
             if path.is_dir():
-                name=path.name.replace("_","/")
-                if name.endswith(("/USDT","/USDC","/FDUSD")):
-                    discovered.append(name)
-    if bundled_root.exists():
-        for path in bundled_root.glob("*_*.csv"):
-            stem=path.stem.rsplit("_",1)[0]
-            if stem.endswith(("_USDT","_USDC","_FDUSD")):
-                discovered.append(stem.replace("_","/"))
-    universe=list(dict.fromkeys(configured+discovered))
-    max_symbols=max(5,int(getattr(settings,"live_max_symbols",15)))
-    out=[]
-    for symbol in universe[:max_symbols]:
+                local.append(path.name.replace("_", "/"))
+    history_root = roots[1]
+    if history_root.exists():
+        for path in history_root.glob("*_*.csv"):
+            stem = path.stem.rsplit("_", 1)[0]
+            if stem.endswith(("_USDT", "_USDC", "_FDUSD")):
+                local.append(stem.replace("_", "/"))
+
+    universe = list(dict.fromkeys(configured + discovered + local))
+    bundle_root = Path(root) / "models" / "assets"
+    scoreable = []
+    for symbol in universe:
         try:
-            assessment=assess_symbol(
-                settings,root,symbol,exchange=ex,skip_network=network_unavailable
+            bundle = resolve_signal_bundle(settings, root, symbol)
+            if (bundle / "signal_model.joblib").exists():
+                scoreable.append(symbol)
+        except Exception:
+            continue
+
+    limit = int(getattr(settings, "live_max_symbols", 0))
+    if limit > 0:
+        scoreable = scoreable[:limit]
+    return {
+        "symbols": scoreable,
+        "discovered_markets": len(universe),
+        "model_backed_markets": len(scoreable),
+        "market_counts": market_counts,
+    }
+
+
+def scan_top5(settings, root=".", symbols=None, *, return_meta=False):
+    ex = None
+    network_unavailable = False
+    try:
+        ex = exchange_client(getattr(settings, "exchange", "binance"), sandbox=False)
+    except Exception:
+        network_unavailable = True
+
+    universe = discover_live_universe(settings, root, ex, symbols)
+    candidates = universe["symbols"]
+    out = []
+    for symbol in candidates:
+        try:
+            assessment = assess_symbol(
+                settings, root, symbol, exchange=ex, skip_network=network_unavailable
             )
-            if assessment.signal in {"LONG","SHORT"} and assessment.status=="SIGNAL":
+            if assessment.signal in {"LONG", "SHORT"} and assessment.status == "SIGNAL":
                 out.append(assessment)
         except Exception:
             continue
+
     out.sort(
         key=lambda x: (
             float(x.confidence),
@@ -150,8 +205,16 @@ def scan_top5(settings,root=".",symbols=None):
         ),
         reverse=True,
     )
-    return out[:5]
-
+    picks = out[:5]
+    if return_meta:
+        return picks, {
+            "universe_total": int(universe["discovered_markets"]),
+            "universe_model_backed": int(universe["model_backed_markets"]),
+            "universe_evaluated": int(len(candidates)),
+            "market_counts": universe["market_counts"],
+            "universe_mode": "all_active_markets",
+        }
+    return picks
 
 def write_live_snapshot(results,root="."):
     p=Path(root)/"logs"/"live_snapshot.json"; p.parent.mkdir(parents=True,exist_ok=True)
