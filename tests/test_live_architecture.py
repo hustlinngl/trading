@@ -80,11 +80,15 @@ def test_live_tracker_realtime_price_prefers_quote_mid_over_last_trade():
 def test_binance_public_stream_routes_market_types_to_matching_endpoints():
     spot = BinancePublicStream("BTC/USDT")
     usdm = BinancePublicStream("ETH/USDT:USDT")
+    usdm_book = BinancePublicStream("ETH/USDT:USDT", streams=("bookTicker",))
+    usdm_trades = BinancePublicStream("ETH/USDT:USDT", streams=("aggTrade",))
     coinm = BinancePublicStream("BTC/USD:BTC")
     dated_coinm = BinancePublicStream("BTC/USD:BTC-251226")
 
     assert "stream.binance.com:9443/stream" in spot.url()
-    assert "fstream.binance.com/public/stream" in usdm.url()
+    assert len(usdm.urls()) == 2
+    assert "fstream.binance.com/public/stream" in usdm_book.url()
+    assert "fstream.binance.com/market/stream" in usdm_trades.url()
     assert "dstream.binance.com/stream" in coinm.url()
     assert "btcusd_251226@bookticker" in dated_coinm.url()
     with pytest.raises(ValueError):
