@@ -484,18 +484,11 @@ class SignalTerminal:
                         "error": f"{type(exc).__name__}:{exc}",
                     }
 
-                market_symbols = []
-                try:
-                    markets = getattr(self._exchange, "markets", {}) or {}
-                    market_symbols = sorted({
-                        str(m.get("symbol")).strip()
-                        for m in markets.values()
-                        if isinstance(m, dict)
-                        and m.get("active") is not False
-                        and str(m.get("symbol") or "").strip()
-                    })
-                except Exception:
-                    market_symbols = []
+                market_symbols = sorted({
+                    str(symbol).strip()
+                    for symbol in (universe_meta.get("market_symbols") or [])
+                    if str(symbol).strip()
+                })
                 quotes = self._quotes(symbols)
                 signals = []
                 for assessment in assessments:
