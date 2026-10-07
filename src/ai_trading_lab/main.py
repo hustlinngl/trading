@@ -209,12 +209,16 @@ def system_doctor(settings, root: str | Path = ".") -> dict:
     import importlib.util, platform
     root = Path(root)
     deps = {name: importlib.util.find_spec(name) is not None for name in [
-        "numpy", "pandas", "sklearn", "yaml", "joblib", "ccxt", "plotly", "streamlit"
+        "numpy", "pandas", "sklearn", "yaml", "joblib",
+        "optuna", "scipy", "pyarrow",
+        "ccxt", "requests",
+        "plotly", "streamlit",
+        "xgboost", "lightgbm",
     ]}
     directories = {name: (root / name).exists() for name in ["data", "models", "logs"]}
     core_names = ["numpy", "pandas", "sklearn", "yaml", "joblib"]
     research_names = ["numpy", "pandas", "sklearn", "yaml", "joblib", "optuna", "scipy", "pyarrow"]
-    live_names = ["ccxt"]
+    live_names = ["ccxt", "requests"]
     ui_names = ["plotly", "streamlit"]
     return {
         "version": (Path(root) / "VERSION").read_text(encoding="utf-8").strip() if (Path(root) / "VERSION").exists() else "unknown",
@@ -230,7 +234,8 @@ def system_doctor(settings, root: str | Path = ".") -> dict:
         "research_ready": all(deps.get(x, False) for x in research_names),
         "live_data_ready": all(deps.get(x, False) for x in live_names),
         "ui_live_ready": all(deps.get(x, False) for x in ui_names),
-        "all_required_dependencies": all(deps.values()),
+        "all_required_dependencies": all(deps.get(x, False) for x in research_names + live_names + ui_names),
+        "optional_ml": {"xgboost": deps.get("xgboost", False), "lightgbm": deps.get("lightgbm", False)},
     }
 
 
