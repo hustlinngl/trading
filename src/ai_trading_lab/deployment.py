@@ -3,6 +3,29 @@ from __future__ import annotations
 from pathlib import Path
 
 
+
+def model_semantics_fingerprint(settings) -> str:
+    import hashlib
+    import json
+
+    fields = {
+        "timeframe": str(getattr(settings, "timeframe", "")),
+        "horizon_bars": int(getattr(settings, "horizon_bars", 8)),
+        "pt_atr": float(getattr(settings, "pt_atr", 1.6)),
+        "sl_atr": float(getattr(settings, "sl_atr", 1.0)),
+        "memory_k": int(getattr(settings, "memory_k", 32)),
+        "memory_information_weighted": bool(getattr(settings, "memory_information_weighted", False)),
+        "xgb_estimators": int(getattr(settings, "xgb_estimators", 240)),
+        "lgbm_estimators": int(getattr(settings, "lgbm_estimators", 240)),
+        "hist_max_iter": int(getattr(settings, "hist_max_iter", 260)),
+        "regime_n_init": int(getattr(settings, "regime_n_init", 5)),
+        "external_feature_lag_bars": int(getattr(settings, "external_feature_lag_bars", 1)),
+        "conformal_level": float(getattr(settings, "conformal_level", 0.90)),
+        "efficiency_corr_threshold": float(getattr(settings, "efficiency_corr_threshold", 0.995)),
+        "validation_purge_bars": int(getattr(settings, "validation_purge_bars", 12)),
+    }
+    return hashlib.sha256(json.dumps(fields, sort_keys=True).encode("utf-8")).hexdigest()[:24]
+
 def asset_slug(symbol: str) -> str:
     return str(symbol).replace("/", "_").replace(":", "_")
 
@@ -49,6 +72,9 @@ def bundle_compatibility(settings, bundle: str | Path, symbol: str) -> tuple[boo
                 return False, "model_symbol_mismatch"
             if str(meta.get("timeframe")) != str(getattr(settings, "timeframe", "")):
                 return False, "model_timeframe_mismatch"
+            recorded_semantics=meta.get("model_semantics_fingerprint")
+            if recorded_semantics and str(recorded_semantics)!=model_semantics_fingerprint(settings):
+                return False, "model_semantics_mismatch"
         except Exception as exc:
             return False, f"model_metadata_error:{type(exc).__name__}"
     if bool(getattr(settings, "require_deployment_manifest_for_signal", False)):
