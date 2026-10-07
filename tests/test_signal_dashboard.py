@@ -177,3 +177,15 @@ def test_signal_terminal_alpha_decision_deck_is_wired():
     assert "renderDecisionDeck" in html
     assert "Decision trace" in html
     assert "data-target=\"detail\"" in html
+
+
+def test_signal_terminal_alpha_ambient_fx_is_wired():
+    import signal_dashboard as terminal_mod
+
+    html = terminal_mod.HTML
+    assert 'id="ambient-canvas"' in html
+    assert "initAmbientFX" in html
+    assert "requestAnimationFrame" in html
+    assert "click-ripple" in html
+    assert "signal-live-" in html
+    assert "prefers-reduced-motion:reduce" in html
