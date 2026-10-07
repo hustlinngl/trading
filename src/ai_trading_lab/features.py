@@ -47,5 +47,23 @@ def make_features(df,horizon=8,external_feature_lag_bars=1):
     future_entry=x.open.shift(-1); future_exit=c.shift(-(int(horizon)+1)); future_ret=future_exit/future_entry-1; y=(future_ret>0).astype(float); y[future_ret.isna()]=np.nan
     return x.replace([np.inf,-np.inf],np.nan),y,future_ret
 def make_oos_features(history,future,horizon=8,warmup_bars=None,external_feature_lag_bars=1):
-    warmup=int(warmup_bars or max(256,int(horizon)*4)); context=history.tail(warmup); combined=pd.concat([context,future]).sort_index(); combined=combined[~combined.index.duplicated(keep='last')]
-    features,_,_=make_features(combined,horizon,external_feature_lag_bars=external_feature_lag_bars); return features.reindex(future.index)
+    warmup=int(warmup_bars or max(256,int(horizon)*4))
+    context=history.tail(warmup).copy()
+    future=future.copy()
+    if not isinstance(context.index,pd.DatetimeIndex) or not isinstance(future.index,pd.DatetimeIndex):
+        raise TypeError("history and future must use DatetimeIndex")
+    if context.index.has_duplicates or future.index.has_duplicates:
+        raise ValueError("history and future must have unique timestamps")
+    overlap=context.index.intersection(future.index)
+    if len(overlap):
+        cols=[c for c in context.columns.intersection(future.columns) if c in {'open','high','low','close','volume','quote_volume','trades','taker_buy_base_volume','taker_buy_quote_volume'}]
+        for col in cols:
+            a=pd.to_numeric(context.loc[overlap,col],errors='coerce')
+            b=pd.to_numeric(future.loc[overlap,col],errors='coerce')
+            equal=(a.isna() & b.isna()) | np.isclose(a.to_numpy(float),b.to_numpy(float),rtol=1e-10,atol=1e-12,equal_nan=True)
+            if not bool(np.all(equal)):
+                raise ValueError(f"Conflicting overlapping OOS data at column {col}")
+    combined=pd.concat([context,future]).sort_index()
+    combined=combined[~combined.index.duplicated(keep='last')]
+    features,_,_=make_features(combined,horizon,external_feature_lag_bars=external_feature_lag_bars)
+    return features.reindex(future.index)
