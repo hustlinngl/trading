@@ -208,6 +208,7 @@ def discover_live_universe(settings, root=".", exchange=None, symbols=None):
         eligible = eligible[:limit]
     return {
         "symbols": eligible,
+        "universe_symbols": list(universe),
         "discovered_markets": len(universe),
         "exchange_market_metadata": bool(exchange_ready),
         "model_backed_markets": len(model_backed),
@@ -293,6 +294,7 @@ def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, re
             "universe_ineligible_model": int(universe.get("ineligible_model_markets", 0)),
             "universe_uncovered": int(universe.get("uncovered_markets", 0)),
             "universe_evaluated": int(len(candidates)),
+            "market_symbols": list(universe.get("universe_symbols", candidates)),
             "universe_signals": int(len(out)),
             "universe_waits": int(waits),
             "assessment_failures": int(failures),
