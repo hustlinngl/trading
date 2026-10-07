@@ -446,13 +446,23 @@ class SignalTerminal:
                         or (self.settings.symbol,)
                     )
                 )
-                assessments, universe_meta = scan_top5(
+                scan_result = scan_top5(
                     self.settings,
                     str(self.root),
                     exchange=self._get_exchange(),
                     cache=self._assessment_cache,
                     return_meta=True,
                 )
+                if isinstance(scan_result, tuple):
+                    assessments, universe_meta = scan_result
+                else:
+                    assessments = scan_result
+                    universe_meta = {
+                        "universe_total": len(assessments),
+                        "universe_model_backed": len(assessments),
+                        "universe_evaluated": len(assessments),
+                        "universe_mode": "compatibility_fallback",
+                    }
                 # Tickers are presentation-only; never poll the entire scan universe.
                 symbols = list(dict.fromkeys(
                     configured_symbols + [x.symbol for x in assessments]
