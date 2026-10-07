@@ -125,7 +125,7 @@ def train_trade_window_backbone(df,settings,holdout_frac=.15,save_path=None):
     return report
 
 
-def assess_trade_window(df, settings, model_path=None):
+def assess_trade_window(df, settings, model_path=None, symbol=None):
     """Evaluate the persisted 3–24h specialist as a final direction/quality verifier."""
     path = Path(model_path or getattr(settings, "trade_window_model_path", "models/champion/trade_window_specialist.joblib"))
     out = {
@@ -145,9 +145,10 @@ def assess_trade_window(df, settings, model_path=None):
         model = artifact["model"]
         feature_columns = list(artifact.get("feature_columns", []))
         report = artifact.get("report", {}) or {}
+        expected_symbol = str(symbol or getattr(settings, "symbol", ""))
         artifact_symbol = report.get("symbol")
         artifact_timeframe = report.get("timeframe")
-        if artifact_symbol and str(artifact_symbol) != str(getattr(settings, "symbol", "")):
+        if artifact_symbol and str(artifact_symbol) != expected_symbol:
             out["trade_window_reason"] = "symbol_mismatch"
             return out
         if artifact_timeframe and str(artifact_timeframe) != str(getattr(settings, "timeframe", "15m")):
