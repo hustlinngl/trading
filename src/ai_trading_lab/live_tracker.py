@@ -331,18 +331,35 @@ class LiveTracker:
             )
 
             payload = event.payload or {}
-            event_price = self._event_price(event, previous)
-            if event_price is not None and np.isfinite(event_price):
-                merged["last_trade_price"] = float(event_price)
+            event_kind = event.event_type.lower()
+            event_ms = int(event.event_time_ms or 0)
+            quote_time = int(previous.get("quote_event_time_ms", 0) or 0)
+            trade_time = int(previous.get("trade_event_time_ms", 0) or 0)
+            accepted_quote = event_kind == "bookticker" and (
+                event_ms <= 0 or quote_time <= 0 or event_ms > quote_time
+            )
+            accepted_trade = event_kind in {"aggtrade", "trade"} and (
+                event_ms <= 0 or trade_time <= 0 or event_ms > trade_time
+            )
 
-            for target, source in (("bid", "b"), ("ask", "a")):
-                if source in payload:
-                    try:
-                        value = float(payload[source])
-                        if np.isfinite(value) and value > 0:
-                            merged[target] = value
-                    except (TypeError, ValueError):
-                        pass
+            if event_kind == "bookticker":
+                if accepted_quote:
+                    for target, source in (("bid", "b"), ("ask", "a")):
+                        if source in payload:
+                            try:
+                                value = float(payload[source])
+                                if np.isfinite(value) and value > 0:
+                                    merged[target] = value
+                            except (TypeError, ValueError):
+                                pass
+                    merged["quote_event_time_ms"] = event_ms or quote_time
+                else:
+                    merged["stale_event_count"] = int(previous.get("stale_event_count", 0) or 0) + 1
+
+            event_price = self._event_price(event, previous)
+            if accepted_trade and event_price is not None and np.isfinite(event_price):
+                merged["last_trade_price"] = float(event_price)
+                merged["trade_event_time_ms"] = event_ms or trade_time
 
             quote = self._valid_quote(merged.get("bid"), merged.get("ask"))
             if quote is not None:
@@ -351,10 +368,10 @@ class LiveTracker:
                 # The dashboard's canonical realtime price is the executable quote
                 # midpoint, not the last trade, whenever a valid book exists.
                 merged["price"] = merged["mid"]
-            elif event_price is not None and np.isfinite(event_price):
+            elif accepted_trade and event_price is not None and np.isfinite(event_price):
                 merged["price"] = float(event_price)
 
-            if event.event_type.lower() in {"aggtrade", "trade"}:
+            if accepted_trade:
                 try:
                     if payload.get("q") is not None:
                         qty = float(payload["q"])
