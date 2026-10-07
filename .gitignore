@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+models/*.joblib
+models/**/*.joblib
+data/*.parquet
+logs/*.csv
+logs/*.json
+logs/*.jsonl
+
+# Windows packaging
+build/
+dist/
+*.spec
+release/

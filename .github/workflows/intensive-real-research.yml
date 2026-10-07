@@ -1,0 +1,86 @@
+name: Intensive Real Research
+
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: UTC start date
+        required: false
+        default: '2022-01-01'
+      end:
+        description: UTC end date
+        required: false
+        default: ''
+      trials:
+        description: Master tuning trials per asset
+        required: false
+        default: '60'
+  schedule:
+    - cron: '17 4 * * 0'
+
+concurrency:
+  group: intensive-real-research
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile and import check
+        run: |
+          python -m compileall -q src run_intensive_real_research.py
+          python - <<'PY'
+          from ai_trading_lab.config import load_settings
+          from ai_trading_lab.engine import AdaptiveEngine
+          from ai_trading_lab.master_tuner import master_tune
+          print("core-import-ok", load_settings().timeframe, AdaptiveEngine.__name__, callable(master_tune))
+          PY
+
+      - name: Run adversarial integrity gate
+        run: python run_adversarial_integrity.py
+
+      - name: Run intensive real-data research
+        run: |
+          START_DATE='${{ inputs.start }}'
+          END_DATE='${{ inputs.end }}'
+          TRIALS='${{ inputs.trials }}'
+          START_DATE=${START_DATE:-2022-01-01}
+          END_DATE=${END_DATE:-$(date -u +%F)}
+          TRIALS=${TRIALS:-60}
+          python run_intensive_real_research.py \
+            --symbols BTC/USDT,ETH/USDT,SOL/USDT \
+            --timeframe 15m \
+            --start "$START_DATE" \
+            --end "$END_DATE" \
+            --trials "$TRIALS" \
+            --holdout-frac 0.15 \
+            --require-all-assets
+      - name: Run cross-exchange transfer validation
+        run: |
+          python run_cross_exchange_validation.py --trials 24 --holdout-frac 0.15
+
+      - name: Upload research reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: intensive-real-research-${{ github.run_id }}
+          path: |
+            logs/intensive_real/**
+            data/intensive_real/merged/**
+          if-no-files-found: error
+
