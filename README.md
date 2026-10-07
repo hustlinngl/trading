@@ -23,7 +23,7 @@ The intended pre-alpha user experience is now one program:
 
 `python signal_dashboard.py`
 
-It binds to localhost only, opens the browser automatically, scans the configured trained assets, applies the same strict live/paper decision gates, records signals and resolves mature signals against later public candles. It has no order endpoint and does not place trades.
+It binds to localhost only, opens the browser automatically, discovers active exchange markets across the configured market types, evaluates every deployment-eligible asset bundle before ranking the Top 5, applies the same strict live/paper decision gates, records signals and resolves mature signals against later public candles. A market without a compatible asset-specific model remains outside the Top 5 rather than borrowing another asset's model. It has no order endpoint and does not place trades.
 
 Headless check: `python signal_dashboard.py --once`
 
