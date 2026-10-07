@@ -71,8 +71,12 @@ class CognitionEngine:
         valid=y.notna() & ret.notna(); x=x.loc[valid]; y=y.loc[valid].astype(int); ret=ret.loc[valid].astype(float)
         if len(x)<200: return []
         from sklearn.ensemble import ExtraTreesClassifier
-        split=max(100,int(len(x)*0.70)); clf=ExtraTreesClassifier(n_estimators=200,min_samples_leaf=12,max_features="sqrt",random_state=int(self.settings.seed),n_jobs=-1)
-        clf.fit(x.iloc[:split],y.iloc[:split]); p=clf.predict_proba(x.iloc[split:])[:,1]; sig=np.where(p>=.55,1,np.where(p<=.45,-1,0)); target=np.sign(ret.iloc[split:].to_numpy())
+        split=max(100,int(len(x)*0.70))
+        purge=max(1,int(getattr(self.settings,"horizon_bars",8)))
+        train_end=max(1,split-purge-1)
+        if train_end<100 or split>=len(x): return []
+        clf=ExtraTreesClassifier(n_estimators=200,min_samples_leaf=12,max_features="sqrt",random_state=int(self.settings.seed),n_jobs=-1)
+        clf.fit(x.iloc[:train_end],y.iloc[:train_end]); p=clf.predict_proba(x.iloc[split:])[:,1]; sig=np.where(p>=.55,1,np.where(p<=.45,-1,0)); target=np.sign(ret.iloc[split:].to_numpy())
         active=sig!=0; hit=float(np.mean(sig[active]==target[active])) if active.any() else 0.0; mean_ret=float(np.mean(sig[active]*ret.iloc[split:].to_numpy()[active])) if active.any() else 0.0
         try:
             from sklearn.metrics import roc_auc_score; auc=float(roc_auc_score(y.iloc[split:],p))
