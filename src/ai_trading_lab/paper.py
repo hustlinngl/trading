@@ -11,6 +11,7 @@ from .fingerprint import strong_dataset_fingerprint
 from .policy import live_signal_gate
 from .trade_window import assess_trade_window
 from .deployment import resolve_signal_bundle, resolve_trade_window_model, bundle_compatibility
+from .signal_contract import direct_signal
 
 def one_iteration(settings, root: str | Path = "."):
     root=Path(root); (root/"logs").mkdir(parents=True,exist_ok=True)
@@ -67,7 +68,16 @@ def one_iteration(settings, root: str | Path = "."):
                     signal,reasons=live_signal_gate(last,settings)
                     p=float(last.get("p_up",0.5))
                     confidence=p if signal=="LONG" else (1.0-p if signal=="SHORT" else 0.0)
-                    result.update({"status":"SIGNAL" if signal!="FLAT" else "WAIT","signal":signal,"confidence":confidence,"expected_return":float(last.get("expected_return",0.0)),"score":float(last.get("score",0.0)),"meta_success":float(last.get("meta_success",0.5)),"model_disagreement":float(last.get("model_disagreement",0.0)),"analog_neighbors":int(last.get("analog_n",0)),"analog_agreement":float(last.get("analog_agreement",0.0)),"reason":reasons})
+                    result.update(direct_signal(
+                        symbol=settings.symbol,
+                        timestamp=str(result.get("data_timestamp", "")),
+                        signal=signal,
+                        confidence=confidence,
+                        expected_return=float(last.get("expected_return",0.0)),
+                        price=float(result.get("price",0.0)),
+                        horizon_bars=int(getattr(settings,"horizon_bars",8)),
+                        reason=";".join(str(x) for x in reasons),
+                    ).to_dict())
     except Exception as exc:
         result["reason"].append(f"runtime:{type(exc).__name__}:{exc}")
     (root/"logs"/"paper_last.json").write_text(json.dumps(result,indent=2,default=str),encoding="utf-8")
