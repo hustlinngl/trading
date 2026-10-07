@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.14
+- Triple-barrier same-bar TP/SL collisions are now treated as ambiguous rather than directionally bearish.
+- OOS feature stitching rejects conflicting overlapping bars instead of silently choosing one source.
+- OHLCV fetching/cache paths reject conflicting duplicates and enforce closed-bar semantics consistently.
+- Deployment manifests are now cryptographically bound to model semantics and dataset fingerprints.
+- Auto-promotion refreshes model provenance and re-trains the duration verifier before a bundle can become signal-eligible.
+- Added regression coverage for stale deployment evidence and provenance-bound deployment readiness.
+
 ## 0.9.13
 - Restored the missing deterministic benchmark module behind the `benchmark` CLI.
 - Added regression tests for data timing, risk sizing, execution semantics, configuration and strict signal gating.
