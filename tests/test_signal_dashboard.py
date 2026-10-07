@@ -79,6 +79,27 @@ def test_signal_terminal_builds_read_only_state(tmp_path, monkeypatch):
     assert state["notes"][0].startswith("Sola lettura")
 
 
+def test_signal_terminal_reuses_exchange_for_outcome_tracking(tmp_path, monkeypatch):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path, refresh_seconds=30)
+    exchange = object()
+    seen = {}
+
+    terminal._get_exchange = lambda: exchange
+    monkeypatch.setattr(terminal_mod, "scan_top5", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        terminal_mod,
+        "update_live_signal_outcomes",
+        lambda settings, root, exchange=None: seen.update(exchange=exchange) or {"updated": 0, "open": 0, "closed": 0},
+    )
+
+    terminal._terminal_state(force=True)
+
+    assert seen["exchange"] is exchange
+
+
 def test_signal_terminal_serves_only_read_routes(tmp_path, monkeypatch):
     import signal_dashboard as terminal_mod
 
