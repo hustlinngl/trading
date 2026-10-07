@@ -123,8 +123,18 @@ class SignalTerminal:
         self._lock = threading.Lock()
         self._cached_state: dict | None = None
         self._cached_at = 0.0
+        self._exchange = None
         self.state_root.joinpath("logs").mkdir(parents=True, exist_ok=True)
         self.state_root.joinpath("data", "history").mkdir(parents=True, exist_ok=True)
+
+    def _get_exchange(self):
+        """Reuse one read-only CCXT client so full-universe refreshes do not reload markets."""
+        if self._exchange is not None:
+            return self._exchange
+        self._exchange = exchange_client(
+            getattr(self.settings, "exchange", "binance"), sandbox=False
+        )
+        return self._exchange
 
     def _bundle_snapshot(self, symbol: str) -> dict:
         bundle = resolve_signal_bundle(self.settings, self.root, symbol)
@@ -193,9 +203,7 @@ class SignalTerminal:
         """Best-effort realtime ticker overlay; failure never blocks signals."""
         result = {}
         try:
-            exchange = exchange_client(
-                getattr(self.settings, "exchange", "binance"), sandbox=False
-            )
+            exchange = self._get_exchange()
         except Exception as exc:
             return {"_error": f"{type(exc).__name__}:{exc}"}
 
@@ -222,9 +230,7 @@ class SignalTerminal:
 
     def _quote(self, symbol: str) -> dict:
         try:
-            exchange = exchange_client(
-                getattr(self.settings, "exchange", "binance"), sandbox=False
-            )
+            exchange = self._get_exchange()
             payload = self._ticker_row(symbol, exchange.fetch_ticker(symbol))
             payload["generated_at"] = datetime.now(timezone.utc).isoformat()
             return payload
@@ -285,9 +291,7 @@ class SignalTerminal:
                     pass
 
         try:
-            exchange = exchange_client(
-                getattr(self.settings, "exchange", "binance"), sandbox=False
-            )
+            exchange = self._get_exchange()
             frame = fetch_ohlcv(exchange, symbol, self.settings.timeframe, bars)
             if frame is not None and not frame.empty:
                 writable.parent.mkdir(parents=True, exist_ok=True)
@@ -369,7 +373,7 @@ class SignalTerminal:
                     )
                 )
                 assessments, universe_meta = scan_top5(
-                    self.settings, str(self.root), return_meta=True
+                    self.settings, str(self.root), exchange=self._get_exchange(), return_meta=True
                 )
                 # Tickers are presentation-only; never poll the entire scan universe.
                 symbols = list(dict.fromkeys(
