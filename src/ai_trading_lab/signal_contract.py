@@ -52,6 +52,15 @@ class DirectSignal:
         return asdict(self)
 
 
+
+def _probability_from_signal(signal: str, confidence: float) -> float:
+    """Recover the model's directional probability from the public confidence."""
+    if signal == "LONG":
+        return confidence
+    if signal == "SHORT":
+        return 1.0 - confidence
+    return 0.5
+
 def compile_direct_signal(
     row: Mapping[str, Any],
     *,
