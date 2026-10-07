@@ -48,7 +48,7 @@ class AdaptiveEngine:
         self.regimes=RegimeDetector(settings.seed,n_init=getattr(settings,'regime_n_init',5))
         self.model=SignalModel(settings.seed,xgb_estimators=getattr(settings,'xgb_estimators',240),lgbm_estimators=getattr(settings,'lgbm_estimators',240),hist_max_iter=getattr(settings,'hist_max_iter',260))
         self.model.conformal_level=float(getattr(settings,'conformal_level',0.90))
-        self.memory=AnalogMemory(k=getattr(settings,'memory_k',32)); self.meta=MetaPolicy(settings.seed); self.meta_regimes=None
+        self.memory=AnalogMemory(k=getattr(settings,'memory_k',32),exclusion_bars=int(getattr(settings,'memory_exclusion_bars',max(1,getattr(settings,'validation_purge_bars',settings.horizon_bars))))); self.meta=MetaPolicy(settings.seed); self.meta_regimes=None
 
     def features(self, df):
         """Build the canonical feature frame used by both research and live inference."""
@@ -76,14 +76,14 @@ class AdaptiveEngine:
         if len(valid_positions)>cal_n+100: selection_mask.iloc[valid_positions[:-cal_n]]=True
         else: selection_mask.loc[valid_idx.index]=valid_idx
         pruned,efficiency_report=audit_features(features,y,corr_threshold=float(getattr(self.settings,'efficiency_corr_threshold',0.995)),selection_mask=selection_mask); self.feature_efficiency=efficiency_report
-        self.model.fit(pruned,y,future_ret,purge_bars=int(getattr(self.settings,'validation_purge_bars',self.settings.horizon_bars)))
+        self.model.fit(pruned,y,target_ret,purge_bars=int(getattr(self.settings,'validation_purge_bars',self.settings.horizon_bars)))
         cal_oos=getattr(self.model,'calibration_oos_',None)
         if cal_oos is not None and not cal_oos.empty:
             first_cal=cal_oos.index[0]; core_idx=_pre_calibration_core_mask(features.index,first_cal,int(getattr(self.settings,'validation_purge_bars',self.settings.horizon_bars))); self.meta_regimes=RegimeDetector(self.settings.seed,n_init=getattr(self.settings,'regime_n_init',5)); self.meta_regimes.fit(features.loc[core_idx])
         self.regimes.fit(features); regime=self.regimes.transform(features); regime_persistence=self.regimes.persistence(features); model_features=pruned.reindex(index=features.index)
         meta_analog=None
         if cal_oos is not None and not cal_oos.empty:
-            first_cal=cal_oos.index[0]; core_idx=_pre_calibration_core_mask(model_features.index,first_cal,int(getattr(self.settings,'validation_purge_bars',self.settings.horizon_bars))); meta_memory=AnalogMemory(k=getattr(self.settings,'memory_k',32)); meta_memory.fit(model_features.loc[core_idx],target_ret.loc[core_idx],information_weighted=bool(getattr(self.settings,'memory_information_weighted',False))); meta_analog=meta_memory.query_many(model_features.loc[cal_oos.index])
+            first_cal=cal_oos.index[0]; core_idx=_pre_calibration_core_mask(model_features.index,first_cal,int(getattr(self.settings,'validation_purge_bars',self.settings.horizon_bars))); meta_memory=AnalogMemory(k=getattr(self.settings,'memory_k',32),exclusion_bars=int(getattr(self.settings,'memory_exclusion_bars',max(1,getattr(self.settings,'validation_purge_bars',self.settings.horizon_bars)))); meta_memory.fit(model_features.loc[core_idx],target_ret.loc[core_idx],information_weighted=bool(getattr(self.settings,'memory_information_weighted',False))); meta_analog=meta_memory.query_many(model_features.loc[cal_oos.index])
         self.memory.fit(model_features,future_ret,information_weighted=bool(getattr(self.settings,'memory_information_weighted',False))); base=self.model.predict(model_features); analog=self.memory.query_many(model_features,exclude_self=True)
         if cal_oos is not None and not cal_oos.empty and meta_analog is not None:
             idx=cal_oos.index.intersection(features.index); meta_base=cal_oos.loc[idx]; mm=self.meta_regimes if self.meta_regimes is not None else self.regimes; mr=mm.transform(features.loc[idx]); mp=mm.persistence(features.loc[idx]); mprob=mm.semantic_probabilities(features.loc[idx])
@@ -91,7 +91,7 @@ class AdaptiveEngine:
             fee_bps=float(getattr(self.settings,'fee_bps',0.0)); slip_bps=float(getattr(self.settings,'slippage_bps',0.0)); impact_bps=float(getattr(self.settings,'impact_bps_per_sqrt',0.0)); participation=float(np.clip(getattr(self.settings,'max_participation_pct',0.10),0.0,1.0)); edge_bps=float(getattr(self.settings,'min_edge_after_cost_bps',5.0)); borrow_bps=float(max(0.0,getattr(self.settings,'short_borrow_bps_per_bar',0.0)))*int(max(1,getattr(self.settings,'max_holding_bars',96)))
             base_cost=(2*(fee_bps+slip_bps)+2*impact_bps*np.sqrt(participation)+max(0.0,edge_bps))/10000.0
             directional_cost=base_cost+np.where(meta_base.p_up.to_numpy(float)<0.5,borrow_bps/10000.0,0.0)
-            meta_y=cost_aware_meta_target(target_ret.loc[idx].to_numpy(),meta_base.p_up.to_numpy(),directional_cost); valid=future_ret.loc[idx].notna().to_numpy()
+            meta_y=cost_aware_meta_target(target_ret.loc[idx].to_numpy(),meta_base.p_up.to_numpy(),directional_cost); valid=target_ret.loc[idx].notna().to_numpy()
             if valid.sum()>=100 and np.unique(meta_y[valid]).size>1: self.meta.fit(meta_x.loc[valid],pd.Series(meta_y[valid],index=idx[valid]))
         meta_detector=self.meta_regimes if self.meta_regimes is not None else self.regimes
         meta_regime=meta_detector.transform(features)
