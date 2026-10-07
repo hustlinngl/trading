@@ -195,6 +195,17 @@ class SignalTerminal:
         return info
 
     @staticmethod
+    def _timeframe_minutes(timeframe: str) -> float:
+        tf = str(timeframe).strip().lower()
+        import re
+        match = re.fullmatch(r"(\\d+)(s|min|m|h|d|w)", tf)
+        if not match:
+            return 15.0
+        n, unit = int(match.group(1)), match.group(2)
+        scale = {"s": 1 / 60, "min": 1.0, "m": 1.0, "h": 60.0, "d": 1440.0, "w": 10080.0}
+        return float(n) * scale.get(unit, 15.0)
+
+    @staticmethod
     def _ticker_row(symbol: str, ticker: dict) -> dict:
         def as_float(key: str):
             value = ticker.get(key)
@@ -289,19 +300,28 @@ class SignalTerminal:
         bundled = self.root / "data" / "historical" / f"{slug}.csv"
         writable = self.state_root / "data" / "history" / f"{slug}.csv"
 
-        # The dashboard must render reliably even when Binance REST is blocked/offline.
-        # Prefer a recent writable cache, then the bundled verified snapshot.
-        for path, source in ((writable, "local_cache"), (bundled, "bundled")):
-            if path.exists():
-                try:
-                    result = self._history_from_csv(path, bars, source)
-                    if result.get("bars"):
-                        return result
-                except (OSError, ValueError, KeyError):
-                    pass
+        # Prefer a fresh local cache, then refresh from the public exchange.
+        # Bundled history is an offline fallback and must never mask a stale live cache.
+        cached_result = None
+        if writable.exists():
+            try:
+                cached_result = self._history_from_csv(writable, bars, "local_cache")
+                if cached_result.get("bars"):
+                    last = datetime.fromtimestamp(cached_result["bars"][-1]["t"] / 1000, tz=timezone.utc)
+                    age_minutes = max(0.0, (datetime.now(timezone.utc) - last).total_seconds() / 60.0)
+                    max_cache_age = max(
+                        float(getattr(self.settings, "live_max_data_age_minutes", 30.0)),
+                        self._timeframe_minutes(self.settings.timeframe) * 2.5,
+                    )
+                    if age_minutes <= max_cache_age:
+                        return cached_result
+            except (OSError, ValueError, KeyError, TypeError, OverflowError):
+                cached_result = None
 
         try:
             exchange = self._get_exchange()
+            if exchange is None:
+                raise RuntimeError(self._exchange_error or "exchange_unavailable")
             frame = fetch_ohlcv(exchange, symbol, self.settings.timeframe, bars)
             if frame is not None and not frame.empty:
                 writable.parent.mkdir(parents=True, exist_ok=True)
@@ -332,13 +352,27 @@ class SignalTerminal:
         else:
             network_error = "empty_data"
 
+        if cached_result and cached_result.get("bars"):
+            cached_result["source"] = "local_cache_stale"
+            cached_result["stale_reason"] = "network_refresh_failed"
+            cached_result["error"] = network_error
+            return cached_result
+        if bundled.exists():
+            try:
+                bundled_result = self._history_from_csv(bundled, bars, "bundled")
+                if bundled_result.get("bars"):
+                    bundled_result["stale_reason"] = "offline_fallback"
+                    bundled_result["error"] = network_error
+                    return bundled_result
+            except (OSError, ValueError, KeyError):
+                pass
         return {
             "symbol": symbol,
             "timeframe": self.settings.timeframe,
             "bars": [],
             "source": "unavailable",
             "error": network_error,
-            "hint": "No historical cache is available. Reconnect to the internet or rebuild the portable package.",
+            "hint": "Nessuno storico disponibile: connetti il terminale a Internet oppure esegui bootstrap-live-data.",
         }
 
     def _journal(self) -> list[dict]:
@@ -500,6 +534,14 @@ class SignalTerminal:
                 if str(symbol).strip()
             })
             quotes = self._quotes(symbols)
+            market_data = {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "exchange": getattr(self.settings, "exchange", "binance"),
+                "available": self._get_exchange() is not None,
+                "error": self._exchange_error,
+                "symbols": list(symbols),
+                "quotes": _json_safe(quotes),
+            }
             signals = []
             for assessment in assessments:
                 row = self._assessment_payload(assessment)
@@ -619,6 +661,7 @@ class SignalTerminal:
                     "terminal_ready": compatible > 0,
                 },
                 "signals": signals,
+                "market_data": market_data,
                 "journal": self._journal(),
                 "outcome_update": _json_safe(outcome_update),
                 "notes": [
@@ -819,7 +862,7 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
 #pointer-aura{width:130px;height:130px;margin:-65px 0 0 -65px;border-radius:50%;background:radial-gradient(circle,rgba(255,120,200,.13),rgba(200,92,255,.045) 42%,transparent 72%);filter:blur(2px)}
 #anime-cursor{width:46px;height:46px;margin:-7px 0 0 -7px;filter:drop-shadow(0 0 10px rgba(255,120,200,.45));transition:filter .16s ease}
 #livePrice.good{animation:liveGlow 2.2s ease-in-out infinite}
-#anime-cursor.click{filter:drop-shadow(0 0 18px rgba(255,120,200,.95));animation:cursorHit .16s ease}
+#anime-cursor.click{filter:drop-shadow(0 0 18px rgba(255,120,200,.95));animation:none}
 .click-ripple{position:fixed;width:16px;height:16px;margin:-8px;border:1px solid rgba(255,120,200,.8);border-radius:50%;pointer-events:none;z-index:9998;animation:ripple .52s ease-out forwards;box-shadow:0 0 22px rgba(255,120,200,.34)}
 .reveal{animation:reveal .46s ease both}
 @keyframes panelIn{from{opacity:0;transform:translateY(10px) scale(.99)}to{opacity:1;transform:none}}
@@ -847,6 +890,15 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
 @media(max-width:1180px){.layout{grid-template-columns:1fr}}
 @media(max-width:760px){.wrap{padding:18px 13px 40px}.top{align-items:flex-start;flex-direction:column}h1{font-size:29px}.grid3{grid-template-columns:1fr}.chart-panel{min-height:430px}#chart{height:350px}.nav{overflow:auto;flex-wrap:nowrap}.nav-btn{white-space:nowrap}}
 
+.live-data-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px}
+.live-data-card{position:relative;padding:13px 14px;border:1px solid rgba(255,120,200,.16);border-radius:14px;background:linear-gradient(180deg,rgba(25,15,29,.92),rgba(12,9,17,.98));box-shadow:0 8px 24px rgba(0,0,0,.18);transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease;cursor:pointer;overflow:hidden}
+.live-data-card::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 88% 12%,rgba(255,120,200,.10),transparent 42%);pointer-events:none}
+.live-data-card:hover{transform:translateY(-2px);border-color:rgba(255,120,200,.30);box-shadow:0 12px 30px rgba(0,0,0,.26),0 0 28px rgba(255,120,200,.07)}
+.live-data-card .live-symbol{font-size:12px;font-weight:800;letter-spacing:.08em}
+.live-data-card .live-price{margin-top:7px;font-size:24px;font-weight:800;letter-spacing:-.03em}
+.live-data-card .live-meta{margin-top:6px;font-size:10px;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
+.live-data-card .live-error{margin-top:8px;font-size:10px;color:var(--amber);line-height:1.35}
+.live-data-card:focus-visible{outline:none;border-color:rgba(255,120,200,.5);box-shadow:0 0 0 2px rgba(255,120,200,.12),0 12px 30px rgba(0,0,0,.26)}
 /* 0.9.18 art-direction layer */
 .operator-stage{
   position:absolute;right:14px;bottom:10px;width:126px;height:126px;pointer-events:none;opacity:.9;
@@ -1216,6 +1268,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   <section class="focus-only" id="focusDashboard" aria-live="polite">
     <div class="top5-head"><div><div class="top5-title">Top 5 signals</div></div></div>
     <div id="top5Grid" class="top5-grid"></div>
+    <div id="liveDataFallback" class="live-data-grid" hidden></div>
   </section>
 
   <section class="legacy-hidden decision-deck" id="decisionDeck" aria-live="polite">
@@ -1666,12 +1719,12 @@ async function loadFocusHistories(picks){
   });
 }
 
-function populateAssets(signals){
+function populateAssets(signals, extraSymbols=[]){
   const input=$("asset");
   const cfg=(state.data&&state.data.config)||{};
   const discovered=Array.isArray(cfg.market_symbols)?cfg.market_symbols:[];
   const active=signals.map(x=>x.symbol).filter(Boolean);
-  state.marketSymbols=Array.from(new Set([...discovered,...active])).sort();
+  state.marketSymbols=Array.from(new Set([...discovered,...active,...extraSymbols.filter(Boolean)])).sort();
   const list=$("marketSymbols");
   if(list){
     list.innerHTML=state.marketSymbols.map(s=>'<option value="'+esc(s)+'"></option>').join("");
@@ -1944,6 +1997,61 @@ function initInspector(){
   });
 }
 
+function renderLiveData(data){
+  const box=$("liveDataFallback");
+  if(!box)return;
+  const market=data.market_data||{};
+  const symbols=Array.isArray(market.symbols)?market.symbols:[];
+  const quotes=(market.quotes&&typeof market.quotes==="object")?market.quotes:{};
+  const signals=data.signals||[];
+  const hasSignals=signals.some(x=>x&&["LONG","SHORT"].includes(x.signal));
+  if(hasSignals || !symbols.length){
+    box.hidden=true;
+    box.innerHTML="";
+    return;
+  }
+  const ordered=Array.from(new Set(symbols)).slice(0,12);
+  box.hidden=false;
+  box.innerHTML=ordered.map(symbol=>{
+    const q=quotes[symbol]||{};
+    const price=Number(q.price);
+    const bid=Number(q.bid), ask=Number(q.ask);
+    const stamp=q.timestamp?new Date(q.timestamp).toLocaleTimeString():"—";
+    const priceLabel=Number.isFinite(price)?num(price,2):"OFFLINE";
+    const spread=Number.isFinite(bid)&&Number.isFinite(ask)?(ask-bid).toFixed(4):"—";
+    const error=q.error||(!market.available?market.error:"");
+    return '<article class="live-data-card" data-live-symbol="'+esc(symbol)+'" tabindex="0" role="button" aria-label="Apri dati live '+esc(symbol)+'">'+
+      '<div class="live-symbol">'+esc(symbol)+'</div>'+
+      '<div class="live-price">'+esc(priceLabel)+'</div>'+
+      '<div class="live-meta"><span>bid/ask '+esc(Number.isFinite(bid)?num(bid,2):"—")+' / '+esc(Number.isFinite(ask)?num(ask,2):"—")+'</span><span>'+esc(stamp)+'</span></div>'+
+      '<div class="live-meta"><span>spread '+esc(spread)+'</span><span>'+esc(market.exchange||"exchange")+'</span></div>'+
+      (error?'<div class="live-error">'+esc(String(error).slice(0,180))+'</div>':"")+
+    '</article>';
+  }).join("");
+  box.querySelectorAll("[data-live-symbol]").forEach(card=>{
+    const open=()=>{
+      const symbol=card.dataset.liveSymbol;
+      if(!symbol)return;
+      state.selected=symbol;
+      const input=$("asset");
+      if(input)input.value=symbol;
+      const marketEl=$("market");
+      if(marketEl){
+        marketEl.classList.remove("legacy-hidden");
+        marketEl.scrollIntoView({behavior:"smooth",block:"start"});
+      }
+      loadHistory(symbol);
+    };
+    card.addEventListener("click",open);
+    card.addEventListener("keydown",e=>{
+      if(e.key==="Enter"||e.key===" "){
+        e.preventDefault();
+        open();
+      }
+    });
+  });
+}
+
 function render(data){
   state.data=data;
   if(!data.ok){
@@ -1953,10 +2061,13 @@ function render(data){
     return;
   }
   const signals=data.signals||[];
-  populateAssets(signals);
+  const liveSymbols=((data.market_data||{}).symbols||[]).filter(Boolean);
+  populateAssets(signals,liveSymbols);
+  renderLiveData(data);
   renderRadar(signals); renderDetail(signals); renderJournal(data); renderEvidence(signals); renderDecisionDeck(signals); renderTimeline(signals,data.journal||[]); bindInteractiveRows();
   const notes=(data.notes||[]).join(" · ");
   $("footer").textContent=notes+" · refresh "+data.refresh_seconds+"s · scan "+data.scan_seconds+"s";
+  if(!data.scan_in_progress && state.selected && !state.history)loadHistory(state.selected);
 }
 
 function drawChart(history, signals, journal, realtimePrice){
