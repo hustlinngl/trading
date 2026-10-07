@@ -1,4 +1,4 @@
-# Adaptive AI Trading Lab — V6 architecture (0.9.15)
+# Adaptive AI Trading Lab — V6 architecture (0.9.16)
 
 The project is a research system that can grow itself without self-authorizing live trading.
 
@@ -11,3 +11,5 @@ Idempotence and anti-leakage rules are enforced: no future returns are backfille
 The 3–24h specialist is an additional signal verifier, not a substitute for the base engine. Live deployment remains paper/sandbox-only until independent evidence gates pass.
 
 The research runner, paper runner and live radar share canonical feature construction and strict signal gating; diagnostic benchmarks are controls, never promotion objectives.
+
+The pre-alpha presentation boundary is the single local `signal_dashboard.py` terminal: `/api/state` exposes model decisions and provenance, `/api/history` exposes closed-candle OHLC, and `/api/quote` is a display-only realtime ticker path. These routes are intentionally read-only so the alpha UI can evolve without changing model semantics or execution authority.
