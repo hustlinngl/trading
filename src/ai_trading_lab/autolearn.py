@@ -131,7 +131,16 @@ def auto_update(df,settings,model_dir="models"):
             "holdout":holdout.get("stats",{}),
             "utility":float(holdout.get("utility",-np.inf)),
         },indent=2,default=str),encoding="utf-8")
-        refresh_deployment_manifest(settings, Path(mdir).parents[2] if len(Path(mdir).parts) >= 3 else ".")
+        try:
+            from .trade_window import train_trade_window_backbone
+            duration_path=mdir/"trade_window_specialist.joblib"
+            duration_report=train_trade_window_backbone(df,settings,holdout_frac=float(getattr(settings,"final_holdout_frac",0.15)),save_path=duration_path)
+            (mdir/"trade_window_training_report.json").write_text(json.dumps(duration_report,indent=2,default=str),encoding="utf-8")
+        except Exception as exc:
+            duration_report={"production_ready":False,"reason":f"{type(exc).__name__}:{exc}"}
+            (mdir/"trade_window_training_report.json").write_text(json.dumps(duration_report,indent=2,default=str),encoding="utf-8")
+        manifest_root=Path(mdir).parents[2] if len(Path(mdir).parts)>=3 else "."
+        deployment_manifest=refresh_deployment_manifest(settings,manifest_root)
         state={
             "score":score,
             "stats":stats,
@@ -139,6 +148,8 @@ def auto_update(df,settings,model_dir="models"):
             "data_fingerprint":fp,
             "final_holdout":holdout,
             "champion_holdout":champion_holdout,
+            "deployment_manifest":deployment_manifest,
+            "duration_report":duration_report,
         }
         state_path.write_text(json.dumps(state,indent=2,default=str),encoding="utf-8")
         try:
