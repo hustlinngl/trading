@@ -983,7 +983,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
 .pick-card{cursor:pointer;position:relative;isolation:isolate}
 .pick-card::after{content:"↗";position:absolute;right:14px;top:11px;font-size:12px;color:#596473;opacity:0;transform:translate(-2px,2px);transition:opacity .16s ease,transform .16s ease}
 .pick-card:hover::after,.pick-card:focus-visible::after{opacity:1;transform:none}
-.pick-card:focus-visible{outline:none;border-color:#586474;box-shadow:0 0 0 2px rgba(229,138,184,.12),0 10px 28px rgba(0,0,0,.22)}
+.pick-card:focus-visible{outline:none;border-color:#586474;box-shadow:0 0 0 2px rgba(229,138,184,.12),0 10px 28px rgba(0,0,0,.22)}\n.interactive-row[role="button"]{cursor:pointer;transition:background .14s ease,box-shadow .14s ease}\n.interactive-row[role="button"]:hover{background:rgba(255,255,255,.018)}\n.interactive-row[role="button"]:focus-visible{outline:none;box-shadow:inset 0 0 0 1px rgba(229,138,184,.32);background:rgba(229,138,184,.045)}
 .pick-primary{grid-column:span 2;background:linear-gradient(180deg,#121820,#0f1319);border-color:#2d3946}
 .pick-primary .pick-symbol{font-size:20px;letter-spacing:-.02em}
 .pick-primary .pick-chart{height:210px}
@@ -1675,7 +1675,7 @@ function renderMetrics(data){
 function renderRadar(signals){
   $("radarRows").innerHTML=signals.map(r=>{
     const price=r.realtime_price??r.price;
-    return '<tr class="interactive-row" data-symbol="'+esc(r.symbol)+'"><td><strong>'+esc(r.symbol)+'</strong><div class="small">'+num(price,2)+'</div></td>'+
+    return '<tr class="interactive-row" data-symbol="'+esc(r.symbol)+'" tabindex="0" role="button" aria-label="Apri '+esc(r.symbol)+' nel market inspector"><td><strong>'+esc(r.symbol)+'</strong><div class="small">'+num(price,2)+'</div></td>'+
       '<td><span class="signal '+cls(r.signal)+'">'+esc(r.signal||"WAIT")+'</span></td>'+
       '<td class="num">'+pct(r.confidence,1)+'</td></tr>';
   }).join("")||'<tr><td colspan="3" class="small">Nessun asset disponibile.</td></tr>';
@@ -1687,7 +1687,7 @@ function renderDetail(signals){
     const robust=(d.expected_return_lcb==null)?"—":num(d.expected_return_lcb,4)+" / "+num(d.expected_return_ucb,4);
     const duration=d.trade_window_direction?esc(d.trade_window_direction)+" · "+pct(d.trade_window_confidence,0):"—";
     const why=(r.reason_codes||[]).map(x=>'<span class="reason">'+esc(x)+'</span>').join("");
-    return '<tr class="interactive-row" data-symbol="'+esc(r.symbol)+'">'+
+    return '<tr class="interactive-row" data-symbol="'+esc(r.symbol)+'" tabindex="0" role="button" aria-label="Apri '+esc(r.symbol)+' nel market inspector">'+
       '<td><strong>'+esc(r.symbol)+'</strong></td>'+
       '<td><span class="signal '+cls(r.signal)+'">'+esc(r.signal||"WAIT")+'</span><div class="small">'+esc(r.status||"WAIT")+'</div></td>'+
       '<td class="num">'+num(r.realtime_price??r.price,2)+'</td>'+
@@ -1739,18 +1739,24 @@ function renderEvidence(signals){
 
 function bindInteractiveRows(){
   document.querySelectorAll(".interactive-row").forEach(row=>{
-    row.onclick=()=>{
+    const open=()=>{
       const symbol=row.dataset.symbol;
-      if(!symbol)return;
-      const select=$("asset");
-      if(Array.from(select.options).some(o=>o.value===symbol)){
-        state.selected=symbol;
-        select.value=symbol;
-        loadHistory(symbol);
-        const market=$("market");
-        if(market)market.scrollIntoView({behavior:"smooth",block:"start"});
-        openInspector(symbol);
-        renderTimeline((state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[]);
+      const input=$("asset");
+      if(!symbol || !input)return;
+      const allowed=new Set(state.marketSymbols||[]);
+      if(allowed.size && !allowed.has(symbol))return;
+      state.selected=symbol;
+      input.value=symbol;
+      loadHistory(symbol);
+      const market=$("market");
+      if(market)market.scrollIntoView({behavior:"smooth",block:"start"});
+      openInspector(symbol);
+      renderTimeline((state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[]);
+    };
+    row.onclick=open;
+    row.onkeydown=e=>{
+      if((e.key==="Enter"||e.key===" ") && row.getAttribute("role")==="button"){
+        e.preventDefault();open();
       }
     };
   });
