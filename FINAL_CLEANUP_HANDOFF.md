@@ -1,4 +1,4 @@
-# Final cleanup handoff — V6 / 0.9.13
+# Final cleanup handoff — V6 / 0.9.15
 
 The repository now contains the hardened research core plus autonomous orchestration, data utilities, memory/state components, UI controller, strict live/paper inference, regression tests, benchmark controls and CI automation.
 
