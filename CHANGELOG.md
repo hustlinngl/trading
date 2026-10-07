@@ -12,6 +12,17 @@
 - Made challenger promotion bootstrap evidence comparable against the incumbent score.
 - Clarified doctor dependency readiness and synchronized the release metadata.
 
+- Directional conformal uncertainty corrected for short-side decisions.
+- Promotion no longer uses an invalid frozen-champion historical walk-forward comparison; incumbent comparison is now made on the current untouched holdout.
+- Adaptive duration specialist holdout training is properly purged and economically gated.
+- Short borrow is included consistently in signal hurdles, risk sizing and cost-stress backtests.
+- Historical/archive ingestion rejects conflicting duplicates and malformed OHLCV rows while preserving useful microstructure fields.
+- Autonomous research routing is deterministic and external intelligence clients are resilient to missing credentials.
+- Model bundles carry symbol, timeframe and training-semantics provenance; live/paper resolution is asset-local and fail-closed.
+- Paper/live ledgers are idempotent per completed candle.
+- Convenience optimization now preserves a final untouched holdout.
+- UI launchers and diagnostics now expose truthful dependency/readiness state.
+
 ## 0.9.11
 - Real-data Binance Vision and bounded Kraken adapters.
 - Strong dataset fingerprints and provenance.
