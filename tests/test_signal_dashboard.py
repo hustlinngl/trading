@@ -575,3 +575,17 @@ def test_scan_top5_prefers_stronger_robust_selection_score(monkeypatch, tmp_path
     picks = live_mod.scan_top5(settings, tmp_path, exchange=object())
 
     assert [p.symbol for p in picks] == ["A/USDT", "B/USDT"]
+
+def test_signal_terminal_inspector_is_accessible_and_lifecycle_wired():
+    import signal_dashboard as terminal_mod
+
+    html = terminal_mod.HTML
+    assert 'role="dialog"' in html
+    assert 'aria-modal="true"' in html
+    assert 'aria-labelledby="inspectorTitle"' in html
+    assert 'id="inspectorTitle"' in html
+    assert 'initInspector();' in html
+    assert 'drawer.classList.remove("legacy-hidden")' in html
+    assert 'drawer.classList.add("legacy-hidden")' in html
+    assert 'state.inspectorReturnFocus' in html
+    assert 'e.key!=="Tab"' in html
