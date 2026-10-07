@@ -1033,7 +1033,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
   </div>
 
 
-<div id="inspectorBackdrop" class="legacy-hidden inspector-backdrop"</div>
+<div id="inspectorBackdrop" class="legacy-hidden inspector-backdrop"></div>
 <aside id="inspectorDrawer" class="legacy-hidden inspector-drawer" aria-label="Decision inspector" aria-hidden="true"
   <div class="inspector-head">
     <div><div class="title">Decision inspector</div><div class="small" id="inspectorSubtitle">Asset —</div></div>
@@ -1222,8 +1222,8 @@ async function loadFocusHistories(picks){
   state.focusHistories=Object.fromEntries(results);
   picks.forEach(r=>{
     const h=state.focusHistories[r.symbol]||{};
-    const canvas=document.querySelector('[data-pick-chart="'+CSS.escape(r.symbol)+'"]');
-    const badge=document.querySelector('[data-history-badge="'+CSS.escape(r.symbol)+'"]');
+    const canvas=Array.from(document.querySelectorAll("[data-pick-chart]")).find(el=>el.dataset.pickChart===r.symbol);
+    const badge=Array.from(document.querySelectorAll("[data-history-badge]")).find(el=>el.dataset.historyBadge===r.symbol);
     if(canvas)drawPickChart(canvas,h,r.signal);
     if(badge){
       const labels={network:"LIVE",local_cache:"CACHE",bundled:"BUNDLED",unavailable:"OFFLINE"};
