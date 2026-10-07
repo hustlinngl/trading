@@ -471,10 +471,31 @@ def main():
     if args.command == 'discover':
         result=strategy_discovery(df,s); Path('logs/strategy_candidates.json').write_text(json.dumps(result,indent=2),encoding='utf-8'); print(json.dumps(result[:5],indent=2)); return
     if args.command == 'optimize':
-        split = int(len(df) * 0.70)
-        result = optimize_policy(df.iloc[:split], df.iloc[split:], s, trials=args.trials)
-        Path('logs/policy_optimization.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
-        print(json.dumps(result, indent=2)); return
+        holdout_frac=float(np.clip(args.holdout_frac,0.05,0.30)) if 'np' in globals() else max(0.05,min(0.30,float(args.holdout_frac)))
+        holdout_cut=int(len(df)*(1.0-holdout_frac))
+        tuning_df=df.iloc[:holdout_cut].copy()
+        holdout_df=df.iloc[holdout_cut:].copy()
+        validation_cut=int(len(tuning_df)*0.70)
+        train_df=tuning_df.iloc[:validation_cut].copy()
+        validation_df=tuning_df.iloc[validation_cut:].copy()
+        if len(train_df)<max(200,int(getattr(s,'min_train_rows',1500))) or len(holdout_df)<100:
+            raise SystemExit('optimize requires enough rows for train, validation and final holdout')
+        result=optimize_policy(train_df,validation_df,s,trials=args.trials)
+        best=result.get('best_params',{})
+        tuned=load_settings(args.config)
+        tuned.symbol=s.symbol; tuned.timeframe=s.timeframe
+        for key,value in best.items():
+            if hasattr(tuned,key): setattr(tuned,key,value)
+        eng=AdaptiveEngine(tuned); eng.fit(tuning_df)
+        feat=__import__('ai_trading_lab.features',fromlist=['make_oos_features']).make_oos_features(tuning_df,holdout_df,tuned.horizon_bars,external_feature_lag_bars=getattr(tuned,'external_feature_lag_bars',1))
+        actions=make_actions(eng,feat,tuned)
+        bt=holdout_df.copy(); bt['atr_14']=feat['atr_14']
+        final=run_configured_backtest(bt,actions,tuned,stop_atr_mult=float(best.get('stop_atr_mult',tuned.stop_atr_mult)),take_profit_rr=float(best.get('take_profit_rr',tuned.take_profit_rr)))
+        result['data_split']={'train_rows':len(train_df),'validation_rows':len(validation_df),'final_holdout_rows':len(holdout_df),'final_holdout_start':str(holdout_df.index[0]),'final_holdout_end':str(holdout_df.index[-1])}
+        result['final_holdout']=final.stats
+        result['warning']='Final holdout was used only once after tuning; it is not part of the optimization objective.'
+        Path('logs/policy_optimization.json').write_text(json.dumps(result, indent=2, default=str), encoding='utf-8')
+        print(json.dumps(result, indent=2, default=str)); return
     if args.command == 'master-tune':
         from .master_tuner import master_tune
         result = master_tune(df, s, trials=args.trials, final_holdout_frac=args.holdout_frac, save_path='logs/master_tuning_report.json')
