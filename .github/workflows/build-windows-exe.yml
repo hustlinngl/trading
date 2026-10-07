@@ -71,6 +71,15 @@ jobs:
               print(symbol, len(frame), frame["timestamp"].min(), frame["timestamp"].max())
           PY
 
+      - name: Verify dashboard imports
+        shell: bash
+        run: |
+          python - <<'PY'
+          import signal_dashboard
+          from ai_trading_lab import live, live_tracker, deployment, data
+          print("dashboard-imports-ok", signal_dashboard.APP_TITLE, live.LiveAssessment.__name__)
+          PY
+
       - name: Build EXE
         shell: bash
         run: |
@@ -82,6 +91,10 @@ jobs:
             --name SakuraSignalTerminal \
             --paths src \
             --collect-submodules ai_trading_lab \
+            --hidden-import ai_trading_lab.live \
+            --hidden-import ai_trading_lab.live_tracker \
+            --hidden-import ai_trading_lab.deployment \
+            --hidden-import ai_trading_lab.data \
             --collect-data xgboost \
             --collect-binaries xgboost \
             --collect-all lightgbm \
