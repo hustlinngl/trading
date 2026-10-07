@@ -25,7 +25,7 @@ def test_dashboard_responsive_ui_and_chart_edge_case():
     assert 'role="button"' in html
     assert "connection-stamp" not in html
     assert 'aria-busy="true"' in html
-    assert "scan-progress" in html
+    assert ".signal-skeleton-grid" in html
     assert 'data-target="focusDashboard"' in html
     assert 'class="nav" id="nav"' in html
     assert "const reveal=id=>" in html
