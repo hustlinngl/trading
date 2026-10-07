@@ -15,33 +15,28 @@ from .signal_contract import DirectSignal, PUBLIC_SIGNALS
 
 
 def _public_signal(result, settings):
-    signal=str(result.get("signal","FLAT")).upper()
-    if signal not in PUBLIC_SIGNALS:
-        signal="FLAT"
+    from .signal_contract import DirectSignal, SignalContractError
+
+    signal = str(result.get("signal", "FLAT")).upper()
     try:
-        confidence=float(result.get("confidence",0.0) or 0.0)
-    except (TypeError,ValueError):
-        confidence=0.0
-    try:
-        expected_return=float(result.get("expected_return",0.0) or 0.0)
-    except (TypeError,ValueError):
-        expected_return=0.0
-    try:
-        price=float(result.get("price",0.0) or 0.0)
-    except (TypeError,ValueError):
-        price=0.0
-    timestamp=str(result.get("data_timestamp") or result.get("timestamp") or "")
+        confidence = float(result["confidence"])
+        expected_return = float(result["expected_return"])
+        price = float(result["price"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise SignalContractError(f"invalid_paper_signal:{type(exc).__name__}") from exc
+
     return DirectSignal(
-        symbol=str(result.get("symbol",settings.symbol)),
-        timestamp=timestamp,
+        symbol=str(result.get("symbol", settings.symbol)),
+        timestamp=str(result.get("data_timestamp") or result.get("timestamp") or ""),
         signal=signal,
-        confidence=max(0.0,min(1.0,confidence)),
+        confidence=confidence,
         expected_return=expected_return,
         price=price,
-        horizon_bars=max(1,int(getattr(settings,"horizon_bars",8))),
-        actionable=signal in {"LONG","SHORT"},
-        reason="qualified" if signal in {"LONG","SHORT"} else "no_actionable_setup",
+        horizon_bars=max(1, int(getattr(settings, "horizon_bars", 8))),
+        actionable=signal in {"LONG", "SHORT"},
+        reason="qualified" if signal in {"LONG", "SHORT"} else "no_actionable_setup",
     ).to_dict()
+
 
 def one_iteration(settings, root: str | Path = "."):
     root=Path(root); (root/"logs").mkdir(parents=True,exist_ok=True)
