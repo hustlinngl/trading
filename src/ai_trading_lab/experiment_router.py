@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from typing import Any
 import math
+import hashlib
 import numpy as np
 
 @dataclass
@@ -22,7 +23,7 @@ class ResearchTask:
 class ResearchRouter:
     """Allocates limited research compute using an information-per-cost score."""
     def __init__(self, seed: int = 42):
-        self.rng = np.random.default_rng(seed)
+        self.seed = int(seed)
     def rank(self, tasks: list[ResearchTask], budget: float = 10.0, top_k: int = 12) -> list[ResearchTask]:
         scored = []
         for t in tasks:
@@ -30,7 +31,8 @@ class ResearchRouter:
             novelty = max(0.0, min(1.0, t.novelty))
             edge = max(-1.0, min(1.0, t.expected_edge))
             value = (0.55 * evidence + 0.30 * novelty + 0.15 * max(edge, 0.0)) / max(0.25, t.compute_cost)
-            value += float(self.rng.uniform(0, 1e-5))
+            tie = int(hashlib.sha256(f"{self.seed}|{t.task_id}".encode()).hexdigest()[:8], 16) / 2**32
+            value += tie * 1e-5
             scored.append((value, t))
         scored.sort(key=lambda z: z[0], reverse=True)
         picked, spent = [], 0.0
