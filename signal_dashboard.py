@@ -1217,7 +1217,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   </div>
 
   <nav class="nav" id="nav" aria-label="Sezioni dashboard">
-    <button class="nav-btn active" data-target="focusDashboard">Overview</button>
+    <button class="nav-btn active" data-target="focusDashboard" aria-current="page">Overview</button>
     <button class="nav-btn" data-target="market">Market</button>
     <button class="nav-btn" data-target="detail">Intelligence</button>
     <button class="nav-btn" data-target="journal">Journal</button>
@@ -1947,6 +1947,9 @@ function render(data){
   if(!data.ok){
     $("radarRows").innerHTML='<tr><td colspan="3"><span class="signal signal-wait">WAIT</span></td></tr>';
     $("detailRows").innerHTML='<tr><td colspan="11" class="small">'+esc(data.error||"Terminale non disponibile")+'</td></tr>';
+    const live=$("livePrice"), source=$("historySource");
+    if(live){live.textContent="REALTIME offline";live.className="pill warn";}
+    if(source){source.textContent="STATE · OFFLINE";source.className="pill warn";}
     renderJournal(data); renderEvidence([]); renderDecisionDeck([]);
     return;
   }
