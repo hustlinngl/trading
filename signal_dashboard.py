@@ -328,7 +328,9 @@ class SignalTerminal:
         }
 
     def _journal(self) -> list[dict]:
-        path = self.root / "logs" / "live_signal_history.jsonl"
+        # Frozen builds persist mutable state outside the executable directory.
+        # Read from the same state root used by the writer so journal history survives restarts.
+        path = self.state_root / "logs" / "live_signal_history.jsonl"
         if not path.exists():
             return []
         rows: list[dict] = []
@@ -900,7 +902,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
     <div id="top5Grid" class="top5-grid"></div>
   </section>
 
-  <section class="legacy-hidden decision-deck" id="decisionDeck" aria-live="polite"
+  <section class="legacy-hidden decision-deck" id="decisionDeck" aria-live="polite">
     <div class="decision-hero">
       <div class="decision-top">
         <div>
@@ -949,7 +951,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
   </section>
 
   <div class="layout">
-    <div class="legacy-hidden panel chart-panel" id="market"
+    <div class="legacy-hidden panel chart-panel" id="market">
       <div class="panel-head">
         <div>
           <div class="title">Market cockpit</div>
@@ -992,7 +994,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
   </div>
 
 
-  <div class="legacy-hidden panel" id="timeline"
+  <div class="legacy-hidden panel" id="timeline">
     <div class="panel-head">
       <div>
         <div class="title">Signal timeline</div>
@@ -1005,7 +1007,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
     </div>
   </div>
 
-  <div class="legacy-hidden panel" id="detail"
+  <div class="legacy-hidden panel" id="detail">
     <div class="panel-head">
       <div><div class="title">Signal detail</div><div class="small">Stessa decisione usata dal motore: robust edge, meta, memoria, regime e duration gate.</div></div>
     </div>
@@ -1019,7 +1021,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
     </div>
   </div>
 
-  <div class="legacy-hidden panel" id="journal"
+  <div class="legacy-hidden panel" id="journal">
     <div class="panel-head">
       <div><div class="title">Signal journal</div><div class="small">Ogni segnale resta osservabile fino alla maturazione del suo orizzonte; gli esiti sono risolti con candele successive.</div></div>
       <div class="small" id="journalStatus"></div>
@@ -1032,14 +1034,14 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
     </div>
   </div>
 
-  <div class="legacy-hidden panel" id="evidencePanel"
+  <div class="legacy-hidden panel" id="evidencePanel">
     <div class="panel-head"><div><div class="title">Training / deployment evidence</div><div class="small">Un segnale è ammissibile solo con bundle compatibile e provenance coerente.</div></div></div>
     <div class="grid3" id="evidence"></div>
   </div>
 
 
 <div id="inspectorBackdrop" class="legacy-hidden inspector-backdrop"></div>
-<aside id="inspectorDrawer" class="legacy-hidden inspector-drawer" aria-label="Decision inspector" aria-hidden="true"
+<aside id="inspectorDrawer" class="legacy-hidden inspector-drawer" aria-label="Decision inspector" aria-hidden="true">
   <div class="inspector-head">
     <div><div class="title">Decision inspector</div><div class="small" id="inspectorSubtitle">Asset —</div></div>
     <button class="inspector-close" id="inspectorClose" aria-label="Chiudi inspector">×</button>
@@ -1804,6 +1806,41 @@ def make_handler(terminal: SignalTerminal):
     return Handler
 
 
+def validate_dashboard_markup() -> None:
+    """Fail fast on malformed critical markup before a packaged terminal is released."""
+    import re
+
+    if "<body" not in HTML or "</body>" not in HTML:
+        raise RuntimeError("dashboard_markup_missing_body")
+    required = (
+        'id="focusDashboard"',
+        'id="top5Grid"',
+        'id="decisionDeck"',
+        'id="market"',
+        'id="detail"',
+        'id="journal"',
+        'id="timeline"',
+        'id="evidencePanel"',
+        'id="inspectorDrawer"',
+    )
+    missing = [token for token in required if token not in HTML]
+    if missing:
+        raise RuntimeError("dashboard_markup_missing:" + ",".join(missing))
+
+    # Ignore script/style payloads, where arbitrary '<' and '>' are valid code.
+    body = re.search(r"<body\\b[^>]*>(.*?)</body>", HTML, flags=re.I | re.S)
+    if not body:
+        raise RuntimeError("dashboard_markup_body_parse_failed")
+    visible = re.sub(r"<(script|style)\\b.*?</\\1>", "", body.group(1), flags=re.I | re.S)
+    visible = re.sub(r"<!--.*?-->", "", visible, flags=re.S)
+    broken = []
+    for match in re.finditer(r"<([A-Za-z][A-Za-z0-9:-]*)\\b([^>]*)>", visible, flags=re.S):
+        if "<" in match.group(2):
+            broken.append(match.group(1))
+    if broken:
+        raise RuntimeError("dashboard_markup_nested_start_tag:" + ",".join(broken[:8]))
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description=APP_TITLE)
     parser.add_argument(
@@ -1841,6 +1878,8 @@ def parse_args():
 def main():
     args = parse_args()
     if args.smoke_test:
+        validate_dashboard_markup()
+        print("dashboard-smoke-ok")
         return
     settings = load_settings(args.config or ROOT / "config.yaml")
     if args.symbols:
