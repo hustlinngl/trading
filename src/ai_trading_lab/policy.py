@@ -28,7 +28,7 @@ def decide_actions(pred, regime, analog, meta_p, settings, *, regime_persistence
     score=weights[0]*((p_dir-0.5)*2)+weights[1]*np.tanh(er_robust*50)+weights[2]*np.tanh(mem_dir*50)+weights[3]*((meta_p-0.5)*2)+weights[4]*regime_vec*direction+(agreement-0.5)*0.20-np.minimum(0.35,np.maximum(0.0,model_disagreement*uncertainty_penalty_mult))
     ok=(score>=decision_threshold)&(p_dir>=probability_threshold)&(er_robust>=effective_min_expected_return)&(meta_p>=meta_threshold)
     action=np.full(len(pred),'FLAT',dtype=object); action[ok&(direction>0)]='LONG'; action[ok&(direction<0)]='SHORT'
-    score_series=pd.Series(score,index=pred.index,name='score'); score_series.attrs['effective_min_expected_return']=float(effective_min_expected_return); score_series.attrs['economic_hurdle_bps']=float(np.max(hurdle_bps)) if len(hurdle_bps) else 0.0
+    score_series=pd.Series(score,index=pred.index,name='score'); score_series.attrs['effective_min_expected_return']=float(np.max(effective_min_expected_return)) if len(effective_min_expected_return) else 0.0; score_series.attrs['economic_hurdle_bps']=float(np.max(hurdle_bps)) if len(hurdle_bps) else 0.0
     return pd.Series(action,index=pred.index,name='action'),score_series
 
 def live_signal_gate(row, settings):
