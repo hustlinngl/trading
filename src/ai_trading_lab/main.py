@@ -17,7 +17,7 @@ from .optimizer import optimize_policy
 from .objectives import robust_performance_utility
 from .fingerprint import strong_dataset_fingerprint
 from .autonomous import autonomous_cycle, daemon
-from .deployment import model_semantics_fingerprint
+from .deployment import model_semantics_fingerprint, refresh_deployment_manifest as _refresh_deployment_manifest
 
 
 def synthetic_data(s, n=5000):
@@ -57,45 +57,7 @@ def asset_deployment_manifest(settings, root: str | Path = ".") -> Path:
 
 
 def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
-    root = Path(root)
-    asset_dir = asset_model_dir(settings.symbol)
-    base_path = asset_dir / "base_holdout_report.json"
-    duration_path = asset_dir / "trade_window_training_report.json"
-    base = json.loads(base_path.read_text(encoding="utf-8")) if base_path.exists() else {}
-    duration = json.loads(duration_path.read_text(encoding="utf-8")) if duration_path.exists() else {}
-    h = base.get("holdout", {}) if isinstance(base, dict) else {}
-    base_checks = {
-        "holdout_report_present": bool(base),
-        "holdout_trade_support": int(h.get("trades_taken", h.get("trades", 0))) >= int(getattr(settings, "base_min_holdout_trades", 20)),
-        "positive_holdout_return": float(h.get("net_compounded_return", h.get("total_return", h.get("return", -1.0)))) > 0.0 if bool(getattr(settings, "base_require_positive_holdout_return", True)) else True,
-        "profit_factor": float(h.get("profit_factor", 0.0)) >= float(getattr(settings, "base_min_holdout_profit_factor", 1.0)),
-        "holdout_drawdown": float(h.get("max_drawdown", -1.0)) >= float(getattr(settings, "base_max_holdout_drawdown", -0.25)),
-    }
-    duration_bt = duration.get("holdout", {}).get("backtest", {}) if isinstance(duration, dict) else {}
-    duration_utility = robust_performance_utility(duration_bt, min_trades=int(getattr(settings, "trade_window_min_holdout_trades", 12)), max_drawdown=float(getattr(settings, "trade_window_max_holdout_drawdown", -0.25))) if duration_bt else -1.0
-    base_utility = robust_performance_utility(h, min_trades=int(getattr(settings, "base_min_holdout_trades", 20)), max_drawdown=float(getattr(settings, "base_max_holdout_drawdown", -0.25))) if h else -1.0
-    base_checks["risk_adjusted_utility"] = base_utility >= float(getattr(settings, "base_min_holdout_utility", 0.0))
-    duration_checks = {
-        "duration_report_present": bool(duration),
-        "duration_production_ready": bool(duration.get("production_ready", False)),
-        "risk_adjusted_utility": (not bool(duration_bt)) or duration_utility >= float(getattr(settings, "trade_window_min_holdout_utility", 0.0)),
-    }
-    checks = {**base_checks, **duration_checks}
-    ready = all(checks.values()) if bool(getattr(settings, "trade_window_enabled", True)) else all(base_checks.values())
-    manifest = {
-        "symbol": settings.symbol,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-        "ready": bool(ready),
-        "checks": checks,
-        "base_holdout_report": str(base_path),
-        "duration_report": str(duration_path),
-        "objective": {"base_risk_adjusted_utility": float(base_utility), "duration_risk_adjusted_utility": float(duration_utility)},
-    }
-    asset_dir.mkdir(parents=True, exist_ok=True)
-    tmp = asset_dir / "deployment_manifest.json.tmp"
-    tmp.write_text(json.dumps(manifest, indent=2, default=str), encoding="utf-8")
-    tmp.replace(asset_dir / "deployment_manifest.json")
-    return manifest
+    return _refresh_deployment_manifest(settings, root)
 
 
 def _promote_asset_bundle(asset_dir: str | Path, champion_dir: str | Path = "models/champion") -> None:
