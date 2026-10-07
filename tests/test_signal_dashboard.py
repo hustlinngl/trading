@@ -277,7 +277,7 @@ def test_scan_top5_filters_wait_and_caps_verified_picks(monkeypatch, tmp_path):
     settings = load_settings("config.yaml")
     settings.live_symbols = tuple(f"ASSET{i}/USDT" for i in range(8))
 
-    def fake_assess(settings, root, symbol, exchange=None):
+    def fake_assess(settings, root, symbol, exchange=None, skip_network=False):
         idx = int(symbol.replace("ASSET", "").split("/")[0])
         if idx == 7:
             return LiveAssessment(symbol, "2026-10-07T00:00:00+00:00", "WAIT", "FLAT", 0.99, 0.9, 1.0, ["gate"], "fp")
@@ -449,6 +449,7 @@ def test_signal_terminal_background_state_does_not_hold_lock_during_scan(tmp_pat
 
     monkeypatch.setattr(terminal_mod, "scan_top5", slow_scan)
     terminal = terminal_mod.SignalTerminal(settings, tmp_path, refresh_seconds=30)
+    terminal._get_exchange = lambda: None
 
     first = terminal._terminal_state(force=True, background=True)
     assert first["scan_in_progress"] is True
