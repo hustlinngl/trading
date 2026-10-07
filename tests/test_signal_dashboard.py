@@ -32,6 +32,12 @@ def test_dashboard_responsive_ui_and_chart_edge_case():
     assert "section-reveal" in html
     assert "prefers-reduced-motion:reduce" in html
     assert 'id="sakuraMusic"' in html
+    assert 'id="metrics"' not in html
+    assert 'id="focusStatus"' not in html
+    assert 'id="focusCoverage"' not in html
+    assert 'id="deckBundle"' not in html
+    assert 'function renderMetrics' not in html
+    assert 'function pill(' not in html
 
 
 def test_dashboard_market_explorer_ui():
