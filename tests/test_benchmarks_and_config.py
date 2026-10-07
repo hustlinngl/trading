@@ -24,3 +24,28 @@ def test_benchmark_suite_returns_controls():
     result = evaluate_suite(settings, n=1200)
     assert {"flat", "buy_hold", "trend", "mean_reversion"}.issubset(set(result["strategy"]))
     assert "adaptive_engine" in set(result["strategy"])
+
+
+def test_promotion_gate_has_absolute_floor_without_stale_score_dependency():
+    from ai_trading_lab.promotion import promotion_gate
+    stats = {
+        "folds": 8,
+        "total_trades": 80,
+        "score": 0.15,
+        "positive_fold_ratio": 0.75,
+        "worst_drawdown": -0.10,
+        "bootstrap_superiority_prob": 0.80,
+    }
+    gate = promotion_gate(
+        stats,
+        champion_score=0.90,
+        min_folds=4,
+        min_trades=50,
+        max_dd=-0.20,
+        min_positive_fold_ratio=0.65,
+        min_bootstrap_prob=0.58,
+        min_score=0.0,
+        require_score_improvement=False,
+    )
+    assert gate["approved"]
+    assert gate["checks"]["score_improves"] is True
