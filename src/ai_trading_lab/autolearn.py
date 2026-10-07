@@ -37,8 +37,15 @@ def auto_update(df,settings,model_dir="models"):
     state=json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
     previous_score=float(state.get("score",-np.inf))
     fp=strong_dataset_fingerprint(df)
+    model_semantics=model_semantics_fingerprint(settings)
+    deployment_semantics=deployment_semantics_fingerprint(settings)
 
-    if (mdir/"signal_model.joblib").exists() and state.get("data_fingerprint")==fp:
+    if (
+        (mdir/"signal_model.joblib").exists()
+        and state.get("data_fingerprint")==fp
+        and state.get("model_semantics_fingerprint")==model_semantics
+        and state.get("deployment_semantics_fingerprint")==deployment_semantics
+    ):
         return {
             "promoted":False,
             "skipped":True,
@@ -147,10 +154,14 @@ def auto_update(df,settings,model_dir="models"):
             "stats":stats,
             "version":int(state.get("version",0))+1,
             "data_fingerprint":fp,
+            "model_semantics_fingerprint":model_semantics,
+            "deployment_semantics_fingerprint":deployment_semantics,
             "final_holdout":holdout,
             "champion_holdout":champion_holdout,
             "deployment_manifest":deployment_manifest,
             "duration_report":duration_report,
+            "model_semantics_fingerprint":model_semantics,
+            "deployment_semantics_fingerprint":deployment_semantics,
         }
         state_path.write_text(json.dumps(state,indent=2,default=str),encoding="utf-8")
         result["deployment_manifest"]=deployment_manifest
@@ -163,6 +174,8 @@ def auto_update(df,settings,model_dir="models"):
     else:
         state.update({
             "data_fingerprint":fp,
+            "model_semantics_fingerprint":model_semantics,
+            "deployment_semantics_fingerprint":deployment_semantics,
             "last_challenger_score":score,
             "last_champion_score":previous_score,
             "last_stats":stats,
