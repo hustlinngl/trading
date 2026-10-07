@@ -78,7 +78,7 @@ def _collect_folds(df,settings,max_folds=None,only_folds=None):
 def _actions(snapshot,settings,params):
     pred=snapshot.pred.copy(); er=pred.expected_return.to_numpy(float)
     if snapshot.conformal_scaled_residuals is not None and len(snapshot.conformal_scaled_residuals) and 'atr_pct' in snapshot.features:
-        level=float(np.clip(params.get('conformal_level',getattr(settings,'conformal_level',0.90)),0.50,0.999)); q=float(np.quantile(snapshot.conformal_scaled_residuals,level,method='higher')); margin=np.maximum(np.abs(snapshot.features.atr_pct.to_numpy(float)),1e-6)*q; direction=np.where(pred.p_up.to_numpy(float)>=0.5,1.0,-1.0); pred['expected_return_lcb']=er-margin*direction
+        level=float(np.clip(params.get('conformal_level',getattr(settings,'conformal_level',0.90)),0.50,0.999)); q=float(np.quantile(snapshot.conformal_scaled_residuals,level,method='higher')); margin=np.maximum(np.abs(snapshot.features.atr_pct.to_numpy(float)),1e-6)*q; pred['expected_return_lcb']=er-margin; pred['expected_return_ucb']=er+margin
     actions,_=decide_actions(pred,snapshot.regimes,snapshot.analog,snapshot.meta_p,settings,regime_persistence=snapshot.regime_persistence,regime_probs=snapshot.regime_probs,**params); return actions
 
 def _evaluate_params(folds,settings,params,cost_multipliers=(1.0,1.25,1.5)):
