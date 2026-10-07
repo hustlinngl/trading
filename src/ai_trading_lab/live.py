@@ -175,7 +175,8 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
         tw = assess_trade_window(df, settings, tw_path, symbol=symbol)
         for key, value in tw.items():
             last[key] = value
-        last['funding_cost_return']=float(funding.get('funding_cost_return',0.0) or 0.0)
+        last['funding_rate']=funding.get('funding_rate')
+        last['funding_intervals']=funding.get('funding_intervals',0)
         signal,reasons=live_signal_gate(last,settings)
         p=float(last.get("p_up",0.5))
         confidence=p if signal=="LONG" else (1.0-p if signal=="SHORT" else 0.0)
@@ -183,7 +184,8 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
         lcb=float(last.get("expected_return_lcb", last.get("expected_return", 0.0)))
         ucb=float(last.get("expected_return_ucb", last.get("expected_return", 0.0)))
         robust_edge=lcb if signal=="LONG" else (-ucb if signal=="SHORT" else 0.0)
-        robust_edge-=float(funding.get("funding_cost_return",0.0) or 0.0)
+        direction_sign=1.0 if p >= 0.5 else -1.0
+        robust_edge-=direction_sign*float(funding.get("funding_rate",0.0) or 0.0)*max(0,int(funding.get("funding_intervals",0) or 0))
         score=float(last.get("score", 0.0))
         tw_conf=float(last.get("trade_window_confidence", 0.0))
         probability_floor=max(
@@ -209,7 +211,7 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
             "meta_success","model_disagreement","return_disagreement","regime",
             "regime_persistence","analog_edge","analog_agreement","analog_dispersion","analog_n",
             "trade_window_available","trade_window_ready","trade_window_direction",
-            "trade_window_confidence","trade_window_reason","funding_rate","funding_cost_return","funding_intervals",
+            "trade_window_confidence","trade_window_reason","funding_rate","funding_intervals",
         )
         details={k:last.get(k) for k in detail_keys if k in last.index}
         details.update({
@@ -221,7 +223,7 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
             "market_type": funding.get("market_type","spot"),
             "funding_data_missing": bool(funding.get("funding_data_missing",False)),
             "funding_rate": funding.get("funding_rate"),
-            "funding_cost_return": float(funding.get("funding_cost_return",0.0) or 0.0),
+            "funding_intervals": int(funding.get("funding_intervals",0) or 0),
         })
         assessment=LiveAssessment(
             symbol,stamp,"SIGNAL" if signal!="FLAT" else "WAIT",signal,
