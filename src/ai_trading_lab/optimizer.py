@@ -12,6 +12,7 @@ from .engine import AdaptiveEngine
 from .features import make_oos_features
 from .policy import make_actions
 from .evaluation import run_configured_backtest
+from .objectives import robust_performance_utility
 
 def optimize_policy(train: pd.DataFrame, validation: pd.DataFrame, settings, trials: int = 30) -> dict:
     """Tune decision gates on a validation set after fitting the model on earlier data.
@@ -31,10 +32,13 @@ def optimize_policy(train: pd.DataFrame, validation: pd.DataFrame, settings, tri
         stop = trial.suggest_float('stop_atr_mult', 1.0, 3.0)
         rr = trial.suggest_float('take_profit_rr', 1.2, 4.0)
         actions = make_actions(engine, feat, settings, pt, edge, decision, meta)
-        res = run_configured_backtest(bt_df, actions, settings, stop_atr_mult=stop, take_profit_rr=rr)
+        res = run_configured_backtest(bt_df, actions, settings, stop_atr_mult=stop, take_profit_rr=rr, cost_multiplier=1.0)
+        stress = run_configured_backtest(bt_df, actions, settings, stop_atr_mult=stop, take_profit_rr=rr, cost_multiplier=1.5)
         if res.stats['trades'] < 10 or res.stats['max_drawdown'] < -0.25:
             return -10.0 + res.stats['max_drawdown']
-        return float(res.stats['total_return'] + 0.10 * res.stats['sharpe_like'] + 0.35 * res.stats['max_drawdown'])
+        base_utility=robust_performance_utility(res.stats,min_trades=10,max_drawdown=-0.25)
+        stress_utility=robust_performance_utility(stress.stats,min_trades=10,max_drawdown=-0.25)
+        return float(0.70*base_utility+0.30*stress_utility)
     study = optuna.create_study(direction='maximize', sampler=optuna.samplers.TPESampler(seed=settings.seed))
     study.optimize(objective, n_trials=int(trials), show_progress_bar=False)
     return {'best_value': float(study.best_value), 'best_params': study.best_params, 'trials': len(study.trials)}
