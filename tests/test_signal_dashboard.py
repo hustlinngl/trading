@@ -303,3 +303,73 @@ def test_signal_terminal_journal_reads_frozen_state_root(tmp_path, monkeypatch):
 
     assert len(rows) == 1
     assert rows[0]["signal"] == "LONG"
+
+
+def test_discover_live_universe_uses_all_active_market_types(monkeypatch, tmp_path):
+    import ai_trading_lab.live as live_mod
+
+    settings = load_settings("config.yaml")
+    settings.live_symbols = ("BTC/USDT",)
+    settings.live_market_types = ("spot", "swap", "future")
+    asset_root = tmp_path / "models" / "assets"
+    asset_root.mkdir(parents=True)
+    for symbol in ("BTC/USDT", "ETH/USDT:USDT", "XRP/USDT:USDT"):
+        bundle = asset_root / symbol.replace("/", "_").replace(":", "_")
+        bundle.mkdir()
+        (bundle / "signal_model.joblib").write_text("stub", encoding="utf-8")
+
+    class FakeExchange:
+        markets = {
+            "BTC/USDT": {"symbol": "BTC/USDT", "type": "spot", "active": True},
+            "ETH/USDT:USDT": {"symbol": "ETH/USDT:USDT", "type": "swap", "contract": True, "active": True},
+            "XRP/USDT:USDT": {"symbol": "XRP/USDT:USDT", "type": "future", "contract": True, "active": True},
+            "DOGE/USDT": {"symbol": "DOGE/USDT", "type": "spot", "active": False},
+            "EUR/USD": {"symbol": "EUR/USD", "type": "spot", "active": True},
+        }
+
+    monkeypatch.setattr(live_mod, "resolve_signal_bundle", lambda settings, root, symbol:
+        asset_root / symbol.replace("/", "_").replace(":", "_")
+    )
+
+    meta = live_mod.discover_live_universe(settings, tmp_path, FakeExchange())
+
+    assert set(meta["symbols"]) == {"BTC/USDT", "ETH/USDT:USDT", "XRP/USDT:USDT"}
+    assert meta["discovered_markets"] == 4
+    assert meta["model_backed_markets"] == 3
+    assert meta["market_counts"]["spot"] == 2
+    assert meta["market_counts"]["swap"] == 1
+    assert meta["market_counts"]["future"] == 1
+
+
+def test_scan_top5_return_meta_reports_universe_coverage(monkeypatch, tmp_path):
+    import ai_trading_lab.live as live_mod
+
+    settings = load_settings("config.yaml")
+    settings.live_symbols = ("BTC/USDT",)
+
+    class FakeExchange:
+        markets = {
+            "BTC/USDT": {"symbol": "BTC/USDT", "type": "spot", "active": True},
+        }
+
+    monkeypatch.setattr(live_mod, "exchange_client", lambda *args, **kwargs: FakeExchange())
+    monkeypatch.setattr(live_mod, "discover_live_universe", lambda *args, **kwargs: {
+        "symbols": ["BTC/USDT", "ETH/USDT"],
+        "discovered_markets": 12,
+        "model_backed_markets": 2,
+        "market_counts": {"spot": 8, "swap": 4},
+    })
+    monkeypatch.setattr(
+        live_mod,
+        "assess_symbol",
+        lambda settings, root, symbol, exchange=None, skip_network=False:
+            LiveAssessment(symbol, "2026-10-07T00:00:00+00:00", "SIGNAL", "LONG", 0.9, 0.01, 1.0, [], "fp"),
+    )
+
+    picks, meta = live_mod.scan_top5(settings, tmp_path, return_meta=True)
+
+    assert len(picks) == 2
+    assert meta["universe_total"] == 12
+    assert meta["universe_model_backed"] == 2
+    assert meta["universe_evaluated"] == 2
+    assert meta["universe_mode"] == "all_active_markets"
