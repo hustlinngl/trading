@@ -191,3 +191,49 @@ def test_oos_feature_stitch_allows_identical_overlap():
     future = history.iloc[-1:].copy()
     out = make_oos_features(history, future, horizon=4)
     assert list(out.index) == list(future.index)
+
+
+def test_cached_duplicate_microstructure_conflict_is_rejected():
+    from ai_trading_lab.data import _deduplicate_ohlcv
+    idx = pd.to_datetime(["2026-01-01 00:00:00+00:00"] * 2)
+    df = pd.DataFrame({
+        "open":[100.0,100.0],"high":[101.0,101.0],"low":[99.0,99.0],
+        "close":[100.0,100.0],"volume":[1000.0,1000.0],"trades":[10.0,11.0],
+    }, index=idx)
+    try:
+        _deduplicate_ohlcv(df)
+    except ValueError as exc:
+        assert "Conflicting duplicate market timestamp" in str(exc)
+    else:
+        raise AssertionError("conflicting microstructure duplicate must be rejected")
+
+
+def test_master_tuner_rebuilds_both_conformal_bounds(monkeypatch):
+    from ai_trading_lab.master_tuner import FoldSnapshot, _actions
+    import ai_trading_lab.master_tuner as tuner_mod
+    settings = load_settings(Path("config.yaml"))
+    idx = pd.date_range("2026-01-01", periods=1, freq="15min", tz="UTC")
+    pred = pd.DataFrame({
+        "p_up":[0.10],
+        "expected_return":[-0.004],
+        "expected_return_lcb":[-0.004],
+        "expected_return_ucb":[-0.004],
+        "model_disagreement":[0.0],
+        "return_disagreement":[0.0],
+    }, index=idx)
+    features = pd.DataFrame({"atr_pct":[0.01]}, index=idx)
+    snap = FoldSnapshot(
+        0, market_frame(1), features, pred,
+        pd.Series(["high_vol_down"], index=idx),
+        pd.DataFrame({"agreement":[0.9],"edge":[-0.01],"dispersion":[0.0],"n":[32]}, index=idx),
+        np.array([0.9]), None, None, None, np.array([0.5]*20)
+    )
+    captured = {}
+    def fake_decide(pred_in, *args, **kwargs):
+        captured["pred"] = pred_in.copy()
+        return pd.Series(["FLAT"], index=idx), pd.Series([0.0], index=idx)
+    monkeypatch.setattr(tuner_mod, "decide_actions", fake_decide)
+    _actions(snap, settings, {"conformal_level":0.90})
+    rebuilt = captured["pred"]
+    assert np.isclose(float(rebuilt["expected_return_lcb"].iloc[0]), -0.009)
+    assert np.isclose(float(rebuilt["expected_return_ucb"].iloc[0]), 0.001)
