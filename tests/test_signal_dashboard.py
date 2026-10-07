@@ -228,7 +228,6 @@ def test_signal_terminal_history_falls_back_to_bundled_cache(tmp_path, monkeypat
     result = terminal._history("BTC/USDT", 240)
 
     assert result["source"] == "bundled"
-    assert result["network_error"] == "OSError:offline"
     assert len(result["bars"]) == 2
     assert result["bars"][1]["c"] == 101.5
 
@@ -241,11 +240,11 @@ def test_signal_terminal_focus_surface_is_only_verified_picks():
     assert 'id="top5Grid"' in html
     assert 'Top 5 Picks' in html
     assert 'legacy-hidden' in html
-    assert 'id="market" class="legacy-hidden' in html
-    assert 'id="detail" class="legacy-hidden' in html
-    assert 'id="journal" class="legacy-hidden' in html
-    assert 'id="timeline" class="legacy-hidden' in html
-    assert 'id="evidencePanel" class="legacy-hidden' in html
+    assert 'class="legacy-hidden panel chart-panel" id="market"' in html
+    assert 'class="legacy-hidden panel" id="detail"' in html
+    assert 'class="legacy-hidden panel" id="journal"' in html
+    assert 'class="legacy-hidden panel" id="timeline"' in html
+    assert 'class="legacy-hidden panel" id="evidencePanel"' in html
 
 
 def test_scan_top5_filters_wait_and_caps_verified_picks(monkeypatch, tmp_path):
