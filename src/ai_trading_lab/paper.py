@@ -11,6 +11,37 @@ from .fingerprint import strong_dataset_fingerprint
 from .policy import live_signal_gate
 from .trade_window import assess_trade_window
 from .deployment import resolve_signal_bundle, resolve_trade_window_model, bundle_compatibility
+from .signal_contract import DirectSignal, PUBLIC_SIGNALS
+
+
+def _public_signal(result, settings):
+    signal=str(result.get("signal","FLAT")).upper()
+    if signal not in PUBLIC_SIGNALS:
+        signal="FLAT"
+    try:
+        confidence=float(result.get("confidence",0.0) or 0.0)
+    except (TypeError,ValueError):
+        confidence=0.0
+    try:
+        expected_return=float(result.get("expected_return",0.0) or 0.0)
+    except (TypeError,ValueError):
+        expected_return=0.0
+    try:
+        price=float(result.get("price",0.0) or 0.0)
+    except (TypeError,ValueError):
+        price=0.0
+    timestamp=str(result.get("data_timestamp") or result.get("timestamp") or "")
+    return DirectSignal(
+        symbol=str(result.get("symbol",settings.symbol)),
+        timestamp=timestamp,
+        signal=signal,
+        confidence=max(0.0,min(1.0,confidence)),
+        expected_return=expected_return,
+        price=price,
+        horizon_bars=max(1,int(getattr(settings,"horizon_bars",8))),
+        actionable=signal in {"LONG","SHORT"},
+        reason="qualified" if signal in {"LONG","SHORT"} else "no_actionable_setup",
+    ).to_dict()
 
 def one_iteration(settings, root: str | Path = "."):
     root=Path(root); (root/"logs").mkdir(parents=True,exist_ok=True)
@@ -26,7 +57,7 @@ def one_iteration(settings, root: str | Path = "."):
     if not model.exists():
         result["reason"].append("model_missing")
         (root/"logs"/"paper_last.json").write_text(json.dumps(result,indent=2,default=str),encoding="utf-8")
-        return result
+        return _public_signal(result, settings)
     try:
         ex=exchange_client(getattr(settings,"exchange","binance"),sandbox=False)
         df=fetch_ohlcv(ex,settings.symbol,settings.timeframe,int(getattr(settings,"live_lookback_bars",600)))
@@ -36,7 +67,7 @@ def one_iteration(settings, root: str | Path = "."):
         if str(previous.get("data_timestamp","")) == str(result["data_timestamp"]):
             result["reason"]=["same_completed_candle"]
             previous_path.write_text(json.dumps(result,indent=2,default=str),encoding="utf-8")
-            return result
+            return _public_signal(result, settings)
         result["data_fingerprint"]=strong_dataset_fingerprint(df)
         result["price"]=float(df["close"].iloc[-1])
         if not quality.passed:
@@ -52,7 +83,7 @@ def one_iteration(settings, root: str | Path = "."):
                 if not compatible:
                     result["reason"]=[compatibility_reason]
                     (root/"logs"/"paper_last.json").write_text(json.dumps(result,indent=2,default=str),encoding="utf-8")
-                    return result
+                    return _public_signal(result, settings)
                 eng=AdaptiveEngine(settings).load(model_dir)
                 feat=eng.features(df)
                 pred=eng.predict_frame(feat)
@@ -71,7 +102,7 @@ def one_iteration(settings, root: str | Path = "."):
     except Exception as exc:
         result["reason"].append(f"runtime:{type(exc).__name__}:{exc}")
     (root/"logs"/"paper_last.json").write_text(json.dumps(result,indent=2,default=str),encoding="utf-8")
-    return result
+    return _public_signal(result, settings)
 
 def paper_daemon(settings,cycles=None,sleep_seconds=60,root="."):
     n=0
