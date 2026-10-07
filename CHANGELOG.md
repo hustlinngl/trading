@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.25
+- Removed redundant Top 5/history capsules and inspector trace pills to reduce dashboard visual noise.
+- Replaced document click ripples with bounded primary-pointer ripples, eliminating synthetic `(0, 0)` keyboard-click effects in the top-left corner.
+- Added a low-volume Sakura lo-fi ambient soundtrack generated locally with Web Audio, with a visible toggle and persisted preference.
+
 ## 0.9.24
 - Made offline Market state explicit so stale realtime badges cannot look live after a failed state refresh.
 - Added the initial Overview navigation state to the page semantics and regression coverage for truthful offline presentation.
