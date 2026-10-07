@@ -1,4 +1,4 @@
-# Adaptive AI Trading Lab 0.9.15 — autonomous optimization audit
+# Adaptive AI Trading Lab 0.9.16 — autonomous optimization audit
 
 > Historical note: the evidence and synthetic metrics below describe the prior research build. The 0.9.15 pass is primarily an engineering-completion and correctness pass; it does not convert the strategy into a proven profitable system.
 
@@ -60,6 +60,10 @@ The next valid optimization target is therefore not “increase backtest return.
 ## 0.9.15 engineering completion
 
 The repository-level completion pass fixed the master-tuner fold-cache subset bug, restored the benchmark command, aligned configured economic-edge loading, unified paper/live inference with the canonical engine, activated strict live/paper gates, repaired intensive-workflow shell continuation, made configured holdout cost-stress multipliers effective, added CI and regression coverage, and synchronized release metadata. Full execution of the new suite is delegated to the GitHub Actions CI runner; this environment could inspect and patch the repository but could not execute its complete dependency stack locally.
+
+## Pre-alpha terminal freeze
+
+The final pre-alpha pass keeps the research stack conservative and makes the read-only dashboard boundary explicit. The terminal has no order route, tolerates realtime ticker failure without blocking model signals, restores provenance/evidence rendering from each asset bundle, rejects non-finite JSON values, and avoids stale asynchronous history responses overwriting a newly selected asset.
 
 ## Operational state
 
