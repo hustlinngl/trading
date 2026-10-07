@@ -19,10 +19,10 @@ on:
 
 concurrency:
   group: intensive-real-research
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   research:
@@ -76,16 +76,9 @@ jobs:
       - name: Upload research reports
         uses: actions/upload-artifact@v4
         with:
-          name: intensive-real-research
+          name: intensive-real-research-${{ github.run_id }}
           path: |
             logs/intensive_real/**
             data/intensive_real/merged/**
           if-no-files-found: error
 
-      - name: Record research summary
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add logs/intensive_real/intensive_real_research_summary.json
-          git diff --cached --quiet || git commit -m 'research: record intensive real-data run'
-          git push
