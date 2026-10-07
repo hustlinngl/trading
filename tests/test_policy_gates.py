@@ -85,3 +85,25 @@ def test_short_economic_hurdle_includes_borrow():
     action, score = decide_actions(pred, regime, analog, np.array([0.9]), settings)
     assert action.iloc[0] in {"SHORT","FLAT"}
     assert score.attrs["economic_hurdle_bps"] >= 20.0 * 96
+
+
+def test_live_assessment_empty_data_fails_closed(monkeypatch):
+    import ai_trading_lab.live as live_mod
+    from ai_trading_lab.live import assess_symbol
+    settings = replace(load_settings("config.yaml"), symbol="BTC/USDT")
+    monkeypatch.setattr(live_mod, "fetch_ohlcv", lambda *args, **kwargs: pd.DataFrame())
+    result = assess_symbol(settings, root=".")
+    assert result.status == "WAIT"
+    assert "empty_data" in result.reason_codes
+
+
+def test_live_assessment_fetch_failure_fails_closed(monkeypatch):
+    import ai_trading_lab.live as live_mod
+    from ai_trading_lab.live import assess_symbol
+    settings = replace(load_settings("config.yaml"), symbol="BTC/USDT")
+    def boom(*args, **kwargs):
+        raise RuntimeError("exchange unavailable")
+    monkeypatch.setattr(live_mod, "fetch_ohlcv", boom)
+    result = assess_symbol(settings, root=".")
+    assert result.status == "WAIT"
+    assert any(x.startswith("data_fetch:RuntimeError") for x in result.reason_codes)
