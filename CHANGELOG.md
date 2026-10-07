@@ -1,6 +1,10 @@
 # Changelog
 
 ## 0.9.16
+- Alpha visual foundation added on top of the frozen read-only terminal.
+- Added Sakura Tactical presentation layer: anime operator/cursor motif, pink neon glow language, animated HUD sweep and ambient grid.
+- Added 60fps-oriented interaction motion: requestAnimationFrame cursor tracking, click ripples, button/menu feedback, signal glow and reduced-motion fallback.
+- Added navigable Market / Intelligence / Journal / Evidence menu and click-through asset selection from radar/detail rows.
 - Final pre-alpha freeze: restored bundle provenance/evidence into the dashboard payload and kept compatibility checks fail-closed.
 - Hardened dashboard JSON serialization, browser escaping and asynchronous asset switching.
 - Optimized realtime ticker collection with bulk-fetch fallback while keeping the selected-asset ticker display-only.
