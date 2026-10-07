@@ -45,7 +45,7 @@ st.markdown(
 doctor = system_doctor(settings, ".")
 paper_state = _read_json("logs/paper_last.json")
 research_state = _read_json("logs/intensive_real/intensive_real_research_summary.json")
-promotion_state = _read_json("models/promotion_state.json")
+promotion_state = _read_json(Path("models") / "assets" / settings.symbol.replace("/", "_").replace(":", "_") / "promotion_state.json")
 
 st.markdown(
     f"""
