@@ -1,8 +1,8 @@
 # Adaptive AI Trading Lab
 
-Release **0.9.31** — pre-alpha read-only signal terminal built on the trained research stack.
+Release **0.9.35** — pre-alpha read-only signal terminal built on the trained research stack.
 
-This repository is a research-first adaptive trading platform for real market data, purged walk-forward validation, pristine holdouts, cost-aware event-driven backtesting, autonomous research and guarded paper/signal workflows.
+This repository is a research-first adaptive trading platform for real market data, purged walk-forward validation, governed holdout access, cost-aware event-driven backtesting, autonomous research and guarded paper/signal workflows.
 
 ## What is included
 
@@ -14,7 +14,7 @@ This repository is a research-first adaptive trading platform for real market da
 - Strict paper/live signal gates that default to WAIT unless evidence, freshness and model-consensus requirements are satisfied.
 - Deployment evidence is bound to model, runtime/economic semantics, dataset fingerprint and executable artifact hashes; stale or mixed-generation evidence fails closed.
 - Deterministic benchmark controls and CI checks for compile, tests, CLI startup and benchmark execution.
-- Single-file `signal_dashboard.py` signal terminal with automatic public-data refresh, provenance-aware bundle checks and prequential signal journal.
+- `signal_dashboard.py` thin read-only launcher backed by a dedicated `ai_trading_lab.dashboard_terminal` module; automatic public-data refresh, provenance-aware bundle checks and prequential signal journal.
 - Alpha visual foundation with Sakura Tactical glow, anime operator, animated navigation, decision trace, signal timeline, decision inspector and lightweight ambient effects.
 
 ## Single signal terminal
