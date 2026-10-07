@@ -1447,7 +1447,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
     <div id="liveDataFallback" class="live-data-grid" hidden></div>
   </section>
 
-  <section class="live-intelligence" id="liveIntelligence" aria-live="polite">
+  <section class="legacy-hidden live-intelligence" id="liveIntelligence" aria-live="polite">
     <div class="live-kpi-grid">
       <article class="live-kpi" id="liveKpiPrice"><div class="k">Prezzo</div><div class="v num" id="kpiPrice">—</div><div class="meta" id="kpiPriceMeta">stream · —</div></article>
       <article class="live-kpi" id="liveKpiRegime"><div class="k">Market Regime</div><div class="v" id="kpiRegime">Unknown</div><div class="meta" id="kpiRegimeMeta">confidence · —</div></article>
@@ -1563,7 +1563,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
 
   <div class="legacy-hidden panel" id="detail">
     <div class="panel-head">
-      <div><div class="title">Signal detail</div><div class="small">Stessa decisione usata dal motore: robust edge, meta, memoria, regime e duration gate.</div></div>
+      <div><div class="title">Signal detail</div><div class="small">Risultato diretto del modello: direzione, prezzo, confidenza, rendimento atteso e orizzonte.</div></div>
     </div>
     <div class="table-wrap">
       <table>
@@ -1605,7 +1605,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   </div>
 </aside>
 
-  <section class="panel cognition-panel" id="liveCognitionPanel" aria-live="polite">
+  <section class="legacy-hidden panel cognition-panel" id="liveCognitionPanel" aria-live="polite">
     <div class="panel-head">
       <div><div class="title">Live AI Cognition</div><div class="small">Trace operativa dei gate e delle evidenze disponibili; non rappresenta il ragionamento privato del modello.</div></div>
       <div class="live-telemetry-stamp" id="cognitionStamp">—</div>
@@ -2292,7 +2292,7 @@ function render(data){
   renderLiveData(data);
   renderRadar(signals); renderDetail(signals); renderJournal(data); renderEvidence(signals); renderDecisionDeck(signals); renderTimeline(signals,data.journal||[]); bindInteractiveRows();
   const notes=(data.notes||[]).join(" · ");
-  $("footer").textContent=notes+" · refresh "+data.refresh_seconds+"s · scan "+data.scan_seconds+"s";
+  $("footer").textContent="Segnali diretti · aggiornamento "+data.refresh_seconds+"s · scansione "+data.scan_seconds+"s";
   if(!data.scan_in_progress && state.selected && !state.history)loadHistory(state.selected);
 }
 
