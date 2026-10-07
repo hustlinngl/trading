@@ -179,7 +179,7 @@ class SignalTerminal:
 
         missing = list(dict.fromkeys(symbols))
         bulk = getattr(exchange, "fetch_tickers", None)
-        if callable(bulk):
+        if missing and callable(bulk):
             try:
                 tickers = bulk(missing)
                 if isinstance(tickers, dict):
