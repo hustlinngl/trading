@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import time
 
 import pandas as pd
@@ -9,6 +10,7 @@ from ai_trading_lab.efficiency import (
     ExecutionEfficiencyTracker,
     execution_efficiency_snapshot,
 )
+from ai_trading_lab.live import LiveAssessment
 from ai_trading_lab.live_tracker import LiveTracker
 from ai_trading_lab.state_fusion import fuse_live_dashboard_state
 from ai_trading_lab.streaming import StreamEvent
@@ -44,6 +46,91 @@ def test_live_tracker_async_queue_merges_and_exposes_state():
         assert state["sequence"] == 1
     finally:
         tracker.stop()
+
+
+def test_live_tracker_realtime_price_prefers_quote_mid_over_last_trade():
+    tracker = LiveTracker(symbols=())
+    timestamp = pd.Timestamp("2026-10-07T16:00:00+00:00")
+    book = StreamEvent(
+        received_at=timestamp.isoformat(),
+        stream="btcusdt@bookTicker",
+        event_time_ms=int(timestamp.timestamp() * 1000),
+        symbol="BTC/USDT",
+        event_type="bookTicker",
+        payload={"s": "BTCUSDT", "b": "100.0", "a": "100.2", "E": int(timestamp.timestamp() * 1000)},
+    )
+    trade = StreamEvent(
+        received_at=timestamp.isoformat(),
+        stream="btcusdt@aggTrade",
+        event_time_ms=int(timestamp.timestamp() * 1000) + 10,
+        symbol="BTC/USDT",
+        event_type="aggTrade",
+        payload={"s": "BTCUSDT", "p": "100.4", "q": "2.0", "m": True, "E": int(timestamp.timestamp() * 1000) + 10},
+    )
+    tracker._merge_event(book)
+    tracker._merge_event(trade)
+
+    state = dict(tracker.get_current_state("BTC/USDT"))
+    assert state["price"] == 100.1
+    assert state["mid"] == 100.1
+    assert state["last_trade_price"] == 100.4
+    assert state["trade_side"] == "SELL"
+
+
+def test_live_scan_uses_bounded_parallel_workers(monkeypatch, tmp_path):
+    import ai_trading_lab.live as live_mod
+
+    settings = load_settings("config.yaml")
+    settings.live_scan_workers = 4
+
+    monkeypatch.setattr(
+        live_mod,
+        "discover_live_universe",
+        lambda *args, **kwargs: {
+            "symbols": ["A/USDT", "B/USDT", "C/USDT", "D/USDT"],
+            "discovered_markets": 4,
+            "model_backed_markets": 4,
+            "model_eligible_markets": 4,
+            "market_counts": {"spot": 4},
+        },
+    )
+
+    lock = threading.Lock()
+    active = 0
+    max_active = 0
+
+    def fake_assess(settings, root, symbol, exchange=None, skip_network=False):
+        nonlocal active, max_active
+        with lock:
+            active += 1
+            max_active = max(max_active, active)
+        time.sleep(0.05)
+        with lock:
+            active -= 1
+        return LiveAssessment(
+            symbol,
+            "2026-10-07T00:00:00+00:00",
+            "WAIT",
+            "FLAT",
+            0.0,
+            0.0,
+            1.0,
+            ["gate"],
+            "fp",
+        )
+
+    monkeypatch.setattr(live_mod, "assess_symbol", fake_assess)
+    picks, meta = live_mod.scan_top5(
+        settings,
+        tmp_path,
+        exchange=object(),
+        return_meta=True,
+    )
+
+    assert picks == []
+    assert max_active >= 2
+    assert meta["scan_workers"] == 4
+    assert meta["scan_completed"] == 4
 
 
 def test_state_fusion_normalizes_regime_risk_and_execution():
