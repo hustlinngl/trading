@@ -19,7 +19,12 @@ class LiveAssessment:
 def assess_symbol(settings,root=".",symbol=None,exchange=None):
     symbol=symbol or settings.symbol
     ex=exchange or exchange_client(getattr(settings,"exchange","binance"),sandbox=False)
-    df=fetch_ohlcv(ex,symbol,settings.timeframe,int(getattr(settings,"live_lookback_bars",600)))
+    try:
+        df=fetch_ohlcv(ex,symbol,settings.timeframe,int(getattr(settings,"live_lookback_bars",600)))
+    except Exception as exc:
+        return LiveAssessment(symbol,"","WAIT","FLAT",0.0,0.0,0.0,[f"data_fetch:{type(exc).__name__}:{exc}"],"")
+    if df is None or df.empty:
+        return LiveAssessment(symbol,"","WAIT","FLAT",0.0,0.0,0.0,["empty_data"],"")
     stamp=df.index[-1].isoformat()
     price=float(df.close.iloc[-1])
     fp=strong_dataset_fingerprint(df)
