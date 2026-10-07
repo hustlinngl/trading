@@ -1356,12 +1356,8 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   </div>
 
   <nav class="nav" id="nav" aria-label="Sezioni dashboard">
-    <button class="nav-btn active" data-target="focusDashboard" aria-current="page">Overview</button>
+    <button class="nav-btn active" data-target="focusDashboard" aria-current="page">Signals</button>
     <button class="nav-btn" data-target="market">Market</button>
-    <button class="nav-btn" data-target="detail">Intelligence</button>
-    <button class="nav-btn" data-target="journal">Journal</button>
-    <button class="nav-btn" data-target="timeline">Timeline</button>
-    <button class="nav-btn" data-target="evidencePanel">Evidence</button>
   </nav>
 
   <section class="focus-only" id="focusDashboard" aria-live="polite">
@@ -1508,9 +1504,9 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
 
 
 <div id="inspectorBackdrop" class="legacy-hidden inspector-backdrop" aria-hidden="true"></div>
-<aside id="inspectorDrawer" class="legacy-hidden inspector-drawer" role="dialog" aria-modal="true" aria-labelledby="inspectorTitle" aria-describedby="inspectorSubtitle" aria-label="Decision inspector" aria-hidden="true">
+<aside id="inspectorDrawer" class="legacy-hidden inspector-drawer" role="dialog" aria-modal="true" aria-labelledby="inspectorTitle" aria-describedby="inspectorSubtitle" aria-label="Signal details" aria-hidden="true">
   <div class="inspector-head">
-    <div><div class="title" id="inspectorTitle">Decision inspector</div><div class="small" id="inspectorSubtitle">Asset —</div></div>
+    <div><div class="title" id="inspectorTitle">Signal details</div><div class="small" id="inspectorSubtitle">Asset —</div></div>
     <button class="inspector-close" id="inspectorClose" aria-label="Chiudi inspector">×</button>
   </div>
   <div class="inspector-scroll" id="inspectorContent">
