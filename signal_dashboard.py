@@ -1353,7 +1353,7 @@ function drawChart(history, signals, journal, realtimePrice){
   const volumeMax=Math.max(...bars.map(b=>Number(b.v)||0),1);
   const volBase=H-14, volHeight=24;
   bars.forEach((b,i)=>{
-    const x=xAt(i),vw=Math.max(1,candleW*.72),vh=((Number(b.v)||0)/volumeMax)*volHeight;
+    const x=xAt(i),vw=Math.max(1,cw/bars.length*.62),vh=((Number(b.v)||0)/volumeMax)*volHeight;
     ctx.fillStyle=b.c>=b.o?"rgba(69,227,154,.12)":"rgba(255,111,136,.12)";
     ctx.fillRect(x-vw/2,volBase-vh,vw,vh);
   });
