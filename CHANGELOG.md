@@ -1,3 +1,11 @@
+## 0.9.34
+- Hardened full-universe live scanning with bounded parallel assessment workers and an explicit `live_scan_workers` setting.
+- Made explicit live symbol scopes authoritative even when exchange-wide discovery is available.
+- Fixed realtime canonical pricing to prefer the validated bid/ask midpoint while retaining last-trade price separately.
+- Routed Binance public streams to the correct spot, USD-M and COIN-M endpoints; unsupported option symbols now fail cleanly instead of reconnecting forever.
+- Rejected out-of-order book updates so stale market events cannot overwrite newer quotes; stale-event drops are observable in tracker state.
+- Aligned package, project and release versions at 0.9.34.
+
 ## 0.9.33
 - Extended live market discovery/quote display from the small configured symbol list to the full active exchange universe.
 - `bootstrap-live-data` now discovers all active spot/swap/future markets by default when no explicit `--symbols` list is supplied.
