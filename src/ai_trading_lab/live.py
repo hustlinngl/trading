@@ -18,7 +18,8 @@ class LiveAssessment:
     def to_dict(self): return asdict(self)
 
 def _load_bundled_history(root, symbol, timeframe, limit):
-    path=Path(root)/"data"/"historical"/f"{symbol.replace("/", "_").replace(":", "_")}_{timeframe}.csv"
+    slug = symbol.replace("/", "_").replace(":", "_")
+    path = Path(root) / "data" / "historical" / f"{slug}_{timeframe}.csv"
     if not path.exists():
         return pd.DataFrame()
     try:
