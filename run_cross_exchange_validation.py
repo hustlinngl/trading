@@ -44,6 +44,11 @@ def main():
     best=dict(tuning["best_params"])
     kraken=fetch_kraken_ohlc(timeout=a.timeout); qk=audit_market_data(kraken,"4h")
     if not qk.passed: raise RuntimeError(f"Kraken data failed: {qk.reasons}")
+    if len(binance.index) and len(kraken.index) and binance.index.max() >= kraken.index.min():
+        raise RuntimeError(
+            "Cross-exchange validation requires non-overlapping time ranges; "
+            f"Binance ends at {binance.index.max()} while Kraken starts at {kraken.index.min()}"
+        )
     engine=AdaptiveEngine(settings); engine.fit(binance)
     features=make_oos_features(binance,kraken,settings.horizon_bars,external_feature_lag_bars=getattr(settings,"external_feature_lag_bars",1))
     tuned=settings
