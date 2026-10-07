@@ -722,7 +722,6 @@ class SignalTerminal:
             signals = []
             for assessment in assessments:
                 row = self._assessment_payload(assessment)
-                row["bundle"] = self._bundle_snapshot(assessment.symbol)
                 realtime = quotes.get(assessment.symbol, {})
                 if realtime.get("price") is not None:
                     row["realtime_price"] = realtime["price"]
