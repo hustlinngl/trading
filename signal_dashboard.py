@@ -1412,15 +1412,6 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
       </div>
     </div>
 
-    <div class="panel">
-      <div class="panel-head"><div><div class="title">Radar</div><div class="small">Segnale principale per asset</div></div></div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Asset</th><th>Segnale</th><th>Conf.</th></tr></thead>
-          <tbody id="radarRows"></tbody>
-        </table>
-      </div>
-    </div>
   </div>
 
 
@@ -2222,13 +2213,9 @@ def make_handler(terminal: SignalTerminal):
 def validate_dashboard_markup() -> None:
     """Fail fast on malformed critical markup before a packaged terminal is released."""
     required = (
-        '<section class="legacy-hidden decision-deck" id="decisionDeck" aria-live="polite">',
-        '<div class="legacy-hidden panel chart-panel" id="market">',
-        '<div class="legacy-hidden panel" id="timeline">',
-        '<div class="legacy-hidden panel" id="detail">',
-        '<div class="legacy-hidden panel" id="journal">',
-        '<div class="legacy-hidden panel" id="evidencePanel">',
-        '<aside id="inspectorDrawer" class="legacy-hidden inspector-drawer" role="dialog" aria-modal="true" aria-labelledby="inspectorTitle" aria-describedby="inspectorSubtitle" aria-label="Decision inspector" aria-hidden="true">',
+        '<section class="focus-only" id="focusDashboard" aria-live="polite">',
+        '<div class="panel chart-panel" id="market">',
+        '<aside id="inspectorDrawer" class="legacy-hidden inspector-drawer" role="dialog" aria-modal="true" aria-labelledby="inspectorTitle" aria-describedby="inspectorSubtitle" aria-label="Signal details" aria-hidden="true">',
     )
     missing = [token for token in required if token not in HTML]
     if missing:
