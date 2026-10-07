@@ -17,7 +17,7 @@ from .optimizer import optimize_policy
 from .objectives import robust_performance_utility
 from .fingerprint import strong_dataset_fingerprint
 from .autonomous import autonomous_cycle, daemon
-from .deployment import model_semantics_fingerprint, refresh_deployment_manifest as _refresh_deployment_manifest
+from .deployment import model_semantics_fingerprint, deployment_semantics_fingerprint, refresh_deployment_manifest as _refresh_deployment_manifest
 
 
 def synthetic_data(s, n=5000):
@@ -85,6 +85,7 @@ def train_base_asset(df, settings, *, promote_champion: bool = False):
         "timeframe": str(settings.timeframe),
         "data_fingerprint": strong_dataset_fingerprint(df),
         "model_semantics_fingerprint": model_semantics_fingerprint(settings),
+        "deployment_semantics_fingerprint": deployment_semantics_fingerprint(settings),
         "trained_at": datetime.now(timezone.utc).isoformat(),
     }, indent=2), encoding="utf-8")
     refresh_deployment_manifest(settings)
