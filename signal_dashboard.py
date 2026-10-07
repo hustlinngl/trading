@@ -1165,6 +1165,8 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
 @media(prefers-reduced-motion:reduce){
   .metric,.pick-card{transition:none!important}
   .nav{scroll-behavior:auto}
+  .section-reveal{animation:none!important}
+  .connection-stamp.online::before{animation:none!important}
 }
 </style>
 
