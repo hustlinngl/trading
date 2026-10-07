@@ -58,7 +58,9 @@ def live_signal_gate(row, settings):
     action = str(row.get("action", "FLAT"))
     direction = 1.0 if p_up >= 0.5 else -1.0
     p_direction = p_up if direction > 0 else 1.0 - p_up
-    funding_drag = max(0.0, float(row.get("funding_cost_return", 0.0) or 0.0))
+    funding_rate = float(row.get("funding_rate", 0.0) or 0.0)
+    funding_intervals = max(0, int(float(row.get("funding_intervals", 0) or 0)))
+    funding_drag = float(direction) * funding_rate * funding_intervals
     robust_expected_return = expected_return_lcb if direction > 0 else -expected_return_ucb
     robust_expected_return -= funding_drag
     reasons = []
