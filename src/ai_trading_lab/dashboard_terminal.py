@@ -58,8 +58,6 @@ from ai_trading_lab.live import (
     write_live_snapshot,
 )
 from ai_trading_lab.live_tracker import LiveTracker, update_live_signal_outcomes
-from ai_trading_lab.risk import RiskEngine
-from ai_trading_lab.state_fusion import fuse_live_dashboard_state
 
 
 APP_TITLE = "Adaptive AI Signal Terminal"
@@ -1586,15 +1584,6 @@ function patchLiveNode(id,textValue,semanticClass){
   }
   return changed;
 }
-function renderLiveCognition(cognition){
-  const lines=Array.isArray(cognition&&cognition.lines)?cognition.lines:[];
-  const signature=String((cognition&&cognition.signature)||lines.join("|"));
-  if(signature===state.cognitionSignature)return;
-  state.cognitionSignature=signature;
-  const consoleEl=$("cognitionConsole");
-  if(consoleEl)consoleEl.textContent=lines.join("\\n");
-  patchLiveNode("cognitionStamp",cognition&&cognition.updated_at?new Date(cognition.updated_at).toLocaleTimeString():"LIVE");
-}
 function age(v){return v==null||Number.isNaN(Number(v))?"—":Number(v).toFixed(1)+"m";}
 function cls(sig){return sig==="LONG"?"signal-long":sig==="SHORT"?"signal-short":sig==="WAIT"?"signal-wait":"signal-flat";}
 function drawPickChart(canvas,history,signal){
@@ -2186,9 +2175,6 @@ let refreshBusy=false;
 let refreshTimer=null;
 let livePollBusy=false;
 let livePollTimer=null;
-function startLiveDeltaLoop(){
-  // Signal state is refreshed through /api/state; no separate telemetry channel exists.
-}
 async function refresh(force=false){
   if(refreshBusy)return;
   refreshBusy=true;
@@ -2242,7 +2228,7 @@ initSakuraMusic();
 initAmbientFX();
 initAlphaMotion();
 refresh(true);
-// direct signal refresh is driven by refresh();
+
 </script>
 </body>
 </html>
