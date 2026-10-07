@@ -506,7 +506,8 @@ def main():
         result = master_tune(df, s, trials=args.trials, final_holdout_frac=args.holdout_frac, save_path='logs/master_tuning_report.json')
         print(json.dumps(result, indent=2, default=str)); return
     if args.command == 'auto-update':
-        print(json.dumps(auto_update(df,s),indent=2,default=str)); return
+        bundle_dir=asset_model_dir(s.symbol)
+        print(json.dumps(auto_update(df,s,model_dir=bundle_dir),indent=2,default=str)); return
     for _ in range(max(1,args.iterations)): print(json.dumps(one_iteration(s),indent=2))
 
 
