@@ -126,6 +126,8 @@ class SignalTerminal:
         self._exchange = None
         self._exchange_error = None
         self._assessment_cache = {}
+        self._scan_thread = None
+        self._scan_started_at = 0.0
         self.state_root.joinpath("logs").mkdir(parents=True, exist_ok=True)
         self.state_root.joinpath("data", "history").mkdir(parents=True, exist_ok=True)
 
@@ -361,7 +363,45 @@ class SignalTerminal:
         payload["signal_class"] = _signal_class(str(payload.get("signal", "WAIT")))
         return payload
 
-    def _terminal_state(self, force: bool = False) -> dict:
+    def _bootstrap_state(self) -> dict:
+        return {
+            "ok": True,
+            "app": APP_TITLE,
+            "version": __version__,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "scan_seconds": 0.0,
+            "refresh_seconds": self.refresh_seconds,
+            "scan_in_progress": True,
+            "config": {
+                "exchange": self.settings.exchange,
+                "timeframe": self.settings.timeframe,
+                "primary_symbol": self.settings.symbol,
+                "live_symbols": list(getattr(self.settings, "live_symbols", ()) or ()),
+                "scan_scope": "all_active_markets",
+                "signal_only_mode": bool(self.settings.signal_only_mode),
+                "paper_only": bool(self.settings.paper_only),
+                "sandbox": bool(self.settings.sandbox),
+                "trade_window_required": bool(self.settings.trade_window_required_for_signal),
+            },
+            "summary": {
+                "exchange_available": self._exchange is not None,
+                "exchange_error": self._exchange_error,
+                "assets_scanned": 0,
+                "universe_total": 0,
+                "model_backed_assets": 0,
+                "active_signals": 0,
+                "waits": 0,
+                "compatible_bundles": 0,
+                "fresh_data_assets": 0,
+                "terminal_ready": False,
+            },
+            "signals": [],
+            "journal": self._journal(),
+            "outcome_update": {},
+            "notes": ["Scansione completa dell'universo attivo in corso."],
+        }
+
+    def _terminal_state(self, force: bool = False, *, background: bool = False) -> dict:
         with self._lock:
             now = time.time()
             if (
@@ -370,6 +410,33 @@ class SignalTerminal:
                 and now - self._cached_at < self.refresh_seconds
             ):
                 return self._cached_state
+
+            if background:
+                if self._scan_thread is not None and self._scan_thread.is_alive():
+                    base = dict(self._cached_state or self._bootstrap_state())
+                    base["scan_in_progress"] = True
+                    base["scan_started_at"] = (
+                        datetime.fromtimestamp(self._scan_started_at, tz=timezone.utc).isoformat()
+                        if self._scan_started_at else None
+                    )
+                    base["scan_seconds"] = round(max(0.0, now - self._scan_started_at), 1)
+                    return base
+
+                self._scan_started_at = now
+                self._scan_thread = threading.Thread(
+                    target=self._terminal_state,
+                    kwargs={"force": True},
+                    name="signal-terminal-scan",
+                    daemon=True,
+                )
+                self._scan_thread.start()
+                base = dict(self._cached_state or self._bootstrap_state())
+                base["scan_in_progress"] = True
+                base["scan_started_at"] = datetime.fromtimestamp(
+                    self._scan_started_at, tz=timezone.utc
+                ).isoformat()
+                base["scan_seconds"] = 0.0
+                return base
 
             started = time.monotonic()
             try:
@@ -555,6 +622,7 @@ class SignalTerminal:
 
             self._cached_state = _json_safe(state)
             self._cached_at = time.time()
+            self._scan_thread = None
             return self._cached_state
 
     def health(self) -> dict:
@@ -1812,7 +1880,7 @@ def make_handler(terminal: SignalTerminal):
                 query = parse_qs(parsed.query)
                 force = query.get("force", ["0"])[0] == "1"
                 body = json.dumps(
-                    terminal._terminal_state(force=force),
+                    terminal._terminal_state(force=force, background=True),
                     separators=(",", ":"),
                     allow_nan=False,
                 ).encode("utf-8")
