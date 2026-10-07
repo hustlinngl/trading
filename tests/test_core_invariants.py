@@ -160,14 +160,14 @@ def test_triple_barrier_same_bar_collision_is_ambiguous():
     close = np.full(20, 100.0)
     df = pd.DataFrame({
         "open": close,
-        "high": close,
-        "low": close,
+        "high": np.full(20, 101.0),
+        "low": np.full(20, 99.0),
         "close": close,
         "volume": np.full(20, 10_000.0),
     }, index=idx)
-    # Seed ATR then force both barriers inside the same executable bar.
-    df.loc[idx[14], "high"] = 103.0
-    df.loc[idx[14], "low"] = 97.0
+    # Seed a non-zero ATR, then force both barriers inside the same executable bar.
+    df.loc[idx[14], "high"] = 102.0
+    df.loc[idx[14], "low"] = 98.0
     out = triple_barrier_labels(df, horizon=2, pt_atr=0.5, sl_atr=0.5)
     assert np.isnan(out.loc[idx[13], "tb_label"])
     assert np.isnan(out.loc[idx[13], "tb_return"])
@@ -263,3 +263,38 @@ def test_cross_asset_snapshot_is_bounded_by_anchor_time():
     other = pd.DataFrame({"open":100.0,"high":101.0,"low":99.0,"close":np.arange(12)+100.0,"volume":1000.0}, index=idx)
     out = cross_asset_snapshot({"BTC/USDT":anchor,"ETH/USDT":other},"BTC/USDT")
     assert "cross_asset_mean_return" in out
+
+
+def test_auto_update_cache_hits_only_when_artifact_hash_matches(tmp_path, monkeypatch):
+    import json
+    from ai_trading_lab.autolearn import auto_update
+    from ai_trading_lab.deployment import bundle_artifact_fingerprint, deployment_semantics_fingerprint, model_semantics_fingerprint
+    settings = load_settings("config.yaml")
+    bundle = tmp_path / "models"
+    bundle.mkdir()
+    artifact = bundle / "signal_model.joblib"
+    artifact.write_bytes(b"stable")
+    fp = "data-fp"
+    state = {
+        "data_fingerprint": fp,
+        "model_semantics_fingerprint": model_semantics_fingerprint(settings),
+        "deployment_semantics_fingerprint": deployment_semantics_fingerprint(settings),
+        "bundle_artifact_fingerprint": bundle_artifact_fingerprint(bundle),
+        "score": 0.1,
+    }
+    (bundle / "promotion_state.json").write_text(json.dumps(state), encoding="utf-8")
+    import ai_trading_lab.autolearn as al
+    monkeypatch.setattr(al, "strong_dataset_fingerprint", lambda df: fp)
+    result = auto_update(pd.DataFrame(index=pd.date_range("2026-01-01", periods=2, freq="15min", tz="UTC")), settings, model_dir=bundle)
+    assert result["skipped"] is True
+
+    artifact.write_bytes(b"tampered")
+    def should_not_skip(*args, **kwargs):
+        raise AssertionError("artifact tampering must invalidate cache")
+    monkeypatch.setattr(al, "evaluate_engine", should_not_skip)
+    try:
+        auto_update(pd.DataFrame(index=pd.date_range("2026-01-01", periods=2, freq="15min", tz="UTC")), settings, model_dir=bundle)
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError("tampered artifact unexpectedly hit cache")
