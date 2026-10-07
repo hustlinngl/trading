@@ -91,9 +91,23 @@ def test_signal_terminal_builds_read_only_state(tmp_path, monkeypatch):
     assert state["ok"] is True
     assert state["summary"]["assets_scanned"] == 1
     assert state["summary"]["active_signals"] == 1
-    assert state["signals"][0]["signal"] == "LONG"
-    assert state["signals"][0]["decision"]["score"] == 0.41
-    assert "bundle" in state["signals"][0]
+    signal = state["signals"][0]
+    assert signal == {
+        "symbol": "BTC/USDT",
+        "timestamp": "2026-10-07T00:00:00+00:00",
+        "signal": "LONG",
+        "confidence": 0.91,
+        "expected_return": 0.006,
+        "price": 100000.0,
+        "horizon_bars": 8,
+        "actionable": True,
+        "reason": "qualified",
+    }
+    assert "decision" not in signal
+    assert "details" not in signal
+    assert "bundle" not in signal
+    assert "journal" not in state
+    assert "outcome_update" not in state
     assert state["notes"][0].startswith("Sola lettura")
 
 
@@ -350,9 +364,9 @@ def test_signal_terminal_alpha_ui_keeps_visual_layer_separate_from_execution():
     assert "initAlphaMotion" in html
     assert "initNavigation" in html
     assert 'data-target="market"' in html
-    assert 'data-target="detail"' in html
-    assert 'data-target="journal"' in html
-    assert 'data-target="evidencePanel"' in html
+    assert 'data-target="detail"' not in html
+    assert 'data-target="journal"' not in html
+    assert 'data-target="evidencePanel"' not in html
     assert 'id="detail"' in html
     assert "body.alpha-pointer" in html
     assert "prefers-reduced-motion:reduce" in html
