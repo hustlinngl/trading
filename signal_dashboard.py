@@ -515,7 +515,7 @@ class SignalTerminal:
                 "universe_total": int(market_snapshot.get("universe_total", 0) or 0),
                 "market_counts": market_snapshot.get("market_counts", {}),
             },
-            "outcome_update": {},
+            "feedback": {},
             "notes": ["Scansione completa dell'universo attivo in corso."],
         }
 
@@ -796,8 +796,7 @@ class SignalTerminal:
                     "quotes": {},
                     "source": "persisted_universe",
                 },
-                "journal": self._journal(),
-                "feedback": {},
+                    "feedback": {},
                 "error": f"{type(exc).__name__}:{exc}",
                 "notes": [
                     "Il terminale ha eseguito un fail-closed.",
@@ -952,7 +951,6 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
 .signal-live-long{box-shadow:var(--shadow),0 0 44px rgba(69,227,154,.08)}
 .signal-live-short{box-shadow:var(--shadow),0 0 44px rgba(255,111,136,.08)}
 .signal-live-wait{box-shadow:var(--shadow),0 0 44px rgba(255,209,102,.07)}
-@keyframes decisionFlash{0%{filter:brightness(1)}25%{filter:brightness(1.32)}100%{filter:brightness(1)}}
 
 @keyframes ambientFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 @media(pointer:fine){body.alpha-pointer,body.alpha-pointer button,body.alpha-pointer select{cursor:none}}
@@ -1025,9 +1023,6 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
 @keyframes operatorFloat{0%,100%{transform:translateY(0) rotate(.2deg)}50%{transform:translateY(-5px) rotate(-.4deg)}}
 @keyframes operatorScan{0%,100%{opacity:.08;transform:translateX(-18%)}50%{opacity:.7;transform:translateX(18%)}}
 @media(max-width:760px){
-  .decision-hero{min-height:220px}.decision-hero .reason-strip{max-width:100%;padding-right:0;padding-bottom:34px}
-  .operator-stage{width:94px;height:94px;right:7px;bottom:6px}.operator-caption{display:none}
-  .signal-timeline{min-width:0}.timeline-entry::before{display:none}.timeline-stages{grid-template-columns:1fr 1fr}
   .inspector-drawer{top:8px;right:8px;bottom:8px;width:calc(100vw - 16px)}
 }
 @media(prefers-reduced-motion:reduce){
@@ -1057,7 +1052,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
 .pick-card{cursor:pointer;position:relative;isolation:isolate}
 .pick-card::after{content:"↗";position:absolute;right:14px;top:11px;font-size:12px;color:#596473;opacity:0;transform:translate(-2px,2px);transition:opacity .16s ease,transform .16s ease}
 .pick-card:hover::after,.pick-card:focus-visible::after{opacity:1;transform:none}
-.pick-card:focus-visible{outline:none;border-color:#586474;box-shadow:0 0 0 2px rgba(229,138,184,.12),0 10px 28px rgba(0,0,0,.22)}\n.interactive-row[role="button"]{cursor:pointer;transition:background .14s ease,box-shadow .14s ease}\n.interactive-row[role="button"]:hover{background:rgba(255,255,255,.018)}\n.interactive-row[role="button"]:focus-visible{outline:none;box-shadow:inset 0 0 0 1px rgba(229,138,184,.32);background:rgba(229,138,184,.045)}\n#focusDashboard,#market,#detail,#journal,#timeline,#evidencePanel{scroll-margin-top:82px}
+.pick-card:focus-visible{outline:none;border-color:#586474;box-shadow:0 0 0 2px rgba(229,138,184,.12),0 10px 28px rgba(0,0,0,.22)}\n.interactive-row[role="button"]{cursor:pointer;transition:background .14s ease,box-shadow .14s ease}\n.interactive-row[role="button"]:hover{background:rgba(255,255,255,.018)}\n.interactive-row[role="button"]:focus-visible{outline:none;box-shadow:inset 0 0 0 1px rgba(229,138,184,.32);background:rgba(229,138,184,.045)}\n#focusDashboard,#market{scroll-margin-top:24px}
 .pick-primary{grid-column:span 2;background:linear-gradient(180deg,#121820,#0f1319);border-color:#2d3946}
 .pick-primary .pick-symbol{font-size:20px;letter-spacing:-.02em}
 .pick-primary .pick-chart{height:210px}
@@ -1210,8 +1205,6 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   
   .metric{padding:11px}
   .metric .value{font-size:17px}
-  .decision-deck{gap:10px}
-  .trace-grid{grid-template-columns:1fr 1fr}
   .top5-grid{grid-template-columns:1fr;gap:10px}
   .pick-head{padding:14px 14px 9px}
     .pick-chart{height:190px}
