@@ -76,7 +76,7 @@ def train_base_asset(df, settings, *, promote_champion: bool = False):
     """Train and persist one asset's base bundle in the canonical location."""
     eng = AdaptiveEngine(settings)
     art = eng.fit(df)
-    asset_dir = asset_model_dir(settings.symbol, root)
+    asset_dir = asset_model_dir(settings.symbol)
     asset_dir.mkdir(parents=True, exist_ok=True)
     eng.save(asset_dir)
     (asset_dir / "base_training_meta.json").write_text(json.dumps({
