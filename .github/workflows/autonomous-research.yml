@@ -28,7 +28,7 @@ jobs:
       - name: Upload research artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: autonomous-research-${{ github.run_number }}
+          name: autonomous-research-${{ github.run_id }}
           path: |
             logs/
             models/
