@@ -18,11 +18,11 @@ dependencies = [
   "optuna>=4.0",
   "scipy>=1.14",
   "pyarrow>=17.0",
+  "pytest>=8.0",
 ]
 
 [project.optional-dependencies]
-dashboard = ["streamlit>=1.38"]
-full = ["xgboost>=2.1", "lightgbm>=4.5", "ccxt>=4.5", "duckdb>=1.1", "plotly>=5.24", "polars>=1.8", "vectorbt>=0.27.2", "torch>=2.4", "stable-baselines3>=2.4", "gymnasium>=1.0", "streamlit>=1.38", "websockets>=14.0"]
+full = ["xgboost>=2.1", "lightgbm>=4.5", "ccxt>=4.5", "duckdb>=1.1", "plotly>=5.24", "polars>=1.8", "vectorbt>=0.27.2", "torch>=2.4", "stable-baselines3>=2.4", "gymnasium>=1.0", "websockets>=14.0"]
 
 [project.scripts]
 aitrader = "ai_trading_lab.main:main"
