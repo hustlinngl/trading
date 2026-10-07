@@ -520,6 +520,32 @@ button:focus-visible,select:focus-visible{outline:none;border-color:var(--pink);
 .operator-copy{display:flex;flex-direction:column;line-height:1}.operator-copy strong{font-size:9px;letter-spacing:.16em}.operator-copy span{font-size:8px;color:var(--muted);margin-top:4px;letter-spacing:.12em}
 #stamp{font-size:12px;color:var(--muted);white-space:nowrap}
 .metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.decision-deck{display:grid;grid-template-columns:1.05fr 1.45fr;gap:14px;margin-top:14px}
+.decision-hero{position:relative;overflow:hidden;padding:18px;border-radius:18px;background:
+radial-gradient(420px 180px at 0 0,rgba(255,120,200,.11),transparent 65%),
+linear-gradient(135deg,rgba(29,14,34,.98),rgba(12,9,18,.99));border:1px solid rgba(255,120,200,.18);box-shadow:var(--shadow),0 0 40px rgba(255,120,200,.06)}
+.decision-hero::after{content:"";position:absolute;inset:auto -15% -45% 30%;height:110px;background:radial-gradient(circle,rgba(255,120,200,.16),transparent 68%);filter:blur(20px);pointer-events:none}
+.decision-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.decision-signal{font-size:40px;font-weight:950;line-height:1;letter-spacing:.04em}
+.decision-meta{margin-top:8px;color:var(--muted);font-size:11px}
+.decision-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:18px}
+.mini-stat{padding:9px 10px;border:1px solid rgba(255,120,200,.12);background:rgba(255,255,255,.018);border-radius:11px}
+.mini-stat .k{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.mini-stat .v{margin-top:4px;font-weight:800;font-size:15px}
+.trace{padding:15px 16px;border-radius:18px;border:1px solid var(--line);background:linear-gradient(180deg,rgba(18,12,26,.96),rgba(10,8,16,.985));box-shadow:var(--shadow)}
+.trace-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.trace-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.trace-node{position:relative;padding:10px;border-radius:11px;border:1px solid var(--line);background:rgba(255,255,255,.014)}
+.trace-node strong{display:block;font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.trace-node span{display:block;margin-top:4px;font-size:10px;color:var(--muted)}
+.trace-node.ready{border-color:rgba(69,227,154,.24);box-shadow:inset 0 0 18px rgba(69,227,154,.035)}
+.trace-node.wait{border-color:rgba(255,209,102,.2)}
+.trace-node.fail{border-color:rgba(255,111,136,.24)}
+.trace-dot{position:absolute;right:9px;top:10px;width:6px;height:6px;border-radius:50%;box-shadow:0 0 12px currentColor;background:currentColor}
+.trace-node.ready .trace-dot{color:var(--green)}.trace-node.wait .trace-dot{color:var(--amber)}.trace-node.fail .trace-dot{color:var(--red)}
+.reason-strip{display:flex;flex-wrap:wrap;gap:5px;margin-top:12px}
+.reason-strip .reason{background:rgba(255,120,200,.045);border-color:rgba(255,120,200,.16);color:#d9c9df}
+@media(max-width:900px){.decision-deck{grid-template-columns:1fr}.trace-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .card,.panel{position:relative;background:linear-gradient(180deg,rgba(18,12,26,.96),rgba(10,8,16,.985));
 border:1px solid var(--line);box-shadow:var(--shadow);isolation:isolate}
 .card::before,.panel::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:radial-gradient(420px 120px at 20% 0,rgba(255,120,200,.065),transparent 68%);opacity:.7}
@@ -645,6 +671,29 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
   </nav>
 
   <div class="metrics" id="metrics"></div>
+
+  <section class="decision-deck" id="decisionDeck" aria-live="polite">
+    <div class="decision-hero">
+      <div class="decision-top">
+        <div>
+          <div class="eyebrow">Decision deck</div>
+          <div id="deckSignal" class="decision-signal signal-wait">WAIT</div>
+          <div id="deckMeta" class="decision-meta">Seleziona un asset per ispezionare il verdetto.</div>
+        </div>
+        <span id="deckBundle" class="pill warn"><span class="dot"></span>WAIT</span>
+      </div>
+      <div class="decision-stats">
+        <div class="mini-stat"><div class="k">Prezzo</div><div class="v num" id="deckPrice">—</div></div>
+        <div class="mini-stat"><div class="k">Confidence</div><div class="v" id="deckConfidence">—</div></div>
+        <div class="mini-stat"><div class="k">Robust edge</div><div class="v" id="deckEdge">—</div></div>
+      </div>
+      <div class="reason-strip" id="deckReasons"></div>
+    </div>
+    <div class="trace">
+      <div class="trace-head"><div><div class="title">Decision trace</div><div class="small">Ogni blocco è una condizione osservabile del gate.</div></div><div class="small" id="deckAsset">—</div></div>
+      <div class="trace-grid" id="traceGrid"></div>
+    </div>
+  </section>
 
   <div class="layout">
     <div class="panel chart-panel" id="market">
@@ -883,18 +932,51 @@ function bindInteractiveRows(){
   });
 }
 
+function renderDecisionDeck(signals){
+  const active=signals.find(x=>x.symbol===state.selected)||signals[0];
+  const deckSignal=$("deckSignal"), deckMeta=$("deckMeta"), deckBundle=$("deckBundle");
+  const trace=$("traceGrid"), reasons=$("deckReasons");
+  if(!active){
+    deckSignal.textContent="WAIT";deckSignal.className="decision-signal signal-wait";
+    deckMeta.textContent="Nessun asset disponibile.";
+    deckBundle.className="pill warn";deckBundle.innerHTML='<span class="dot"></span>WAIT';
+    $("deckAsset").textContent="—";$("deckPrice").textContent="—";$("deckConfidence").textContent="—";$("deckEdge").textContent="—";
+    trace.innerHTML="";reasons.innerHTML="";return;
+  }
+  const d=active.decision||{}, b=active.bundle||{};
+  const sig=active.signal||"WAIT";
+  deckSignal.textContent=sig;deckSignal.className="decision-signal "+cls(sig);
+  deckMeta.textContent=sig==="LONG"?"Il gate corrente ammette un bias LONG.":sig==="SHORT"?"Il gate corrente ammette un bias SHORT.":"Nessun edge sufficientemente robusto per un segnale attivo.";
+  deckBundle.className="pill "+(b.compatible&&b.manifest_ready?"good":"warn");
+  deckBundle.innerHTML='<span class="dot"></span>'+esc(b.compatible&&b.manifest_ready?"PROVEN":"WAIT");
+  $("deckAsset").textContent=active.symbol||"—";
+  $("deckPrice").textContent=num(active.realtime_price??active.price,2);
+  $("deckConfidence").textContent=pct(active.confidence,1);
+  $("deckEdge").textContent=d.expected_return_lcb==null?"—":num(d.expected_return_lcb,4)+" / "+num(d.expected_return_ucb,4);
+  reasons.innerHTML=(active.reason_codes||[]).slice(0,8).map(x=>'<span class="reason">'+esc(x)+'</span>').join("");
+  const nodes=[
+    ["Data",d.data_age_minutes!=null && Number(d.data_age_minutes)<=30,"fresh · "+age(d.data_age_minutes)],
+    ["Model",d.p_up!=null,"p(up) · "+pct(d.p_up,1)],
+    ["Meta",d.meta_success!=null && Number(d.meta_success)>=.5,"success · "+pct(d.meta_success,0)],
+    ["Memory",d.analog_n!=null && Number(d.analog_n)>0,"support · "+esc(d.analog_n??"—")],
+    ["Duration",!!d.trade_window_ready,d.trade_window_ready?"ready":"wait"],
+    ["Deployment",!!b.compatible&&!!b.manifest_ready,b.compatible&&b.manifest_ready?"compatible":"wait"]
+  ];
+  trace.innerHTML=nodes.map(n=>'<div class="trace-node '+(n[1]?"ready":"wait")+'"><i class="trace-dot"></i><strong>'+n[0]+'</strong><span>'+n[2]+'</span></div>').join("");
+}
+
 function render(data){
   state.data=data;
   renderMetrics(data);
   if(!data.ok){
     $("radarRows").innerHTML='<tr><td colspan="3"><span class="signal signal-wait">WAIT</span></td></tr>';
     $("detailRows").innerHTML='<tr><td colspan="11" class="small">'+esc(data.error||"Terminale non disponibile")+'</td></tr>';
-    renderJournal(data); renderEvidence([]);
+    renderJournal(data); renderEvidence([]); renderDecisionDeck([]);
     return;
   }
   const signals=data.signals||[];
   populateAssets(signals);
-  renderRadar(signals); renderDetail(signals); renderJournal(data); renderEvidence(signals); bindInteractiveRows();
+  renderRadar(signals); renderDetail(signals); renderJournal(data); renderEvidence(signals); renderDecisionDeck(signals); bindInteractiveRows();
   const notes=(data.notes||[]).join(" · ");
   $("footer").textContent=notes+" · refresh "+data.refresh_seconds+"s · scan "+data.scan_seconds+"s";
 }
