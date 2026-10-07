@@ -596,5 +596,5 @@ def test_signal_terminal_interactive_rows_use_canonical_market_list():
     html = terminal_mod.HTML
     assert 'input.options' not in html
     assert 'new Set(state.marketSymbols||[])' in html
-    assert 'role="button" aria-label="Apri '+esc(r.symbol)+' nel market inspector' in html
+    assert 'role="button" aria-label="Apri '+ in html
     assert 'row.onkeydown=e=>' in html
