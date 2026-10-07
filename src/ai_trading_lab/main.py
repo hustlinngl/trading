@@ -226,6 +226,8 @@ def main():
     parser.add_argument('--symbols', default=None, help='Comma-separated symbols for live scan')
     parser.add_argument('--holdout-frac', type=float, default=0.15)
     parser.add_argument('--limit', type=int, default=700, help='Maximum bars for bounded real-data adapters such as Kraken')
+    parser.add_argument('--all-symbols', action='store_true', help='Discover every active exchange market eligible for OHLCV bootstrap')
+    parser.add_argument('--market-types', default=None, help='Comma-separated market types for --all-symbols (default: spot,swap,future)')
     parser.add_argument('--live-bars', type=int, default=None, help='Closed OHLCV bars to cache for the live dashboard')
     parser.add_argument('--benchmark-bars', type=int, default=3000, help='Bars used by the diagnostic benchmark suite')
     args = parser.parse_args()
@@ -312,40 +314,153 @@ def main():
         print(json.dumps(result, indent=2, default=str)); return
 
     if args.command == 'bootstrap-live-data':
-        symbols = [
-            x.strip()
-            for x in (
-                args.symbols.split(',')
-                if args.symbols
-                else list(getattr(s, 'live_symbols', ()) or [s.symbol])
-            )
-            if x.strip()
-        ]
-        bars = max(80, int(args.live_bars or getattr(s, 'live_lookback_bars', 600)))
+        requested_symbols = [
+            x.strip() for x in args.symbols.split(',') if x.strip()
+        ] if args.symbols else []
+
+        bars = max(
+            80,
+            int(args.live_bars or getattr(s, 'live_lookback_bars', 600))
+        )
         out_dir = Path('data') / 'historical'
         out_dir.mkdir(parents=True, exist_ok=True)
-        ex = exchange_client(getattr(s, 'exchange', 'binance'), sandbox=False)
+        ex = exchange_client(
+            getattr(s, 'exchange', 'binance'),
+            sandbox=False
+        )
+
+        if args.all_symbols or not requested_symbols:
+            allowed_types = {
+                x.strip()
+                for x in (
+                    args.market_types.split(',')
+                    if args.market_types
+                    else ('spot', 'swap', 'future')
+                )
+                if x.strip()
+            }
+            discovered = []
+            markets = getattr(ex, 'markets', {}) or {}
+            for market in markets.values():
+                if not isinstance(market, dict) or market.get('active') is False:
+                    continue
+                symbol = str(market.get('symbol') or '').strip()
+                if not symbol:
+                    continue
+                mtype = str(
+                    market.get('type')
+                    or ('swap' if market.get('swap')
+                        else 'future' if market.get('future')
+                        else 'spot')
+                )
+                if allowed_types and mtype not in allowed_types:
+                    continue
+                if mtype in {'swap', 'future'} and not bool(market.get('contract')):
+                    continue
+                capabilities = market.get('info', {}) if isinstance(market.get('info'), dict) else {}
+                if isinstance(getattr(ex, 'has', None), dict):
+                    # CCXT's global capability is the safest portable check.
+                    if ex.has.get('fetchOHLCV') is False:
+                        continue
+                discovered.append(symbol)
+            symbols = list(dict.fromkeys(discovered))
+        else:
+            symbols = list(dict.fromkeys(requested_symbols))
+
         results = []
-        for symbol in dict.fromkeys(symbols):
-            frame = fetch_ohlcv(
-                ex, symbol, s.timeframe, limit=bars, include_unclosed=False
+        failures = []
+        total = len(symbols)
+        print(
+            json.dumps({
+                'stage': 'discover',
+                'exchange': getattr(s, 'exchange', 'binance'),
+                'symbols': total,
+                'bars_per_symbol': bars,
+                'market_types': (
+                    [x.strip() for x in args.market_types.split(',') if x.strip()]
+                    if args.market_types else ['spot', 'swap', 'future']
+                ),
+            }),
+            flush=True,
+        )
+
+        tf_offset = None
+        try:
+            tf_offset = pd.tseries.frequencies.to_offset(
+                str(getattr(s, 'timeframe', '15m'))
+                .replace('m', 'min') if str(getattr(s, 'timeframe', '15m')).endswith('m')
+                else str(getattr(s, 'timeframe', '15m'))
             )
+        except Exception:
+            tf_offset = pd.Timedelta(minutes=15)
+
+        for index, symbol in enumerate(symbols, start=1):
             path = out_dir / (
                 f"{symbol.replace('/', '_').replace(':', '_')}_{s.timeframe}.csv"
             )
-            frame.to_csv(path, index_label='timestamp')
-            results.append({
-                'symbol': symbol,
-                'timeframe': s.timeframe,
-                'bars': int(len(frame)),
-                'start': str(frame.index.min()) if len(frame) else None,
-                'end': str(frame.index.max()) if len(frame) else None,
-                'output': str(path),
-            })
-        print(json.dumps({
+            try:
+                # Resume safely: don't redownload a sufficiently complete fresh file.
+                if path.exists():
+                    try:
+                        cached = pd.read_csv(path, usecols=['timestamp'])
+                        if len(cached) >= bars and len(cached):
+                            last_raw = pd.to_datetime(cached['timestamp'].iloc[-1], utc=True)
+                            age = pd.Timestamp.now(tz='UTC') - last_raw
+                            max_age = max(pd.Timedelta(minutes=30), tf_offset * 2.5)
+                            if age <= max_age:
+                                results.append({
+                                    'symbol': symbol,
+                                    'timeframe': s.timeframe,
+                                    'bars': int(len(cached)),
+                                    'output': str(path),
+                                    'source': 'cache',
+                                })
+                                print(f'[{index}/{total}] {symbol} cache', flush=True)
+                                continue
+                    except Exception:
+                        pass
+
+                frame = fetch_ohlcv(
+                    ex,
+                    symbol,
+                    s.timeframe,
+                    limit=bars,
+                    include_unclosed=False,
+                )
+                frame.to_csv(path, index_label='timestamp')
+                results.append({
+                    'symbol': symbol,
+                    'timeframe': s.timeframe,
+                    'bars': int(len(frame)),
+                    'start': str(frame.index.min()) if len(frame) else None,
+                    'end': str(frame.index.max()) if len(frame) else None,
+                    'output': str(path),
+                    'source': 'network',
+                })
+                print(f'[{index}/{total}] {symbol} {len(frame)} bars', flush=True)
+            except Exception as exc:
+                failures.append({
+                    'symbol': symbol,
+                    'error': f'{type(exc).__name__}:{exc}',
+                })
+                print(f'[{index}/{total}] {symbol} ERROR {exc}', flush=True)
+
+        summary = {
             'exchange': getattr(s, 'exchange', 'binance'),
+            'timeframe': s.timeframe,
+            'requested_symbols': total,
+            'completed': len(results),
+            'failed': len(failures),
             'results': results,
-        }, indent=2))
+            'failures': failures,
+            'output_dir': str(out_dir),
+        }
+        Path('logs').mkdir(exist_ok=True)
+        Path('logs/bootstrap_live_data.json').write_text(
+            json.dumps(summary, indent=2, default=str),
+            encoding='utf-8',
+        )
+        print(json.dumps(summary, indent=2, default=str))
         return
 
     if args.command == 'real-ticker':
