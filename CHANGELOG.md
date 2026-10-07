@@ -1,6 +1,8 @@
 # Changelog
 
 ## 0.9.18
+- Full-universe live scanner: discovers active spot/margin/swap/future/option markets, checks deployment compatibility and ranks the best five model-backed signals.
+- Added closed-candle assessment reuse and non-blocking dashboard scans so broad coverage does not freeze the UI.
 - Hardened the packaged dashboard with release-time markup validation so malformed critical HTML fails the frozen smoke test instead of reaching users.
 - Fixed frozen-mode journal persistence so signal outcomes are read from the same writable state root used to store them.
 - Added regression coverage for dashboard markup integrity and frozen journal restoration.
