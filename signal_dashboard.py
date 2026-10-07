@@ -979,7 +979,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
 .pick-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:0 18px 12px}.pick-stat{padding:8px 10px;border-radius:12px;background:rgba(255,255,255,.025)}
 .pick-stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.pick-stat .v{margin-top:3px;font-weight:700}.pick-chart{height:220px;padding:0 8px 8px}.pick-chart canvas{display:block;width:100%;height:100%}
 .pick-foot{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 18px 15px;border-top:1px solid rgba(255,255,255,.05);font-size:11px;color:var(--muted)}
-.history-source{color:#697481;font-variant-numeric:tabular-nums}
+
 .pick-card{cursor:pointer;position:relative;isolation:isolate}
 .pick-card::after{content:"↗";position:absolute;right:14px;top:11px;font-size:12px;color:#596473;opacity:0;transform:translate(-2px,2px);transition:opacity .16s ease,transform .16s ease}
 .pick-card:hover::after,.pick-card:focus-visible::after{opacity:1;transform:none}
@@ -1061,8 +1061,6 @@ h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
 @media(max-width:1050px){.top5-grid{grid-template-columns:repeat(2,minmax(280px,1fr))}.pick-primary{grid-column:span 2}}
 @media(max-width:700px){.wrap{padding:20px 14px 34px}.top5-grid{grid-template-columns:1fr}.pick-primary{grid-column:span 1}.pick-chart,.pick-primary .pick-chart{height:150px}.focus-head-meta{justify-content:flex-start}.focus-coverage{white-space:normal}}
 <style>
-.focus-head-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:flex-end}
-.focus-coverage{font-size:10px;color:#66717f;font-variant-numeric:tabular-nums;white-space:nowrap}
 </style>
 </style>
 
@@ -1240,7 +1238,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   <section class="focus-only" id="focusDashboard" aria-live="polite">
     <div class="top5-head">
       <div><div class="eyebrow">Current signals</div><div class="top5-title">Top 5</div><div class="top5-sub">Solo LONG e SHORT attivi. I dati restano separati dalla decisione del modello.</div></div>
-      <div class="focus-head-meta"><span id="focusCoverage" class="focus-coverage">Universe —</span><span id="focusStatus" class="focus-status">Scanning…</span></div>
+      
     </div>
     <div id="top5Grid" class="top5-grid"></div>
   </section>
@@ -1622,23 +1620,23 @@ function renderFocus(data){
   const box=$("top5Grid");
   if(!box)return;
   if(data.scan_in_progress){
-    box.innerHTML='<div class="top5-empty"><div class="eyebrow">Scanning</div><h2 style="margin:8px 0 6px">Analisi dell\'universo in corso</h2><div class="small">Il motore sta valutando i mercati con bundle verificati. La superficie si aggiorna appena il ranking è pronto.</div></div>';
+    box.innerHTML='<div class="top5-empty"><div class="eyebrow">Signal feed</div><h2 style="margin:8px 0 6px">Sto cercando i prossimi segnali</h2><div class="small">Il feed si aggiorna automaticamente appena il ranking è disponibile.</div></div>';
     const p=data.scan_progress||{};
-    const done=Number(p.evaluated??0), total=Number(p.total??summary.assets_scanned??0), signals=Number(p.signals??0);
+    const done=Number(p.evaluated??0), total=Number(p.total??0), signals=Number(p.signals??0);
     const pctDone=total>0?Math.round(done/total*100):0;
     if(done>0){
-      box.innerHTML='<div class="top5-empty"><div class="eyebrow">Scanning · '+pctDone+'%</div><h2 style="margin:8px 0 6px">Analisi dell\'universo in corso</h2><div class="small">Valutati '+done+' / '+total+' mercati · '+signals+' segnali candidati · '+Number(p.waits??0)+' WAIT.</div><div class="scan-progress"><span style="width:'+pctDone+'%"></span></div></div>';
+      box.innerHTML='<div class="top5-empty"><div class="eyebrow">Signal feed · '+pctDone+'%</div><h2 style="margin:8px 0 6px">Sto cercando i prossimi segnali</h2><div class="small">'+signals+' risultati individuati finora · '+done+' / '+total+' mercati analizzati.</div><div class="scan-progress"><span style="width:'+pctDone+'%"></span></div></div>';
     }
     return;
   }
   if(!data.ok){
-    box.innerHTML='<div class="top5-empty"><div class="eyebrow">Offline</div><h2 style="margin:8px 0 6px">Market data unavailable</h2><div class="small">'+esc(data.error||"Il terminale locale non è disponibile.")+'</div></div>';
-return;
+    box.innerHTML='<div class="top5-empty"><div class="eyebrow">Signal feed</div><h2 style="margin:8px 0 6px">Nessun risultato disponibile</h2><div class="small">'+esc(data.error||"Il feed dei segnali non è disponibile in questo momento.")+'</div></div>';
+    return;
   }
   const picks=(data.signals||[]).filter(x=>x.signal==="LONG"||x.signal==="SHORT").slice(0,5);
   if(!picks.length){
-    box.innerHTML='<div class="top5-empty"><div class="eyebrow">No active signals</div><h2 style="margin:8px 0 6px">Nessun segnale</h2><div class="small">Il gate corrente non trova un LONG o SHORT abbastanza solido da mostrare.</div></div>';
-return;
+    box.innerHTML='<div class="top5-empty"><div class="eyebrow">Signal feed</div><h2 style="margin:8px 0 6px">Nessun segnale</h2><div class="small">Nessun LONG o SHORT supera i criteri correnti.</div></div>';
+    return;
   }
   box.innerHTML=picks.map((r,i)=>{
     const d=r.decision||{};
@@ -1651,13 +1649,12 @@ return;
       '<div class="pick-stat"><div class="k">Score</div><div class="v">'+num(d.score,2)+'</div></div>'+
       '</div>'+
       '<div class="pick-chart"><canvas data-pick-chart="'+esc(r.symbol)+'"></canvas></div>'+
-      '<div class="pick-foot"><span>15m · closed candles</span><span class="history-source" data-history-badge="'+esc(r.symbol)+'">history —</span></div>'+
+      '<div class="pick-foot"><span>15m · closed candles</span></div>'+
       '</article>';
   }).join("");
   bindFocusCards();
   loadFocusHistories(picks);
 }
-
 function bindFocusCards(){
   document.querySelectorAll(".pick-card[data-focus-symbol]").forEach(card=>{
     const open=()=>{
@@ -1736,11 +1733,7 @@ function renderMetrics(data){
   ].map(x=>'<div class="card"><div class="metric-label">'+x[0]+'</div><div class="metric-value '+x[2]+'">'+esc(x[1])+'</div></div>').join("");
   const source=q.scan_source==="exchange"?"market map live":q.scan_source==="local_fallback"?"local fallback":"—";
   const types=Object.entries(q.market_counts||{}).sort((a,b)=>String(a[0]).localeCompare(String(b[0]))).slice(0,4).map(([k,v])=>k+" "+v).join(" · ");
-  const stamp=$("stamp");
-  if(stamp){
-    stamp.className="connection-stamp "+(data.ok?"online":"offline");
-    stamp.textContent=(data.generated_at?new Date(data.generated_at).toLocaleTimeString():"—")+" · "+(q.exchange||"—")+" · "+source+(types?" · "+types:"");
-  }
+
 }
 
 function renderRadar(signals){
@@ -2016,9 +2009,6 @@ function render(data){
   if(!data.ok){
     $("radarRows").innerHTML='<tr><td colspan="3"><span class="signal signal-wait">WAIT</span></td></tr>';
     $("detailRows").innerHTML='<tr><td colspan="11" class="small">'+esc(data.error||"Terminale non disponibile")+'</td></tr>';
-    const live=$("livePrice"), source=$("historySource");
-    if(live){live.textContent="REALTIME offline";live.className="pill warn";}
-    if(source){source.textContent="STATE · OFFLINE";source.className="pill warn";}
     renderJournal(data); renderEvidence([]); renderDecisionDeck([]);
     return;
   }
