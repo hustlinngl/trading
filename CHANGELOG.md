@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.29
+- Simplified the Windows release validation to test the exact user-facing windowed EXE instead of rebuilding a second console twin.
+- Functional packaging smoke test now validates the final EXE directly over localhost, including the Top 5 result surface, confidence meter and bundled history for the five packaged markets.
+
 ## 0.9.28
 - Refined the Overview into a cleaner direct-results surface: compact `Top 5 signals` header, no redundant explanatory copy, and no loading/error status text in the primary feed.
 - Added a restrained confidence meter to each signal card using the signal's own probability value; no new status badges or synthetic scoring scales were introduced.
