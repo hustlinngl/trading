@@ -87,8 +87,47 @@ def test_binance_public_stream_routes_market_types_to_matching_endpoints():
     assert "fstream.binance.com/public/stream" in usdm.url()
     assert "dstream.binance.com/stream" in coinm.url()
     assert "btcusd_251226@bookticker" in dated_coinm.url()
+    with pytest.raises(ValueError):
+        BinancePublicStream("BTC/USDT:USDT-251226-100000-C").url()
 
 
+def test_live_universe_honors_explicit_online_scope(monkeypatch, tmp_path):
+    import ai_trading_lab.live as live_mod
+
+    settings = load_settings("config.yaml")
+
+    class FakeExchange:
+        markets = {
+            "BTC/USDT": {"symbol": "BTC/USDT", "type": "spot", "active": True},
+            "ETH/USDT": {"symbol": "ETH/USDT", "type": "spot", "active": True},
+            "SOL/USDT": {"symbol": "SOL/USDT", "type": "spot", "active": True},
+        }
+
+    monkeypatch.setattr(
+        live_mod,
+        "resolve_signal_bundle",
+        lambda settings, root, symbol: tmp_path / symbol.replace("/", "_"),
+    )
+    monkeypatch.setattr(
+        live_mod,
+        "bundle_compatibility",
+        lambda settings, bundle, symbol: (True, "ok"),
+    )
+    for symbol in ("BTC/USDT", "ETH/USDT"):
+        bundle = tmp_path / symbol.replace("/", "_")
+        bundle.mkdir(parents=True, exist_ok=True)
+        (bundle / "signal_model.joblib").write_text("stub", encoding="utf-8")
+
+    meta = live_mod.discover_live_universe(
+        settings,
+        tmp_path,
+        FakeExchange(),
+        symbols=["ETH/USDT"],
+    )
+    assert meta["universe_symbols"] == ["ETH/USDT"]
+    assert meta["symbols"] == ["ETH/USDT"]
+
+    
 def test_live_scan_uses_bounded_parallel_workers(monkeypatch, tmp_path):
     import ai_trading_lab.live as live_mod
 
@@ -208,3 +247,4 @@ def test_dashboard_contains_delta_kpis_cognition_and_live_endpoint():
 def test_settings_still_construct():
     settings = load_settings("config.yaml")
     assert settings.symbol
+    assert 1 <= settings.live_scan_workers <= 8
