@@ -135,15 +135,57 @@ Optional deep inspection:
 
 Nothing here should be editable from the dashboard.
 
-## Microinteractions
+## Microinteractions and fancy effects
 
-- Signal changes: 150–220 ms crossfade + scale transition.
-- Asset changes: chart crossfade, then smooth data interpolation.
-- Fresh tick: realtime line/value updates with no layout shift.
-- New signal: subtle radial pulse around the signal marker.
-- Outcome resolution: journal row animates from OPEN to final outcome.
-- WAIT: calm amber pulse, never an aggressive alarm.
-- Compatibility failure: explicit WAIT state with reason, not a hidden red error.
+The Alpha should feel alive. Fancy effects are encouraged as long as they are layered on top of a stable information hierarchy.
+
+- Signal changes: 150–220 ms crossfade + scale transition, followed by a short radial glow pulse.
+- Asset changes: chart crossfade, smooth data interpolation and a brief perimeter sweep.
+- Fresh tick: realtime price/value updates with a tiny neon shimmer, never a layout shift.
+- New signal: marker bloom + soft expanding ring + a short HUD sweep; keep the effect under ~700 ms.
+- Outcome resolution: journal row transitions from OPEN to WIN/LOSS/TIMEOUT/AMBIGUOUS with a small glow and directional micro-particle burst.
+- WAIT: calm amber breathing glow, never an aggressive alarm.
+- Compatibility failure: explicit WAIT state with an amber/red diagnostic bloom and reason, never a hidden error.
+- Panel hover: 2–4 px visual lift, border glow and soft ambient halo.
+- Menu buttons: animated underline/edge trace on hover, stronger glow on active state.
+- Click feedback: every clickable control gets a tactile response: 80–140 ms scale-down, center-out ripple, temporary neon bloom and quick return to rest.
+- Menu opening: 160–240 ms fade/translate + blur reduction; do not use large elastic/bouncy motion.
+- Menu switching: old panel fades/slides 20–40 px while the new panel enters with a short glow sweep.
+- Buttons can use animated gradient borders and “energy” strokes around their perimeter, but motion must remain subtle enough not to distract from the chart.
+- Long/Short controls use semantic glow colors; WAIT uses amber. Pink/magenta is the interface identity and should remain visible in neutral states.
+- Focus/keyboard interaction receives the same visual polish as mouse interaction.
+- Cursor proximity may create a very small local glow around interactive elements; never make this interfere with chart crosshairs or text selection.
+
+## Global atmosphere
+
+Use several slow, layered effects to give the cockpit a premium anime/HUD feel:
+
+- faint moving star/petal dust in the background;
+- soft radial Sakura glows behind important modules;
+- thin animated HUD lines around the hero chart;
+- occasional scanline/sweep accents, used sparingly;
+- pulsing status LEDs for connection/data freshness;
+- low-amplitude character idle animation;
+- occasional tiny spark/cherry-blossom particles near major state changes.
+
+These effects should be event-driven or slow-moving, never a constant full-screen particle storm.
+
+## Glowing design language
+
+Glow is part of the visual identity, not an afterthought.
+
+- Base UI: subtle pink ambient halo around active panels.
+- Hover: border + local shadow/glow.
+- Active: stronger border illumination + inner bloom.
+- Click: short-lived bright pulse.
+- LONG: green signal glow.
+- SHORT: red signal glow.
+- WAIT: amber glow.
+- New data: pink/blue accent shimmer.
+- Errors: red diagnostic pulse.
+- Provenance/guardian elements: cool cyan/purple secondary glow.
+
+Avoid making every surface permanently luminous. Contrast between glow and calm areas is what makes the important events feel powerful.
 
 ## Performance rules
 
@@ -152,8 +194,12 @@ Nothing here should be editable from the dashboard.
 - Batch realtime ticker requests when the exchange adapter supports it.
 - Never run high-frequency model inference in the browser.
 - Keep continuous animation isolated from data rendering.
-- Limit particle/decorative effects and disable them on low-power/reduced-motion settings.
+- Prefer compositor-friendly animation (transform, opacity, limited filter).
+- Use CSS variables for theme/glow intensity rather than rewriting large inline style trees.
+- Use event-driven particles rather than continuously spawning DOM nodes.
+- Limit particle/decorative effects and disable or simplify them on low-power/reduced-motion settings.
 - Do not let chart animation block quote polling or model refresh.
+- Fancy effects must degrade gracefully on weaker GPUs and high-DPI displays.
 
 ## Data/API contract
 
