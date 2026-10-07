@@ -1,2 +1,2 @@
 """Adaptive AI Trading Lab."""
-__version__ = "0.9.31"
+__version__ = "0.9.34"
