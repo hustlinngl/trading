@@ -48,7 +48,7 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None):
 
         last=pred.iloc[-1].copy()
         tw_path = resolve_trade_window_model(settings,root,symbol)
-        tw = assess_trade_window(df, settings, tw_path)
+        tw = assess_trade_window(df, settings, tw_path, symbol=symbol)
         for key, value in tw.items():
             last[key] = value
         signal,reasons=live_signal_gate(last,settings)
