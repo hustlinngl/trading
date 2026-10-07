@@ -72,7 +72,7 @@ def test_research_router_is_deterministic():
 
 
 def test_bundle_compatibility_rejects_training_semantics_mismatch(tmp_path):
-    from ai_trading_lab.deployment import model_semantics_fingerprint
+    from ai_trading_lab.deployment import model_semantics_fingerprint, deployment_semantics_fingerprint
     settings = load_settings("config.yaml")
     settings.symbol = "BTC/USDT"
     settings.timeframe = "15m"
@@ -96,12 +96,13 @@ def test_bundle_compatibility_rejects_stale_manifest_provenance(tmp_path):
     bundle.mkdir(parents=True)
     fp = "dataset-current"
     sem = model_semantics_fingerprint(settings)
+    dep_sem = deployment_semantics_fingerprint(settings)
     (bundle / "base_training_meta.json").write_text(
-        json.dumps({"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"model_semantics_fingerprint":sem}),
+        json.dumps({"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem}),
         encoding="utf-8",
     )
     (bundle / "deployment_manifest.json").write_text(
-        json.dumps({"ready":True,"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":"dataset-old","model_semantics_fingerprint":sem}),
+        json.dumps({"ready":True,"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":"dataset-old","model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem}),
         encoding="utf-8",
     )
     ok, reason = bundle_compatibility(settings, bundle, "BTC/USDT")
@@ -117,10 +118,11 @@ def test_refresh_deployment_manifest_requires_matching_evidence(tmp_path):
     bundle.mkdir(parents=True)
     fp = "dataset-current"
     sem = model_semantics_fingerprint(settings)
+    dep_sem = deployment_semantics_fingerprint(settings)
     (bundle / "signal_model.joblib").write_bytes(b"model")
     (bundle / "trade_window_specialist.joblib").write_bytes(b"window")
     (bundle / "base_training_meta.json").write_text(
-        json.dumps({"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"model_semantics_fingerprint":sem}),
+        json.dumps({"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem}),
         encoding="utf-8",
     )
     base_stats = {
@@ -163,3 +165,22 @@ def test_asset_deployment_manifest_respects_root(tmp_path):
     settings = load_settings("config.yaml")
     settings.symbol = "BTC/USDT"
     assert asset_deployment_manifest(settings, tmp_path) == asset_bundle_dir(tmp_path, "BTC/USDT") / "deployment_manifest.json"
+
+
+def test_bundle_compatibility_rejects_runtime_policy_mismatch(tmp_path):
+    import json
+    from ai_trading_lab.deployment import model_semantics_fingerprint, deployment_semantics_fingerprint
+    settings = load_settings("config.yaml")
+    bundle = asset_bundle_dir(tmp_path, "BTC/USDT")
+    bundle.mkdir(parents=True)
+    fp = "dataset-current"
+    sem = model_semantics_fingerprint(settings)
+    dep_sem = deployment_semantics_fingerprint(settings)
+    (bundle / "base_training_meta.json").write_text(
+        json.dumps({"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem}),
+        encoding="utf-8",
+    )
+    settings.min_edge_after_cost_bps = float(settings.min_edge_after_cost_bps) + 1.0
+    ok, reason = bundle_compatibility(settings, bundle, "BTC/USDT")
+    assert not ok
+    assert reason == "deployment_semantics_mismatch"
