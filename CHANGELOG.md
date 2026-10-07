@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.22
+- Fixed Radar/Intelligence row activation by using the canonical market list instead of the input element's nonexistent options collection.
+- Added Enter/Space activation and focus treatment for interactive market rows.
+
 ## 0.9.21
 - Fixed the decision inspector lifecycle so it is actually wired, visible on open and correctly hidden on close.
 - Added dialog semantics, focus return and keyboard focus trapping for the inspector.
