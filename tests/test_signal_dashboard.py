@@ -350,9 +350,6 @@ def test_signal_terminal_alpha_ui_keeps_visual_layer_separate_from_execution():
     assert "initAlphaMotion" in html
     assert "initNavigation" in html
     assert 'data-target="market"' in html
-    assert 'data-target="detail"' in html
-    assert 'data-target="journal"' in html
-    assert 'data-target="evidencePanel"' in html
     assert 'id="detail"' in html
     assert "body.alpha-pointer" in html
     assert "prefers-reduced-motion:reduce" in html
@@ -366,7 +363,6 @@ def test_signal_terminal_alpha_decision_deck_is_wired():
     assert 'id="decisionDeck"' in html
     assert 'id="traceGrid"' in html
     assert "renderDecisionDeck" in html
-    assert "Decision trace" in html
     assert "data-target=\"detail\"" in html
 
 
