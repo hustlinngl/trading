@@ -148,8 +148,24 @@ class CognitionEngine:
 
     def run_growth(self,df,query,strategy_candidates=None):
         from .compute_policy import adaptive_budget
+        from .experiment_router import ResearchRouter
         budget=adaptive_budget(df,base_queries=int(getattr(self.settings,"growth_search_queries",4)))
-        return {"timestamp":utcnow(),"research_budget":budget.to_dict(),"external":self.observe_external(query,budget),"experiments_proposed":[],"discoveries_recorded":len(strategy_candidates or []),"next_action":"validate candidates with fresh walk-forward windows; never promote on a single backtest"}
+        hypotheses=[asdict(h) for h in self.discover_hypotheses(query)]
+        tasks=ResearchRouter(seed=int(getattr(self.settings,"seed",42))).from_hypotheses(hypotheses)
+        selected=ResearchRouter(seed=int(getattr(self.settings,"seed",42))).rank(
+            tasks,
+            budget=float(getattr(self.settings,"growth_compute_budget",12.0)),
+            top_k=int(getattr(self.settings,"growth_task_top_k",10)),
+        )
+        external=self.observe_external(query,budget)
+        return {
+            "timestamp":utcnow(),
+            "research_budget":budget.to_dict(),
+            "external":external,
+            "experiments_proposed":[x.to_dict() for x in selected],
+            "discoveries_recorded":len(strategy_candidates or []),
+            "next_action":"validate ranked candidates with fresh walk-forward windows; never promote on a single backtest",
+        }
 
     def run_evolution(self,df,hypotheses=None):
         fp=strong_dataset_fingerprint(df); cached=self._cache("evolution",fp)
