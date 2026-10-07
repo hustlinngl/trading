@@ -1,4 +1,4 @@
-ADAPTIVE AI SIGNAL TERMINAL 0.9.18
+ADAPTIVE AI SIGNAL TERMINAL 0.9.35
 ==================================
 
 1. Install Python 3.11+ 64-bit.
