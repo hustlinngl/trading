@@ -1,15 +1,16 @@
-ADAPTIVE AI SIGNAL TERMINAL 0.9.16
+ADAPTIVE AI SIGNAL TERMINAL 0.9.17
 ==================================
 
 1. Install Python 3.11+ 64-bit.
 2. Run: python -m pip install -e .
-3. Launch: python signal_dashboard.py
+3. Source launch: python signal_dashboard.py
 4. The browser opens the read-only signal terminal on localhost.
 5. The terminal scans the trained asset bundles and applies the same strict live/paper gates used by the engine.
 6. Use the Market cockpit to inspect historical OHLC data, realtime price, regimes and past signal markers.
 7. Use Signal journal to observe WIN/LOSS/TIMEOUT/AMBIGUOUS outcomes as later candles mature.
 
-Headless check: python signal_dashboard.py --once
+Windows: run `SakuraSignalTerminal.exe` from the packaged release.
+Source headless check: python signal_dashboard.py --once
 
 Safety contract:
 - no order endpoint is exposed;
