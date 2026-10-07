@@ -13,6 +13,8 @@ from .features import make_oos_features
 from .policy import make_actions
 from .evaluation import run_configured_backtest
 from .objectives import robust_performance_utility
+from .execution_semantics import aligned_execution_parameters
+from .research_ledger import register_trials
 
 def optimize_policy(train: pd.DataFrame, validation: pd.DataFrame, settings, trials: int = 30) -> dict:
     """Tune decision gates on a validation set after fitting the model on earlier data.
@@ -29,8 +31,9 @@ def optimize_policy(train: pd.DataFrame, validation: pd.DataFrame, settings, tri
         edge = trial.suggest_float('min_expected_return', 0.0003, 0.006, log=True)
         decision = trial.suggest_float('decision_threshold', 0.05, 0.45)
         meta = trial.suggest_float('meta_threshold', 0.50, 0.70)
-        stop = trial.suggest_float('stop_atr_mult', 1.0, 3.0)
-        rr = trial.suggest_float('take_profit_rr', 1.2, 4.0)
+        aligned = aligned_execution_parameters(settings)
+        stop = float(aligned['stop_atr_mult'])
+        rr = float(aligned['take_profit_rr'])
         actions = make_actions(engine, feat, settings, pt, edge, decision, meta)
         res = run_configured_backtest(bt_df, actions, settings, stop_atr_mult=stop, take_profit_rr=rr, cost_multiplier=1.0)
         stress = run_configured_backtest(bt_df, actions, settings, stop_atr_mult=stop, take_profit_rr=rr, cost_multiplier=1.5)
@@ -41,4 +44,5 @@ def optimize_policy(train: pd.DataFrame, validation: pd.DataFrame, settings, tri
         return float(0.70*base_utility+0.30*stress_utility)
     study = optuna.create_study(direction='maximize', sampler=optuna.samplers.TPESampler(seed=settings.seed))
     study.optimize(objective, n_trials=int(trials), show_progress_bar=False)
-    return {'best_value': float(study.best_value), 'best_params': study.best_params, 'trials': len(study.trials)}
+    register_trials(getattr(settings,'research_ledger_path','data/research_ledger.json'),len(study.trials),kind='policy_optimization',metadata={'requested_trials':int(trials)})
+    return {'best_value': float(study.best_value), 'best_params': {**aligned_execution_parameters(settings), **study.best_params}, 'trials': len(study.trials)}
