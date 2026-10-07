@@ -212,6 +212,11 @@ def bundle_compatibility(settings, bundle: str | Path, symbol: str) -> tuple[boo
                     return False, "deployment_semantics_mismatch"
         except Exception as exc:
             return False, f"model_metadata_error:{type(exc).__name__}"
+    required_engine = all((bundle/name).exists() for name in ENGINE_ARTIFACTS)
+    if not required_engine:
+        return False, "deployment_bundle_incomplete"
+    if bool(getattr(settings, "trade_window_enabled", True)) and bool(getattr(settings, "trade_window_required_for_signal", True)) and not (bundle/"trade_window_specialist.joblib").exists():
+        return False, "trade_window_artifact_missing"
     if bool(getattr(settings, "require_deployment_manifest_for_signal", False)):
         manifest_path = bundle / "deployment_manifest.json"
         if not manifest_path.exists():
