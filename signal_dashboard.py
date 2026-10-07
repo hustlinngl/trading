@@ -482,6 +482,12 @@ class SignalTerminal:
                         "error": f"{type(exc).__name__}:{exc}",
                     }
 
+                market_symbols = []
+                try:
+                    markets = getattr(self._exchange, "markets", {}) or {}
+                    market_symbols = sorted({str(m.get("symbol")).strip() for m in markets.values() if isinstance(m, dict) and m.get("active") is not False and str(m.get("symbol") or "").strip()})
+                except Exception:
+                    market_symbols = []
                 quotes = self._quotes(symbols)
                 signals = []
                 for assessment in assessments:
@@ -995,6 +1001,7 @@ h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
 
 <style>
 /* UI polish: restrained Sakura identity + responsive safety */
+.asset-picker{display:flex;align-items:center;gap:6px;min-width:220px;max-width:330px}.asset-picker input{width:100%;min-width:0;height:38px;padding:0 11px;border:1px solid var(--line);border-radius:10px;background:#0e1218;color:var(--text);font:inherit;outline:none}.asset-picker input:focus{border-color:rgba(229,138,184,.55);box-shadow:0 0 0 3px rgba(229,138,184,.08),0 0 22px rgba(229,138,184,.10)}.asset-picker button{height:38px;padding-inline:12px;flex:0 0 auto}@media(max-width:760px){.asset-picker{width:100%;max-width:none;order:2}.chart-tools{width:100%}}
 :root{
   --ui-radius:14px;
   --ui-radius-sm:10px;
@@ -1225,8 +1232,8 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
         <div class="chart-tools">
           <span id="livePrice" class="pill good">REALTIME —</span>
           <span id="historySource" class="pill">HISTORY —</span>
-          <select id="asset"></select>
-          <select id="range"><option value="120">120</option><option value="240" selected>240</option><option value="480">480</option></select>
+          <div class="asset-picker"><input id="asset" list="marketSymbols" inputmode="search" autocomplete="off" spellcheck="false" placeholder="Cerca simbolo..." aria-label="Cerca un simbolo di mercato"/><datalist id="marketSymbols"></datalist><button id="loadAsset" type="button">Apri</button></div>
+          <select id="range" aria-label="Numero di candele"><option value="120">120</option><option value="240" selected>240</option><option value="480">480</option></select>
         </div>
       </div>
       <div class="chart-wrap" id="chartWrap">
@@ -1525,16 +1532,7 @@ async function loadFocusHistories(picks){
   });
 }
 
-function populateAssets(signals){
-  const sel=$("asset");
-  const existing=Array.from(sel.options).map(x=>x.value);
-  const values=signals.map(x=>x.symbol);
-  if(values.join("|")!==existing.join("|")){
-    sel.innerHTML=values.map(s=>'<option value="'+esc(s)+'">'+esc(s)+'</option>').join("");
-  }
-  if(!state.selected || !values.includes(state.selected)) state.selected=values[0]||null;
-  sel.value=state.selected||"";
-}
+function populateAssets(signals){const input=$("asset");const cfg=(state.data&&state.data.config)||{};const discovered=Array.isArray(cfg.market_symbols)?cfg.market_symbols:[];const active=signals.map(x=>x.symbol).filter(Boolean);state.marketSymbols=Array.from(new Set([...discovered,...active])).sort();const list=$("marketSymbols");if(list){list.innerHTML=state.marketSymbols.map(s=>'<option value="'+esc(s)+'"></option>').join("");}if(!state.selected||!state.marketSymbols.includes(state.selected)){state.selected=active[0]||cfg.primary_symbol||state.marketSymbols[0]||null;}if(input)input.value=state.selected||"";}
 
 function renderMetrics(data){
   const s=data.summary||{};
@@ -1972,8 +1970,7 @@ function scheduleRefresh(seconds){
   refreshTimer=setInterval(()=>refresh(false),Math.max(10,Number(seconds||20))*1000);
 }
 $("refresh").addEventListener("click",()=>refresh(true));
-$("asset").addEventListener("change",()=>{state.selected=$("asset").value;loadHistory(state.selected);renderTimeline((state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[]);});
-$("range").addEventListener("change",()=>loadHistory(state.selected));
+function openSelectedAsset(){const value=String($("asset").value||"").trim();if(!value)return;const allowed=new Set(state.marketSymbols||[]);if(!allowed.has(value)){ $("asset").setCustomValidity("Simbolo non presente nei mercati attivi.");$("asset").reportValidity();return;}$("asset").setCustomValidity("");state.selected=value;loadHistory(value);renderTimeline((state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[]);}$("asset").addEventListener("change",openSelectedAsset);$("asset").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();openSelectedAsset();}});$("loadAsset").addEventListener("click",openSelectedAsset);$("range").addEventListener("change",()=>loadHistory(state.selected));
 window.addEventListener("resize",()=>{if(state.history)drawChart(state.history,(state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[],(state.data&&state.data.signals||[]).find(x=>x.symbol===state.selected)?.realtime_price);});
 initAmbientFX();
 initAlphaMotion();
@@ -2041,7 +2038,8 @@ def make_handler(terminal: SignalTerminal):
                     x.get("symbol") for x in cached.get("signals", [])
                     if isinstance(x, dict) and x.get("symbol")
                 ]
-                allowed = set(configured) | {str(x) for x in active_symbols}
+                discovered = set((cached.get("config") or {}).get("market_symbols") or [])
+                allowed = set(configured) | discovered | {str(x) for x in active_symbols}
                 if symbol not in allowed:
                     self._send(
                         b'{"error":"symbol_not_configured"}',
