@@ -632,7 +632,7 @@ th{font-size:9px;text-transform:uppercase;letter-spacing:.11em;color:var(--muted
 const $ = (id) => document.getElementById(id);
 const state = { data:null, history:null, selected:null, historyRequest:0 };
 
-function esc(v){return String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c]));}
+function esc(v){return String(v??"").replace(/[&<>"]/g,c=>c==="&"?"&amp;":c==="<"?"&lt;":c===">"?"&gt;":"&quot;");}
 function pct(v,d=1){return v==null||Number.isNaN(Number(v))?"—":(Number(v)*100).toFixed(d)+"%";}
 function num(v,d=3){return v==null||Number.isNaN(Number(v))?"—":Number(v).toFixed(d);}
 function age(v){return v==null||Number.isNaN(Number(v))?"—":Number(v).toFixed(1)+"m";}
