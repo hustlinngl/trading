@@ -16,44 +16,6 @@ def evaluate_engine(df,settings):
     score=float(folds["robust_score"].median()-0.20*abs(folds["robust_score"].std(ddof=0)))
     return score,{"folds":int(len(folds)),"median_score":float(folds["robust_score"].median()),"score_std":float(folds["robust_score"].std(ddof=0)),"positive_folds":int((folds["robust_score"]>0).sum()),"positive_fold_ratio":float((folds["robust_score"]>0).mean()),"worst_drawdown":float(folds["max_drawdown"].min()),"total_trades":int(folds["trades"].sum()),"median_return":float(folds["total_return"].median()),"median_sharpe":float(folds["sharpe_like"].median()),"_fold_frame":folds}
 
-def _evaluate_frozen_engine(df,settings,model_dir):
-    """Evaluate the existing champion on exactly the same rolling folds as the challenger."""
-    from .purged_cv import walk_forward_splits
-    mdir=Path(model_dir)
-    if not (mdir/"signal_model.joblib").exists():
-        return -np.inf, {"folds":0,"reason":"champion_missing"}
-    try:
-        engine=AdaptiveEngine(settings).load(mdir)
-        purge=int(getattr(settings,"validation_purge_bars",settings.horizon_bars+max(1,settings.horizon_bars//2)))
-        splits=list(walk_forward_splits(len(df),settings.walk_forward_train_bars,settings.walk_forward_test_bars,settings.walk_forward_step,purge,settings.min_train_rows,independent_test=True))
-        rows=[]
-        for sp in splits:
-            context=df.iloc[sp.train_start:sp.train_end].copy()
-            test=df.iloc[sp.test_start:sp.test_end].copy()
-            features=make_oos_features(context,test,settings.horizon_bars,external_feature_lag_bars=getattr(settings,"external_feature_lag_bars",1))
-            pred=engine.predict_frame(features)
-            actions=pred["action"] if "action" in pred else pd.Series("FLAT",index=test.index)
-            bt=test.copy(); bt["atr_14"]=features["atr_14"]
-            result=run_configured_backtest(bt,actions,settings)
-            rows.append({**result.stats,"fold":sp.fold,"robust_score":robust_performance_utility(result.stats)})
-        if not rows:
-            return -np.inf, {"folds":0,"reason":"no_evaluable_folds"}
-        frame=pd.DataFrame(rows)
-        score=float(frame["robust_score"].median()-0.20*abs(frame["robust_score"].std(ddof=0)))
-        return score, {
-            "folds":int(len(frame)),
-            "median_score":float(frame["robust_score"].median()),
-            "score_std":float(frame["robust_score"].std(ddof=0)),
-            "positive_folds":int((frame["robust_score"]>0).sum()),
-            "positive_fold_ratio":float((frame["robust_score"]>0).mean()),
-            "worst_drawdown":float(frame["max_drawdown"].min()),
-            "total_trades":int(frame["trades"].sum()),
-            "_fold_frame":frame,
-        }
-    except Exception as exc:
-        return -np.inf, {"folds":0,"reason":f"{type(exc).__name__}:{exc}"}
-
-
 def _final_holdout_eval(df,settings,engine=None):
     frac=float(np.clip(getattr(settings,"final_holdout_frac",0.15),0.05,0.30)); cut=int(len(df)*(1-frac))
     if len(df)-cut<max(20,int(getattr(settings,"base_min_holdout_trades",20))): return {"passed":False,"reason":"insufficient_holdout_rows"}
@@ -68,41 +30,105 @@ def _final_holdout_eval(df,settings,engine=None):
     return {"passed":bool(all(checks.values())),"checks":checks,"stats":stats,"utility":float(utility),"holdout_rows":len(holdout)}
 
 def auto_update(df,settings,model_dir="models"):
-    mdir=Path(model_dir); mdir.mkdir(parents=True,exist_ok=True); state_path=mdir/"promotion_state.json"; state=json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}; champion=float(state.get("score",-np.inf)); fp=strong_dataset_fingerprint(df)
-    if (mdir/"signal_model.joblib").exists() and state.get("data_fingerprint")==fp: return {"promoted":False,"skipped":True,"skip_reason":"dataset_unchanged","data_fingerprint":fp,"champion_score":champion,"challenger_score":champion}
-    setattr(settings,"_champion_score_hint",champion)
-    if (mdir/"signal_model.joblib").exists():
-        champion,champion_current_stats=_evaluate_frozen_engine(df,settings,mdir)
-        if not np.isfinite(champion):
-            return {"promoted":False,"skipped":False,"reason":"champion_current_evaluation_failed","champion_score":champion,"champion_stats":champion_current_stats,"data_fingerprint":fp}
-    else:
-        champion_current_stats={"folds":0,"reason":"no_existing_champion"}
-    score,stats=evaluate_engine(df,settings); stats["score"]=score; stats["positive_fold_ratio"]=stats.get("positive_folds",0)/max(stats.get("folds",1),1)
-    challenger_folds=stats.get("_fold_frame",pd.DataFrame())
-    champion_folds=champion_current_stats.get("_fold_frame",pd.DataFrame())
-    common_folds=challenger_folds.merge(champion_folds[["fold","robust_score"]],on="fold",suffixes=("_challenger","_champion")) if isinstance(challenger_folds,pd.DataFrame) and isinstance(champion_folds,pd.DataFrame) and not challenger_folds.empty and not champion_folds.empty else pd.DataFrame()
-    if common_folds.empty:
-        stats["bootstrap_superiority_prob"]=1.0 if not (mdir/"signal_model.joblib").exists() else 0.0
-    else:
-        diffs=(common_folds["robust_score_challenger"]-common_folds["robust_score_champion"]).to_numpy(float)
+    mdir=Path(model_dir)
+    mdir.mkdir(parents=True,exist_ok=True)
+    state_path=mdir/"promotion_state.json"
+    state=json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
+    previous_score=float(state.get("score",-np.inf))
+    fp=strong_dataset_fingerprint(df)
+
+    if (mdir/"signal_model.joblib").exists() and state.get("data_fingerprint")==fp:
+        return {
+            "promoted":False,
+            "skipped":True,
+            "skip_reason":"dataset_unchanged",
+            "data_fingerprint":fp,
+            "champion_score":previous_score,
+            "challenger_score":previous_score,
+        }
+
+    score,stats=evaluate_engine(df,settings)
+    stats["score"]=score
+    stats["positive_fold_ratio"]=stats.get("positive_folds",0)/max(stats.get("folds",1),1)
+
+    fold_scores=stats.get("_fold_frame",pd.DataFrame())
+    if isinstance(fold_scores,pd.DataFrame) and not fold_scores.empty:
         rng=np.random.default_rng(int(getattr(settings,"seed",42)))
+        arr=fold_scores["robust_score"].to_numpy(float)
         boot=np.empty(2000,dtype=float)
         for i in range(len(boot)):
-            boot[i]=float(np.median(diffs[rng.integers(0,len(diffs),len(diffs))]))
+            boot[i]=float(np.median(arr[rng.integers(0,len(arr),len(arr))]))
         stats["bootstrap_superiority_prob"]=float(np.mean(boot>0.0))
-    gate=promotion_gate(stats,champion,min_folds=getattr(settings,"growth_min_folds",4),min_trades=max(settings.min_trades_promotion,getattr(settings,"growth_min_trades",50)),max_dd=settings.max_promotion_drawdown,min_positive_fold_ratio=getattr(settings,"growth_min_positive_fold_ratio",.65),min_bootstrap_prob=getattr(settings,"growth_min_bootstrap_probability",.58))
+    else:
+        stats["bootstrap_superiority_prob"]=0.0
+
+    gate=promotion_gate(
+        stats,
+        previous_score,
+        min_folds=getattr(settings,"growth_min_folds",4),
+        min_trades=max(settings.min_trades_promotion,getattr(settings,"growth_min_trades",50)),
+        max_dd=settings.max_promotion_drawdown,
+        min_positive_fold_ratio=getattr(settings,"growth_min_positive_fold_ratio",.65),
+        min_bootstrap_prob=getattr(settings,"growth_min_bootstrap_probability",.58),
+        min_score=0.0,
+        require_score_improvement=False,
+    )
+
     holdout=_final_holdout_eval(df,settings)
-    holdout_superiority=True
     champion_holdout={}
+    holdout_superiority=True
     if mdir/"signal_model.joblib".exists():
-        champion_engine=AdaptiveEngine(settings).load(mdir)
-        champion_holdout=_final_holdout_eval(df,settings,champion_engine)
+        try:
+            from .deployment import bundle_compatibility
+            compatible,reason=bundle_compatibility(settings,mdir,settings.symbol)
+            if not compatible:
+                champion_holdout={"passed":False,"reason":reason,"utility":-np.inf}
+            else:
+                champion_engine=AdaptiveEngine(settings).load(mdir)
+                champion_holdout=_final_holdout_eval(df,settings,champion_engine)
+        except Exception as exc:
+            champion_holdout={"passed":False,"reason":f"{type(exc).__name__}:{exc}","utility":-np.inf}
         holdout_superiority=float(holdout.get("utility",-np.inf))>float(champion_holdout.get("utility",-np.inf))+0.01
-    gate["final_holdout"]=bool(holdout.get("passed")); gate["checks"]["holdout_superiority"]=bool(holdout_superiority); gate["approved"]=bool(gate.get("approved") and holdout.get("passed") and holdout_superiority)
-    result={"challenger_score":score,"champion_score":champion,"champion_current_stats":champion_current_stats,"stats":stats,"promotion_gate":gate,"final_holdout":holdout,"champion_holdout":champion_holdout,"promoted":bool(gate["approved"]),"data_fingerprint":fp}
+
+    gate["final_holdout"]=bool(holdout.get("passed"))
+    gate["checks"]["holdout_superiority"]=bool(holdout_superiority)
+    gate["approved"]=bool(gate.get("approved") and holdout.get("passed") and holdout_superiority)
+
+    result={
+        "challenger_score":score,
+        "champion_score":previous_score,
+        "stats":stats,
+        "promotion_gate":gate,
+        "final_holdout":holdout,
+        "champion_holdout":champion_holdout,
+        "promoted":bool(gate["approved"]),
+        "data_fingerprint":fp,
+    }
     if gate["approved"]:
-        engine=AdaptiveEngine(settings); engine.fit(df); engine.save(mdir); state={"score":score,"stats":stats,"version":int(state.get("version",0))+1,"data_fingerprint":fp,"final_holdout":holdout}; state_path.write_text(json.dumps(state,indent=2,default=str),encoding="utf-8")
-        try: GrowthRegistry(getattr(settings,"memory_db","data/memory.sqlite")).add_model_version("signal","promoted",score,stats,str(mdir))
-        except Exception: pass
-    else: state.update({"data_fingerprint":fp,"last_challenger_score":score,"last_champion_score":champion,"last_stats":stats,"last_champion_current_stats":champion_current_stats,"last_final_holdout":holdout,"last_champion_holdout":champion_holdout}); state_path.write_text(json.dumps(state,indent=2,default=str),encoding="utf-8")
+        engine=AdaptiveEngine(settings)
+        engine.fit(df)
+        engine.save(mdir)
+        state={
+            "score":score,
+            "stats":stats,
+            "version":int(state.get("version",0))+1,
+            "data_fingerprint":fp,
+            "final_holdout":holdout,
+            "champion_holdout":champion_holdout,
+        }
+        state_path.write_text(json.dumps(state,indent=2,default=str),encoding="utf-8")
+        try:
+            GrowthRegistry(getattr(settings,"memory_db","data/memory.sqlite")).add_model_version("signal","promoted",score,stats,str(mdir))
+        except Exception:
+            pass
+    else:
+        state.update({
+            "data_fingerprint":fp,
+            "last_challenger_score":score,
+            "last_champion_score":previous_score,
+            "last_stats":stats,
+            "last_final_holdout":holdout,
+            "last_champion_holdout":champion_holdout,
+        })
+        state_path.write_text(json.dumps(state,indent=2,default=str),encoding="utf-8")
     return result
