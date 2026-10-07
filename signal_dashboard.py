@@ -578,6 +578,9 @@ class SignalTerminal:
                         "assets_scanned": int(universe_meta.get("universe_evaluated", len(signals))),
                         "universe_total": int(universe_meta.get("universe_total", len(signals))),
                         "model_backed_assets": int(universe_meta.get("universe_model_backed", len(signals))),
+                        "model_eligible_assets": int(universe_meta.get("universe_model_eligible", len(signals))),
+                        "ineligible_model_assets": int(universe_meta.get("universe_ineligible_model", 0)),
+                        "uncovered_assets": int(universe_meta.get("universe_uncovered", 0)),
                         "active_signals": active,
                         "waits": len(signals) - active,
                         "compatible_bundles": compatible,
@@ -1343,7 +1346,7 @@ function renderFocus(data){
     const summary=data.summary||{};
     const coverage=$("focusCoverage");
     if(coverage){
-      const total=Number(summary.universe_total??0), backed=Number(summary.model_backed_assets??0), evaluated=Number(summary.assets_scanned??0);
+      const total=Number(summary.universe_total??0), eligible=Number(summary.model_eligible_assets??summary.model_backed_assets??0), evaluated=Number(summary.assets_scanned??0);
       coverage.textContent=total ? "Universe "+total+" · models "+backed+" · evaluated "+evaluated : "Discovering markets…";
     }
     box.innerHTML='<div class="top5-empty"><div class="eyebrow">Scanning</div><h2 style="margin:8px 0 6px">Analisi dell\'universo in corso</h2><div class="small">Il motore sta valutando i mercati con bundle verificati. La superficie si aggiorna appena il ranking è pronto.</div></div>';
@@ -1360,14 +1363,14 @@ function renderFocus(data){
     box.innerHTML='<div class="top5-empty"><div class="eyebrow">No active signals</div><h2 style="margin:8px 0 6px">Nessun segnale</h2><div class="small">Il gate corrente non trova un LONG o SHORT abbastanza solido da mostrare.</div></div>';
     const summary=data.summary||{};
     const coverage=$("focusCoverage");
-    if(coverage) coverage.textContent="Universe "+(summary.universe_total??0)+" · models "+(summary.model_backed_assets??0)+" · evaluated "+(summary.assets_scanned??0);
+    if(coverage) coverage.textContent="Universe "+(summary.universe_total??0)+" · eligible "+(summary.model_eligible_assets??summary.model_backed_assets??0)+" · evaluated "+(summary.assets_scanned??0);
     status.textContent="0 signals";status.className="pill warn";return;
   }
   const summary=data.summary||{};
   const coverage=$("focusCoverage");
   if(coverage){
-    const total=Number(summary.universe_total??0), backed=Number(summary.model_backed_assets??0), evaluated=Number(summary.assets_scanned??0);
-    coverage.textContent="Universe "+total+" · models "+backed+" · evaluated "+evaluated;
+    const total=Number(summary.universe_total??0), eligible=Number(summary.model_eligible_assets??summary.model_backed_assets??0), evaluated=Number(summary.assets_scanned??0);
+    coverage.textContent="Universe "+total+" · eligible "+eligible+" · evaluated "+evaluated;
   }
   status.textContent=picks.length+" signal"+(picks.length===1?"":"s");status.className="pill good";
   box.innerHTML=picks.map((r,i)=>{
