@@ -9,6 +9,7 @@ from .objectives import robust_performance_utility
 from .promotion import promotion_gate
 from .growth import GrowthRegistry
 from .fingerprint import strong_dataset_fingerprint
+from .deployment import model_semantics_fingerprint, refresh_deployment_manifest
 
 def evaluate_engine(df,settings):
     folds=walk_forward(df,settings,independent_test=True)
@@ -108,6 +109,29 @@ def auto_update(df,settings,model_dir="models"):
         engine=AdaptiveEngine(settings)
         engine.fit(df)
         engine.save(mdir)
+        # Promotion changes the executable artifact, so refresh all provenance/evidence
+        # artifacts before the bundle can become signal-eligible again.
+        (mdir/"base_training_meta.json").write_text(json.dumps({
+            "symbol":str(settings.symbol),
+            "rows":int(len(df)),
+            "start":str(df.index.min()),
+            "end":str(df.index.max()),
+            "timeframe":str(settings.timeframe),
+            "data_fingerprint":fp,
+            "model_semantics_fingerprint":model_semantics_fingerprint(settings),
+            "trained_at":pd.Timestamp.now(tz="UTC").isoformat(),
+            "promotion_source":"auto_update",
+        },indent=2,default=str),encoding="utf-8")
+        (mdir/"base_holdout_report.json").write_text(json.dumps({
+            "symbol":str(settings.symbol),
+            "rows":int(len(df)),
+            "train_rows":int(len(df)-int(holdout.get("holdout_rows",0))),
+            "data_fingerprint":fp,
+            "holdout_rows":int(holdout.get("holdout_rows",0)),
+            "holdout":holdout.get("stats",{}),
+            "utility":float(holdout.get("utility",-np.inf)),
+        },indent=2,default=str),encoding="utf-8")
+        refresh_deployment_manifest(settings, Path(mdir).parents[2] if len(Path(mdir).parts) >= 3 else ".")
         state={
             "score":score,
             "stats":stats,
