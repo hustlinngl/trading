@@ -1,3 +1,9 @@
+## 0.9.34
+- Hardened the full-universe live-data bootstrap with bounded parallel workers, resumable timestamp-based cache reuse and atomic CSV replacement.
+- Added persistent live-market-universe snapshots so discovered symbols remain available across dashboard restarts and temporary exchange outages.
+- Aligned live market defaults and Windows/release documentation with the current OHLCV-focused signal surface.
+- Added regression coverage for persisted universe discovery and bootstrap hardening.
+
 ## 0.9.33
 - Extended live market discovery/quote display from the small configured symbol list to the full active exchange universe.
 - `bootstrap-live-data` now discovers all active spot/swap/future markets by default when no explicit `--symbols` list is supplied.
