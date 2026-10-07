@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.24
+- Made offline Market state explicit so stale realtime badges cannot look live after a failed state refresh.
+- Added the initial Overview navigation state to the page semantics and regression coverage for truthful offline presentation.
+
 ## 0.9.23
 - Hardened frontend refresh scheduling to prevent overlapping state requests.
 - Made realtime quote updates latest-request-wins when the selected asset changes quickly.
