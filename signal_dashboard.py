@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Adaptive AI Signal Terminal.
+Adaptive AI Segnale Terminale.
 
 Single-entry local dashboard for trained signal bundles.
 It has no order endpoints, no exchange write API and no trading execution path.
@@ -31,7 +31,7 @@ from ai_trading_lab.live import LiveAssessment, append_live_signal_history, scan
 from ai_trading_lab.live_tracker import update_live_signal_outcomes
 
 
-APP_TITLE = "Adaptive AI Signal Terminal"
+APP_TITLE = "Adaptive AI Segnale Terminale"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 DEFAULT_REFRESH = 45
@@ -93,10 +93,10 @@ def _signal_class(signal: str) -> str:
 
 
 def _status_class(status: str) -> str:
-    return "status-ready" if status == "READY" else "status-wait"
+    return "status-ready" if status == "PRONTO" else "status-wait"
 
 
-class SignalTerminal:
+class SegnaleTerminale:
     def __init__(self, settings: Settings, root: str | Path = ".", refresh_seconds: int = DEFAULT_REFRESH):
         self.settings = settings
         self.root = Path(root).resolve()
@@ -255,9 +255,9 @@ class SignalTerminal:
                     "journal": journal,
                     "outcome_update": _json_safe(outcome_update),
                     "notes": [
-                        "Signals are read-only. This terminal has no order-placement endpoint.",
-                        "WAIT is the default outcome whenever data, provenance, model consensus or quality gates fail.",
-                        "A compatible bundle is necessary but does not prove a persistent trading edge.",
+                        "Segnales are read-only. This terminal has no order-placement endpoint.",
+                        "WAIT è l'esito predefinito quando falliscono dati, provenienza, consenso modello o gate di qualità.",
+                        "Un bundle compatibile è necessario, ma non dimostra un edge di trading persistente.",
                     ],
                 }
             except Exception as exc:
@@ -288,8 +288,8 @@ class SignalTerminal:
                     "outcome_update": {},
                     "error": self._scan_error,
                     "notes": [
-                        "No signal was produced because the terminal failed closed.",
-                        "Check public market-data connectivity and trained asset bundles.",
+                        "No signal was produced because the terminal failed chiusi.",
+                        "Controlla la connettività ai dati pubblici e i bundle addestrati.",
                     ],
                 }
 
@@ -314,7 +314,7 @@ HTML = r"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="X-Content-Type-Options" content="nosniff">
-<title>Adaptive AI Signal Terminal</title>
+<title>Adaptive AI Segnale Terminale</title>
 <style>
 :root {
   --bg:#070a0f; --panel:#0d121a; --panel2:#111823; --line:#1d2733;
@@ -368,13 +368,13 @@ pre{white-space:pre-wrap;word-break:break-word;color:#aeb9c8;font-size:12px;marg
 <div class="wrap">
   <div class="top">
     <div>
-      <div class="kicker">Pre-alpha signal terminal</div>
-      <h1>Adaptive AI Signal Terminal</h1>
-      <div class="sub">Read-only market radar powered by the repository's trained bundles, strict provenance checks and conservative signal gates.</div>
+      <div class="kicker">Terminalee segnali pre-alpha</div>
+      <h1>Adaptive AI Segnale Terminale</h1>
+      <div class="sub">Radar di mercato in sola lettura, alimentato dai bundle addestrati del repository, con controlli di provenienza e gate conservativi.</div>
     </div>
     <div class="actions">
-      <span id="stamp">loading…</span>
-      <button id="refresh">Refresh now</button>
+      <span id="stamp">caricamento…</span>
+      <button id="refresh">Aggiorna ora</button>
     </div>
   </div>
 
@@ -383,8 +383,8 @@ pre{white-space:pre-wrap;word-break:break-word;color:#aeb9c8;font-size:12px;marg
   <div class="panel">
     <div class="panel-head">
       <div>
-        <div class="panel-title">Signal Radar</div>
-        <div class="small">The dashboard never sends orders. A signal is visible only after the same live/paper gate used by the engine passes.</div>
+        <div class="panel-title">Radar segnali</div>
+        <div class="small">La dashboard non invia ordini. Un segnale appare solo dopo il superamento degli stessi gate live/paper del motore.</div>
       </div>
       <div class="small" id="config"></div>
     </div>
@@ -392,8 +392,8 @@ pre{white-space:pre-wrap;word-break:break-word;color:#aeb9c8;font-size:12px;marg
       <table>
         <thead>
           <tr>
-            <th>Asset</th><th>Signal</th><th>Confidence</th><th>Expected</th><th>Robust band</th>
-            <th>Score</th><th>Meta</th><th>Memory</th><th>Regime</th><th>Duration</th><th>Data</th><th>Why / lineage</th>
+            <th>Asset</th><th>Segnale</th><th>Confidenza</th><th>Atteso</th><th>Intervallo robusto</th>
+            <th>Score</th><th>Meta</th><th>Memoria</th><th>Regime</th><th>Durata</th><th>Dati</th><th>Perché / provenienza</th>
           </tr>
         </thead>
         <tbody id="rows"></tbody>
@@ -402,10 +402,10 @@ pre{white-space:pre-wrap;word-break:break-word;color:#aeb9c8;font-size:12px;marg
   </div>
 
   <div class="panel">
-    <div class="panel-head"><div><div class="panel-title">Signal Journal</div><div class="small">Feedback only: completed signals are resolved from subsequent public candles. No orders are sent.</div></div><div class="small" id="journalStatus"></div></div>
+    <div class="panel-head"><div><div class="panel-title">Segnale Journal</div><div class="small">Solo feedback: i segnali maturati vengono risolti usando le candele pubbliche successive. Nessun ordine viene inviato.</div></div><div class="small" id="journalStatus"></div></div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Time</th><th>Asset</th><th>Signal</th><th>Confidence</th><th>Expected</th><th>Outcome</th><th>Realized</th><th>Holding</th></tr></thead>
+        <thead><tr><th>Ora</th><th>Asset</th><th>Segnale</th><th>Confidenza</th><th>Atteso</th><th>Esito</th><th>Realizzato</th><th>Holding</th></tr></thead>
         <tbody id="journalRows"></tbody>
       </table>
     </div>
@@ -413,15 +413,15 @@ pre{white-space:pre-wrap;word-break:break-word;color:#aeb9c8;font-size:12px;marg
 
   <div class="two">
     <div class="panel">
-      <div class="panel-head"><div><div class="panel-title">Training & deployment evidence</div><div class="small">Signals are tied to asset-local trained artifacts; stale evidence fails closed.</div></div></div>
+      <div class="panel-head"><div><div class="panel-title">Evidenze training e deployment</div><div class="small">Segnales are tied to asset-local trained artifacts; stale evidence fails chiusi.</div></div></div>
       <div class="cols" id="evidence"></div>
     </div>
     <div class="panel">
-      <div class="panel-head"><div><div class="panel-title">Operating contract</div><div class="small">Designed for observation, not execution.</div></div></div>
+      <div class="panel-head"><div><div class="panel-title">Contratto operativo</div><div class="small">Progettato per osservare, non per eseguire.</div></div></div>
       <div class="cols">
-        <div class="info"><div class="label">Execution</div><div class="value good">OFF</div><div class="small">No order API is exposed by this process.</div></div>
-        <div class="info"><div class="label">Default posture</div><div class="value warn">WAIT</div><div class="small">Missing data, model evidence or gate consensus produces WAIT.</div></div>
-        <div class="info"><div class="label">Edge status</div><div class="value warn">UNPROVEN</div><div class="small">Validation readiness is not evidence of a durable market edge.</div></div>
+        <div class="info"><div class="label">Esecuzione</div><div class="value good">OFF</div><div class="small">Questo processo non espone API per gli ordini.</div></div>
+        <div class="info"><div class="label">Postura predefinita</div><div class="value warn">WAIT</div><div class="small">Dati mancanti, evidenze modello o consenso insufficiente producono WAIT.</div></div>
+        <div class="info"><div class="label">Stato edge</div><div class="value warn">NON DIMOSTRATO</div><div class="small">La readiness della validazione non dimostra un edge di mercato durevole.</div></div>
       </div>
     </div>
   </div>
@@ -439,18 +439,18 @@ function _signalClass(signal){ return signal==="LONG"?"signal-long":signal==="SH
 
 function render(data){
   const s=data.summary||{};
-  $("stamp").textContent = data.generated_at ? new Date(data.generated_at).toLocaleTimeString() : "—";
+  $("stamp").textContent = data.generated_at ? new Date(data.generated_at).toLocaleOraString() : "—";
   $("config").textContent = data.config ? data.config.exchange+" · "+data.config.timeframe+" · "+data.config.primary_symbol : "";
   $("summary").innerHTML = [
-    ["Terminal", data.ok ? "READY" : "WAIT", data.ok ? "good":"bad"],
-    ["Assets", s.assets_scanned??0, ""],
-    ["Live signals", s.active_signals??0, s.active_signals>0?"good":""],
+    ["Terminale", data.ok ? "PRONTO" : "WAIT", data.ok ? "good":"bad"],
+    ["Asset", s.assets_scanned??0, ""],
+    ["Segnali live", s.active_signals??0, s.active_signals>0?"good":""],
     ["WAIT", s.waits??0, s.waits>0?"warn":""],
-    ["Compatible bundles", s.compatible_bundles??0, s.compatible_bundles>0?"good":"warn"],
+    ["Bundle compatibili", s.compatible_bundles??0, s.compatible_bundles>0?"good":"warn"],
   ].map(x=>'<div class="card"><div class="label">'+x[0]+'</div><div class="value '+x[2]+'">'+x[1]+'</div></div>').join("");
 
   if(!data.ok){
-    $("rows").innerHTML='<tr><td colspan="12"><div class="info"><strong>Terminal failed closed</strong><div class="small">'+esc(data.error||"unknown error")+'</div></div></td></tr>';
+    $("rows").innerHTML='<tr><td colspan="12"><div class="info"><strong>Terminale failed chiusi</strong><div class="small">'+esc(data.error||"unknown error")+'</div></div></td></tr>';
     $("evidence").innerHTML="";
     $("footer").textContent=(data.notes||[]).join(" · ");
     return;
@@ -460,7 +460,7 @@ function render(data){
     const d=r.decision||{}, b=r.bundle||{};
     const signal=r.signal||"WAIT";
     const reasons=(r.reason_codes||[]).map(x=>'<span class="reason">'+esc(x)+'</span>').join("");
-    const lineage = badge(b.compatible && b.manifest_ready, b.compatible && b.manifest_ready ? "deployable evidence":"WAIT / lineage");
+    const lineage = badge(b.compatible && b.manifest_ready, b.compatible && b.manifest_ready ? "evidenza deployabile":"WAIT / provenienza");
     const duration = d.trade_window_direction ? esc(d.trade_window_direction)+" · "+pct(d.trade_window_confidence,0) : "—";
     const robust = d.expected_return_lcb==null ? "—" : num(d.expected_return_lcb,4)+" / "+num(d.expected_return_ucb,4);
     return '<tr>'+
@@ -473,7 +473,7 @@ function render(data){
       '<td class="num">'+pct(d.meta_success,1)+'</td>'+
       '<td class="num">'+(d.analog_n==null?"—":esc(d.analog_n))+' · '+pct(d.analog_agreement,0)+'</td>'+
       '<td>'+esc(d.regime||"—")+'</td>'+
-      '<td class="tw"><strong>'+duration+'</strong>'+badge(!!d.trade_window_ready, d.trade_window_ready?"READY":"WAIT")+'</td>'+
+      '<td class="tw"><strong>'+duration+'</strong>'+badge(!!d.trade_window_ready, d.trade_window_ready?"PRONTO":"WAIT")+'</td>'+
       '<td class="num">'+age(d.data_age_minutes)+'</td>'+
       '<td>'+lineage+'<div class="reasons" style="margin-top:7px">'+reasons+'</div></td>'+
     '</tr>';
@@ -501,12 +501,12 @@ function render(data){
     const b=r.bundle||{}, h=b.holdout||{};
     return '<div class="info">'+
       '<div class="label">'+esc(r.symbol)+'</div>'+
-      '<div style="margin:7px 0">'+badge(!!b.compatible && !!b.manifest_ready, b.compatible&&b.manifest_ready?"READY":"WAIT")+'</div>'+
-      '<div class="small">training rows: '+esc(b.training_rows??"—")+'</div>'+
-      '<div class="small">holdout: '+pct(h.total_return ?? h.net_compounded_return,2)+' · trades: '+esc(h.trades??h.trades_taken??"—")+'</div>'+
+      '<div style="margin:7px 0">'+badge(!!b.compatible && !!b.manifest_ready, b.compatible&&b.manifest_ready?"PRONTO":"WAIT")+'</div>'+
+      '<div class="small">righe training: '+esc(b.training_rows??"—")+'</div>'+
+      '<div class="small">holdout: '+pct(h.total_return ?? h.net_compounded_return,2)+' · trade: '+esc(h.trades??h.trades_taken??"—")+'</div>'+
       '<div class="small">dataset: '+esc((b.data_fingerprint||"—").slice(0,12))+'</div>'+
-      '<div class="small">artifacts: '+esc((b.artifact_fingerprint||"—").slice(0,12))+'</div>'+
-      '<div class="small">compatibility: '+esc(b.compatibility||"—")+'</div>'+
+      '<div class="small">artefatti: '+esc((b.artifact_fingerprint||"—").slice(0,12))+'</div>'+
+      '<div class="small">compatibilità: '+esc(b.compatibility||"—")+'</div>'+
     '</div>';
   }).join("");
 
@@ -520,14 +520,14 @@ function scheduleRefresh(seconds){
 }
 
 async function refresh(force=false){
-  $("stamp").textContent="scanning…";
+  $("stamp").textContent="scansione…";
   try{
     const res=await fetch("/api/state?force="+(force?"1":"0"),{cache:"no-store"});
     const data=await res.json();
     render(data);
     scheduleRefresh(data.refresh_seconds||45);
   }catch(e){
-    render({ok:false,error:String(e),summary:{},notes:["Browser could not reach the local signal terminal."]});
+    render({ok:false,error:String(e),summary:{},notes:["Il browser non riesce a raggiungere il terminale locale dei segnali."]});
   }
 }
 $("refresh").addEventListener("click",()=>refresh(true));
@@ -538,9 +538,9 @@ refresh(false);
 """
 
 
-def make_handler(terminal: SignalTerminal):
+def make_handler(terminal: SegnaleTerminale):
     class Handler(BaseHTTPRequestHandler):
-        server_version = "AdaptiveSignalTerminal/1.0"
+        server_version = "AdaptiveSegnaleTerminale/1.0"
 
         def _send(self, body: bytes, status=200, content_type="text/html; charset=utf-8"):
             self.send_response(status)
@@ -582,9 +582,9 @@ def parse_args():
     parser.add_argument("--config", default="config.yaml", help="Settings YAML path")
     parser.add_argument("--host", default=DEFAULT_HOST, help="Bind address (default: localhost only)")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="HTTP port")
-    parser.add_argument("--refresh", type=int, default=DEFAULT_REFRESH, help="Signal refresh TTL in seconds")
+    parser.add_argument("--refresh", type=int, default=DEFAULT_REFRESH, help="Segnale refresh TTL in seconds")
     parser.add_argument("--symbols", default=None, help="Comma-separated symbol override")
-    parser.add_argument("--no-browser", action="store_true", help="Do not open the dashboard automatically")
+    parser.add_argument("--no-browser", action="store_true", help="Do not aperti the dashboard automatically")
     parser.add_argument("--once", action="store_true", help="Print one JSON snapshot and exit")
     return parser.parse_args()
 
@@ -595,16 +595,16 @@ def main():
     if args.symbols:
         settings.live_symbols = tuple(x.strip() for x in args.symbols.split(",") if x.strip())
 
-    terminal = SignalTerminal(settings, ".", refresh_seconds=args.refresh)
+    terminal = SegnaleTerminale(settings, ".", refresh_seconds=args.refresh)
     if args.once:
         print(json.dumps(terminal._terminal_state(force=True), indent=2, ensure_ascii=False))
         return
     server = ThreadingHTTPServer((args.host, args.port), make_handler(terminal))
     url = f"http://{args.host if args.host not in {'0.0.0.0','::'} else '127.0.0.1'}:{args.port}/"
     print(f"{APP_TITLE} v{__version__}")
-    print(f"Read-only mode · exchange={settings.exchange} · timeframe={settings.timeframe}")
+    print(f"Modalità sola lettura · exchange={settings.exchange} · timeframe={settings.timeframe}")
     print(f"Dashboard: {url}")
-    print("No order endpoints are exposed by this process.")
+    print("Questo processo non espone endpoint per ordini.")
     if not args.no_browser:
         try:
             webbrowser.open(url)
@@ -613,7 +613,7 @@ def main():
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nStopping signal terminal.")
+        print("\nArresto del terminale segnali.")
     finally:
         server.server_close()
 
