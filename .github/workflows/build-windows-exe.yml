@@ -54,10 +54,29 @@ jobs:
           if (-not (Test-Path $exe)) {
             throw "Frozen executable was not produced: $exe"
           }
-          $process = Start-Process -FilePath $exe -ArgumentList "--smoke-test" -Wait -PassThru
-          if ($process.ExitCode -ne 0) {
-            throw "SakuraSignalTerminal.exe smoke test failed with exit code $($process.ExitCode)"
+
+          # The primary binary is intentionally windowed, so startup stderr is hidden in CI.
+          # Build a temporary console twin to expose any frozen-import/startup failure.
+          pyinstaller `
+            --noconfirm `
+            --clean `
+            --onefile `
+            --console `
+            --name SakuraSignalTerminalSmoke `
+            --paths src `
+            --collect-submodules ai_trading_lab `
+            --collect-all xgboost `
+            --collect-all lightgbm `
+            signal_dashboard.py
+
+          $output = & .\dist\SakuraSignalTerminalSmoke.exe --smoke-test 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | Out-String | Write-Host
+          if ($exitCode -ne 0) {
+            throw "Frozen executable startup failed with exit code $exitCode. Output:`n$output"
           }
+
+          Write-Host "Primary windowed executable produced successfully: $exe"
 
       - name: Assemble portable package
         shell: pwsh
