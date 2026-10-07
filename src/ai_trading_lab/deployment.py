@@ -75,11 +75,11 @@ def bundle_compatibility(settings, bundle: str | Path, symbol: str) -> tuple[boo
                 return False, "model_symbol_mismatch"
             if str(meta.get("timeframe")) != str(getattr(settings, "timeframe", "")):
                 return False, "model_timeframe_mismatch"
-            if bool(getattr(settings, "require_deployment_manifest_for_signal", False)) and not meta.get("data_fingerprint"):
-                return False, "model_data_provenance_missing"
             recorded_semantics=meta.get("model_semantics_fingerprint")
             if recorded_semantics and str(recorded_semantics)!=model_semantics_fingerprint(settings):
                 return False, "model_semantics_mismatch"
+            if bool(getattr(settings, "require_deployment_manifest_for_signal", False)) and not meta.get("data_fingerprint"):
+                return False, "model_data_provenance_missing"
         except Exception as exc:
             return False, f"model_metadata_error:{type(exc).__name__}"
     if bool(getattr(settings, "require_deployment_manifest_for_signal", False)):
