@@ -2095,7 +2095,8 @@ def make_handler(terminal: SignalTerminal):
                     x.get("symbol") for x in cached.get("signals", [])
                     if isinstance(x, dict) and x.get("symbol")
                 ]
-                allowed = set(configured) | {str(x) for x in active_symbols}
+                discovered = set((cached.get("config") or {}).get("market_symbols") or [])
+                allowed = set(configured) | discovered | {str(x) for x in active_symbols}
                 if symbol not in allowed:
                     self._send(
                         b'{"error":"symbol_not_configured","bars":[]}',
