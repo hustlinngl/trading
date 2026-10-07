@@ -75,7 +75,7 @@ def test_state_fusion_normalizes_regime_risk_and_execution():
         },
     )
     assert payload["regime"]["label"] == "High Volatility"
-    assert payload["risk"]["drawdown"] == -0.1
+    assert abs(payload["risk"]["drawdown"] + 0.1) < 1e-9
     assert payload["risk"]["leverage"] == 2.0
     assert payload["efficiency"]["execution_available"] is True
     assert payload["efficiency"]["slippage_bps"] > 0
