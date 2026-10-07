@@ -2,6 +2,7 @@
 
 ## 0.9.16
 - Alpha visual foundation added on top of the frozen read-only terminal.
+- Expanded the visual layer with ambient Sakura particles, animated decision-state bloom and richer navigation/interaction feedback.
 - Added Sakura Tactical presentation layer: anime operator/cursor motif, pink neon glow language, animated HUD sweep and ambient grid.
 - Added 60fps-oriented interaction motion: requestAnimationFrame cursor tracking, click ripples, button/menu feedback, signal glow and reduced-motion fallback.
 - Added navigable Market / Intelligence / Journal / Evidence menu and click-through asset selection from radar/detail rows.
