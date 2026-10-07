@@ -194,13 +194,15 @@ def discover_live_universe(settings, root=".", exchange=None, symbols=None):
     }
 
 
-def scan_top5(settings, root=".", symbols=None, *, return_meta=False):
-    ex = None
-    network_unavailable = False
-    try:
-        ex = exchange_client(getattr(settings, "exchange", "binance"), sandbox=False)
-    except Exception:
-        network_unavailable = True
+def scan_top5(settings, root=".", symbols=None, *, exchange=None, return_meta=False):
+    ex = exchange
+    network_unavailable = ex is None
+    if ex is None:
+        try:
+            ex = exchange_client(getattr(settings, "exchange", "binance"), sandbox=False)
+            network_unavailable = False
+        except Exception:
+            network_unavailable = True
 
     universe = discover_live_universe(settings, root, ex, symbols)
     candidates = universe["symbols"]
