@@ -49,3 +49,22 @@ def test_promotion_gate_has_absolute_floor_without_stale_score_dependency():
     )
     assert gate["approved"]
     assert gate["checks"]["score_improves"] is True
+
+
+def test_settings_default_to_strict_deployment():
+    from ai_trading_lab.config import Settings
+    settings = Settings()
+    assert settings.trade_window_required_for_signal is True
+    assert settings.require_deployment_manifest_for_signal is True
+
+
+def test_release_versions_are_aligned():
+    from pathlib import Path
+    import re
+    from ai_trading_lab import __version__
+    root = Path(__file__).resolve().parents[1]
+    version_file = (root / "VERSION").read_text(encoding="utf-8").strip()
+    pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
+    match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
+    assert match is not None
+    assert __version__ == version_file == match.group(1)
