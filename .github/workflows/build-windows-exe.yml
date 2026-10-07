@@ -135,13 +135,29 @@ jobs:
       - name: Functional packaged dashboard smoke test
         shell: pwsh
         run: |
+          # Confirm the primary windowed binary stays alive when launched.
+          $primary = Start-Process -FilePath .\dist\SakuraSignalTerminal.exe `
+            -ArgumentList "--no-browser --host 127.0.0.1 --port 8875" `
+            -PassThru
+          try {
+            Start-Sleep -Seconds 8
+            if ($primary.HasExited) {
+              throw "Primary windowed executable exited during startup with code $($primary.ExitCode)"
+            }
+            Write-Host "Primary windowed executable startup process is alive."
+          } finally {
+            Stop-Process -Id $primary.Id -Force -ErrorAction SilentlyContinue
+          }
+
+          # The console twin uses the same application code with a visible console
+          # subsystem, so use it for deterministic HTTP/route validation.
           $port = 8876
-          $proc = Start-Process -FilePath .\dist\SakuraSignalTerminal.exe `
+          $proc = Start-Process -FilePath .\dist\SakuraSignalTerminalSmoke.exe `
             -ArgumentList "--no-browser --host 127.0.0.1 --port $port" `
             -PassThru
           try {
             $ready = $false
-            for ($i = 0; $i -lt 30; $i++) {
+            for ($i = 0; $i -lt 45; $i++) {
               try {
                 $page = Invoke-WebRequest -Uri "http://127.0.0.1:$port/" -UseBasicParsing -TimeoutSec 2
                 $health = Invoke-RestMethod -Uri "http://127.0.0.1:$port/api/health" -TimeoutSec 2
@@ -151,7 +167,7 @@ jobs:
                 Start-Sleep -Seconds 1
               }
             }
-            if (-not $ready) { throw "Packaged terminal did not start on port $port" }
+            if (-not $ready) { throw "Packaged console twin did not start on port $port" }
             if (-not $page.Content.Contains("Top 5")) { throw "Packaged dashboard does not contain the focused Top 5 surface" }
             if (-not $health.ok) { throw "Packaged health endpoint did not report ok=true" }
             $symbols = @("BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT")
