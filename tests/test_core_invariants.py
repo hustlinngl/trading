@@ -237,3 +237,12 @@ def test_master_tuner_rebuilds_both_conformal_bounds(monkeypatch):
     rebuilt = captured["pred"]
     assert np.isclose(float(rebuilt["expected_return_lcb"].iloc[0]), -0.009)
     assert np.isclose(float(rebuilt["expected_return_ucb"].iloc[0]), 0.001)
+
+
+def test_meta_target_accepts_directional_borrow_hurdle():
+    from ai_trading_lab.meta import cost_aware_meta_target
+    returns = np.array([-0.004, -0.020])
+    p_up = np.array([0.10, 0.10])
+    hurdle = np.array([0.005, 0.005])
+    out = cost_aware_meta_target(returns, p_up, hurdle)
+    assert out.tolist() == [0, 1]
