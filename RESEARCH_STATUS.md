@@ -1,8 +1,8 @@
-# Research status — 0.9.16
+# Research status — 0.9.17
 
 ## Current state
 
-The repository contains the full research source tree plus the autonomous orchestration, data utilities, model bundles, UI controller, tests and GitHub Actions workflows needed to operate the project coherently.
+The repository contains the full research source tree plus the autonomous orchestration, data utilities, model bundles, tests and GitHub Actions workflows needed to operate the project coherently.
 
 The system is deliberately research-first. No result in this repository should be interpreted as proof of a durable trading edge, and the live/paper signal path defaults to conservative WAIT behavior.
 
@@ -25,7 +25,7 @@ The 0.9.15 hardening pass restores the missing benchmark command, fixes master-t
 
 The current code remains suitable for research and paper/signal operation. A production-grade market edge remains **unproven** until fresh multi-year, multi-asset real-data evidence passes the full protocol.
 
-The 0.9.16 pre-alpha terminal is now the stable read-only observation layer: realtime ticker data is visually overlaid, while model inference continues to use the closed-candle path. Signal history is tracked prequentially so the next alpha UI can build on a stable, provenance-aware data contract.
+The 0.9.17 pre-alpha terminal is now the stable read-only observation layer: realtime ticker data is visually overlaid, while model inference continues to use the closed-candle path. Signal history is tracked prequentially so the next alpha UI can build on a stable, provenance-aware data contract.
 
 ## Required deployment gate
 
