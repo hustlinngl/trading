@@ -141,7 +141,7 @@ def fetch_ohlcv_incremental(exchange, symbol: str, timeframe: str, cache_path: s
         return drop_unclosed_tail(fallback,timeframe) if not include_unclosed else fallback
 
 def asof_join(base: pd.DataFrame, source: pd.DataFrame, *, source_time: str = "timestamp", columns: Iterable[str] | None = None, lag: pd.Timedelta | None = None, tolerance: pd.Timedelta | None = None, suffix: str = "") -> pd.DataFrame:
-    if base.empty or source.empty:
+    if len(base) == 0 or len(source) == 0:
         return base.copy()
     b = base.copy().sort_index()
     src = source.copy()
