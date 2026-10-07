@@ -26,7 +26,7 @@ def walk_forward(df: pd.DataFrame, settings, independent_test=False):
             regime_persistence=rp,
             regime_probs=rprob,
         )
-                bt=test.copy(); bt['atr_14']=test_features['atr_14']; result=run_configured_backtest(bt,pd.Series(actions,index=test.index),settings); rows.append({'train_start':str(train.index[0]),'train_end':str(train.index[-1]),'test_start':str(test.index[0]),'test_end':str(test.index[-1]),'purge_bars':purge,'median_regime':regimes.mode().iloc[0],**result.stats,'robust_score':robust_score(result.stats)}); cursor+=step
+        bt=test.copy(); bt['atr_14']=test_features['atr_14']; result=run_configured_backtest(bt,pd.Series(actions,index=test.index),settings); rows.append({'train_start':str(train.index[0]),'train_end':str(train.index[-1]),'test_start':str(test.index[0]),'test_end':str(test.index[-1]),'purge_bars':purge,'median_regime':regimes.mode().iloc[0],**result.stats,'robust_score':robust_score(result.stats)}); cursor+=step
     return pd.DataFrame(rows)
 
 def strategy_discovery(df,settings):
