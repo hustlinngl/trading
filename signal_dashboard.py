@@ -1575,8 +1575,6 @@ function pct(v,d=1){return v==null||Number.isNaN(Number(v))?"—":(Number(v)*100
 function num(v,d=3){return v==null||Number.isNaN(Number(v))?"—":Number(v).toFixed(d);}
 function age(v){return v==null||Number.isNaN(Number(v))?"—":Number(v).toFixed(1)+"m";}
 function cls(sig){return sig==="LONG"?"signal-long":sig==="SHORT"?"signal-short":sig==="WAIT"?"signal-wait":"signal-flat";}
-function pill(ok,label){return '<span class="pill '+(ok?'good':'warn')+'"><span class="dot"></span>'+esc(label)+'</span>';}
-
 function drawPickChart(canvas,history,signal){
   const bars=(history&&history.bars)||[];
   if(!canvas||bars.length<2)return;
