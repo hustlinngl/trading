@@ -8,6 +8,17 @@ from ai_trading_lab.config import load_settings
 from ai_trading_lab.live import LiveAssessment
 
 
+def test_dashboard_responsive_ui_and_chart_edge_case():
+    import signal_dashboard as terminal_mod
+
+    html = terminal_mod.HTML
+    assert "UI polish: restrained Sakura identity" in html
+    assert "@media(max-width:460px)" in html
+    assert "bars.length===1?pad.l+cw/2" in html
+    assert "table-wrap{border-radius" in html
+    assert "focus-visible" in html
+
+
 def test_signal_terminal_builds_read_only_state(tmp_path, monkeypatch):
     import signal_dashboard as terminal_mod
 
