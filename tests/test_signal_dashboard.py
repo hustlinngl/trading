@@ -97,6 +97,70 @@ def test_signal_terminal_builds_read_only_state(tmp_path, monkeypatch):
     assert state["notes"][0].startswith("Sola lettura")
 
 
+
+def test_dashboard_cursor_click_does_not_override_pointer_position():
+    import signal_dashboard as terminal_mod
+
+    html = terminal_mod.HTML
+    assert '#anime-cursor.click{filter:drop-shadow(0 0 18px rgba(255,120,200,.95));animation:none}' in html
+
+
+def test_signal_terminal_publishes_market_data_without_model_signals(tmp_path, monkeypatch):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    settings.live_symbols = ("BTC/USDT", "ETH/USDT")
+
+    class FakeExchange:
+        markets = {
+            "BTC/USDT": {"symbol": "BTC/USDT", "active": True, "type": "spot"},
+            "ETH/USDT": {"symbol": "ETH/USDT", "active": True, "type": "spot"},
+        }
+
+        def fetch_tickers(self, symbols):
+            return {
+                "BTC/USDT": {
+                    "last": 101.0, "bid": 100.9, "ask": 101.1,
+                    "timestamp": 123, "quoteVolume": 1000.0,
+                },
+                "ETH/USDT": {
+                    "last": 5.0, "bid": 4.9, "ask": 5.1,
+                    "timestamp": 123, "quoteVolume": 2000.0,
+                },
+            }
+
+    monkeypatch.setattr(
+        terminal_mod, "exchange_client", lambda *args, **kwargs: FakeExchange()
+    )
+    monkeypatch.setattr(
+        terminal_mod,
+        "scan_top5",
+        lambda *args, **kwargs: ([], {
+            "universe_total": 2,
+            "universe_model_backed": 0,
+            "universe_model_eligible": 0,
+            "universe_evaluated": 0,
+            "universe_signals": 0,
+            "universe_waits": 0,
+            "assessment_failures": 0,
+            "market_symbols": ["BTC/USDT", "ETH/USDT"],
+            "market_counts": {"spot": 2},
+        }),
+    )
+    monkeypatch.setattr(
+        terminal_mod,
+        "update_live_signal_outcomes",
+        lambda *args, **kwargs: {"updated": 0, "open": 0, "closed": 0},
+    )
+
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path, refresh_seconds=30)
+    state = terminal._terminal_state(force=True)
+
+    assert state["market_data"]["symbols"] == ["BTC/USDT", "ETH/USDT"]
+    assert state["market_data"]["quotes"]["BTC/USDT"]["price"] == 101.0
+    assert state["market_data"]["quotes"]["ETH/USDT"]["ask"] == 5.1
+
+
 def test_signal_terminal_reuses_exchange_for_outcome_tracking(tmp_path, monkeypatch):
     import signal_dashboard as terminal_mod
 
