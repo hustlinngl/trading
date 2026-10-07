@@ -240,6 +240,8 @@ def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, re
 
     reused = 0
     refreshed = 0
+    waits = 0
+    failures = 0
     for symbol in candidates:
         try:
             cached = cache.get(symbol)
@@ -264,7 +266,13 @@ def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, re
 
             if assessment.signal in {"LONG", "SHORT"} and assessment.status == "SIGNAL":
                 out.append(assessment)
+            else:
+                waits += 1
+                if any(str(reason).startswith(("runtime:", "data_fetch:")) for reason in assessment.reason_codes):
+                    failures += 1
         except Exception:
+            waits += 1
+            failures += 1
             continue
 
     out.sort(
@@ -285,6 +293,9 @@ def scan_top5(settings, root=".", symbols=None, *, exchange=None, cache=None, re
             "universe_ineligible_model": int(universe.get("ineligible_model_markets", 0)),
             "universe_uncovered": int(universe.get("uncovered_markets", 0)),
             "universe_evaluated": int(len(candidates)),
+            "universe_signals": int(len(out)),
+            "universe_waits": int(waits),
+            "assessment_failures": int(failures),
             "market_counts": universe["market_counts"],
             "exchange_market_metadata": bool(universe.get("exchange_market_metadata", ex is not None)),
             "universe_mode": "all_active_markets" if universe.get("exchange_market_metadata", ex is not None) else "local_fallback_universe",
