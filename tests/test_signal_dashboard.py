@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 
 import pandas as pd
 
@@ -331,11 +333,11 @@ def test_discover_live_universe_uses_all_active_market_types(monkeypatch, tmp_pa
     import ai_trading_lab.live as live_mod
 
     settings = load_settings("config.yaml")
-    settings.live_symbols = ("BTC/USDT",)
+    settings.live_symbols = ("BTC/USDT", "GHOST/USDT")
     settings.live_market_types = ("spot", "swap", "future")
     asset_root = tmp_path / "models" / "assets"
     asset_root.mkdir(parents=True)
-    for symbol in ("BTC/USDT", "ETH/USDT:USDT", "XRP/USDT:USDT"):
+    for symbol in ("BTC/USDT", "ETH/USDT:USDT", "XRP/USDT:USDT", "GHOST/USDT"):
         bundle = asset_root / symbol.replace("/", "_").replace(":", "_")
         bundle.mkdir()
         (bundle / "signal_model.joblib").write_text("stub", encoding="utf-8")
@@ -363,6 +365,8 @@ def test_discover_live_universe_uses_all_active_market_types(monkeypatch, tmp_pa
     assert meta["market_counts"]["spot"] == 2
     assert meta["market_counts"]["swap"] == 1
     assert meta["market_counts"]["future"] == 1
+    assert meta["exchange_market_metadata"] is True
+    assert "GHOST/USDT" not in meta["symbols"]
 
 
 def test_scan_top5_return_meta_reports_universe_coverage(monkeypatch, tmp_path):
@@ -429,6 +433,46 @@ def test_scan_top5_reuses_same_closed_candle_assessment(monkeypatch, tmp_path):
     live_mod.scan_top5(settings, tmp_path, exchange=object(), cache=cache)
 
     assert calls["n"] == 2
+
+
+def test_signal_terminal_background_state_does_not_hold_lock_during_scan(tmp_path, monkeypatch):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_scan(*args, **kwargs):
+        started.set()
+        assert release.wait(2.0)
+        return []
+
+    monkeypatch.setattr(terminal_mod, "scan_top5", slow_scan)
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path, refresh_seconds=30)
+
+    first = terminal._terminal_state(force=True, background=True)
+    assert first["scan_in_progress"] is True
+    assert started.wait(1.0)
+
+    second = {}
+    done = threading.Event()
+
+    def second_request():
+        begin = time.monotonic()
+        second["state"] = terminal._terminal_state(background=True)
+        second["elapsed"] = time.monotonic() - begin
+        done.set()
+
+    request = threading.Thread(target=second_request, daemon=True)
+    request.start()
+    returned_before_release = done.wait(0.5)
+    release.set()
+    request.join(2.0)
+    terminal._scan_thread.join(2.0)
+
+    assert returned_before_release is True
+    assert second["state"]["scan_in_progress"] is True
+    assert second["elapsed"] < 0.45
 
 
 def test_scan_top5_prefers_stronger_robust_selection_score(monkeypatch, tmp_path):
