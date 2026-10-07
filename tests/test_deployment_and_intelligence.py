@@ -35,7 +35,7 @@ def test_bundle_compatibility_rejects_wrong_identity(tmp_path):
 
 
 def test_event_features_are_deterministic():
-    features = extract_event_terms("Fed hawkish rate hike with ETF outflow and exploit risk")
+    features = extract_event_terms("Fed FOMC hawkish interest rate hike with ETF outflow and exploit risk")
     assert features["event_rates_hits"] >= 2
     assert features["event_flows_hits"] >= 1
     assert features["event_security_hits"] >= 1
