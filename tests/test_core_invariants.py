@@ -246,3 +246,11 @@ def test_meta_target_accepts_directional_borrow_hurdle():
     hurdle = np.array([0.005, 0.005])
     out = cost_aware_meta_target(returns, p_up, hurdle)
     assert out.tolist() == [0, 1]
+
+
+def test_meta_learning_core_mask_purges_calibration_boundary():
+    from ai_trading_lab.engine import _pre_calibration_core_mask
+    idx = pd.date_range("2026-01-01", periods=20, freq="15min", tz="UTC")
+    mask = _pre_calibration_core_mask(idx, idx[15], 3)
+    assert mask.iloc[:12].all()
+    assert not mask.iloc[12:].any()
