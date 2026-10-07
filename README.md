@@ -1,6 +1,6 @@
 # Adaptive AI Trading Lab
 
-Release **0.9.27** — pre-alpha read-only signal terminal built on the trained research stack.
+Release **0.9.28** — pre-alpha read-only signal terminal built on the trained research stack.
 
 This repository is a research-first adaptive trading platform for real market data, purged walk-forward validation, pristine holdouts, cost-aware event-driven backtesting, autonomous research and guarded paper/signal workflows.
 
@@ -23,7 +23,7 @@ The intended pre-alpha user experience is now one program:
 
 `python signal_dashboard.py`
 
-It binds to localhost only, opens the browser automatically, discovers active exchange markets across the configured market types, evaluates every deployment-eligible asset bundle before ranking the Top 5, applies the same strict live/paper decision gates, records signals and resolves mature signals against later public candles. The web request path stays responsive while a full-universe scan runs, with live progress visible in the terminal. Top 5 cards are directly inspectable from keyboard or mouse, and the market explorer is populated from the same canonical scan universe. A market without a compatible asset-specific model remains outside the Top 5 rather than borrowing another asset's model. It has no order endpoint and does not place trades.
+It binds to localhost only, opens the browser automatically, discovers active exchange markets across the configured market types, evaluates every deployment-eligible asset bundle before ranking the Top 5, applies the same strict live/paper decision gates, records signals and resolves mature signals against later public candles. The web request path stays responsive while a full-universe scan runs, while the Overview stays focused on direct signal results. Top 5 cards are directly inspectable from keyboard or mouse, and the market explorer is populated from the same canonical scan universe. A market without a compatible asset-specific model remains outside the Top 5 rather than borrowing another asset's model. It has no order endpoint and does not place trades.
 
 Headless check: `python signal_dashboard.py --once`
 
