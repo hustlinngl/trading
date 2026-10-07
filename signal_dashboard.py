@@ -624,6 +624,119 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
 }
 @media(max-width:1180px){.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.layout{grid-template-columns:1fr}}
 @media(max-width:760px){.wrap{padding:18px 13px 40px}.top{align-items:flex-start;flex-direction:column}h1{font-size:29px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3{grid-template-columns:1fr}.chart-panel{min-height:430px}#chart{height:350px}.nav{overflow:auto;flex-wrap:nowrap}.nav-btn{white-space:nowrap}}
+
+/* 0.9.17 art-direction layer */
+.operator-stage{
+  position:absolute;right:14px;bottom:10px;width:126px;height:126px;pointer-events:none;opacity:.9;
+  animation:operatorFloat 4.8s ease-in-out infinite;transform-origin:50% 80%;
+}
+.operator-stage::before{
+  content:"";position:absolute;inset:16% 8% 4%;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,120,200,.16),rgba(200,92,255,.06) 45%,transparent 72%);
+  filter:blur(10px);transform:scale(1.08);
+}
+.operator-stage svg{position:relative;width:100%;height:100%;filter:drop-shadow(0 0 14px rgba(255,120,200,.32))}
+.operator-stage .operator-scan{
+  position:absolute;left:8%;right:8%;top:12%;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(125,232,255,.7),transparent);
+  animation:operatorScan 3.7s ease-in-out infinite;
+}
+.operator-caption{
+  position:absolute;right:5px;bottom:0;padding:3px 6px;border-radius:999px;
+  background:rgba(9,6,14,.75);border:1px solid rgba(255,120,200,.18);
+  font-size:7px;letter-spacing:.18em;color:var(--muted);backdrop-filter:blur(8px);
+}
+.decision-hero{min-height:208px}
+.decision-hero .reason-strip{max-width:calc(100% - 118px);padding-right:4px}
+.timeline-shell{padding:16px 16px 18px;overflow-x:auto}
+.signal-timeline{min-width:760px;display:grid;gap:11px}
+.timeline-entry{
+  position:relative;padding:13px 14px 14px;border:1px solid var(--line);border-radius:14px;
+  background:linear-gradient(180deg,rgba(21,13,29,.93),rgba(11,8,17,.98));
+  transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease;
+}
+.timeline-entry:hover{transform:translateY(-2px);border-color:rgba(255,120,200,.3);box-shadow:0 0 28px rgba(255,120,200,.07)}
+.timeline-entry::before{
+  content:"";position:absolute;left:16px;right:16px;top:48px;height:1px;
+  background:linear-gradient(90deg,rgba(255,120,200,.12),rgba(255,120,200,.34),rgba(125,232,255,.2));
+}
+.timeline-top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}
+.timeline-title{display:flex;align-items:center;gap:8px}
+.timeline-stages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.timeline-stage{
+  position:relative;min-height:64px;padding:11px 10px 9px 12px;border:1px solid var(--line);
+  border-radius:11px;background:rgba(255,255,255,.016);z-index:1;
+}
+.timeline-stage .stage-dot{
+  position:absolute;left:11px;top:-4px;width:8px;height:8px;border-radius:50%;
+  background:var(--muted);box-shadow:0 0 0 3px rgba(11,8,17,.96),0 0 10px currentColor;
+}
+.timeline-stage strong{display:block;font-size:10px;letter-spacing:.07em;text-transform:uppercase}
+.timeline-stage span{display:block;margin-top:4px;font-size:10px;color:var(--muted)}
+.timeline-stage.ready{border-color:rgba(69,227,154,.2)}.timeline-stage.ready .stage-dot{color:var(--green);background:var(--green)}
+.timeline-stage.pending{border-color:rgba(255,209,102,.16)}.timeline-stage.pending .stage-dot{color:var(--amber);background:var(--amber)}
+.timeline-stage.final{border-color:rgba(125,232,255,.18)}.timeline-stage.final .stage-dot{color:var(--cyan);background:var(--cyan)}
+.timeline-empty{padding:18px;border:1px dashed rgba(255,120,200,.16);border-radius:12px;color:var(--muted);text-align:center}
+.inspector-backdrop{
+  position:fixed;inset:0;background:rgba(4,2,8,.58);backdrop-filter:blur(2px);
+  opacity:0;pointer-events:none;transition:opacity .22s ease;z-index:10000;
+}
+.inspector-drawer{
+  position:fixed;top:16px;right:16px;bottom:16px;width:min(460px,calc(100vw - 32px));
+  transform:translate3d(112%,0,0);transition:transform .3s cubic-bezier(.2,.8,.2,1);
+  z-index:10001;border:1px solid rgba(255,120,200,.24);border-radius:20px;
+  background:linear-gradient(180deg,rgba(18,10,25,.985),rgba(8,6,13,.995));
+  box-shadow:0 30px 120px rgba(0,0,0,.52),0 0 48px rgba(255,120,200,.08);
+  overflow:hidden;display:flex;flex-direction:column;
+}
+body.drawer-open .inspector-backdrop{opacity:1;pointer-events:auto}
+body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
+.inspector-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 16px;
+  border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(255,120,200,.06),transparent);
+}
+.inspector-close{width:34px;height:34px;padding:0;display:grid;place-items:center;border-radius:10px}
+.inspector-scroll{overflow:auto;padding:16px}
+.inspector-hero{
+  position:relative;overflow:hidden;padding:16px;border-radius:15px;border:1px solid rgba(255,120,200,.18);
+  background:radial-gradient(360px 160px at 0 0,rgba(255,120,200,.1),transparent 62%),rgba(255,255,255,.012);
+}
+.inspector-hero .verdict{font-size:34px;line-height:1;font-weight:950;letter-spacing:.04em}
+.inspector-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:11px}
+.inspector-card{padding:12px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.015)}
+.inspector-card .k{font-size:9px;text-transform:uppercase;letter-spacing:.11em;color:var(--muted)}
+.inspector-card .v{margin-top:5px;font-size:15px;font-weight:800}
+.inspector-section{margin-top:13px}.inspector-section h3{margin:0 0 8px;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.inspector-reasons{display:flex;gap:6px;flex-wrap:wrap}
+.inspector-trace{display:grid;gap:7px}
+.inspector-trace-row{display:grid;grid-template-columns:86px 1fr auto;align-items:center;gap:8px;padding:8px 9px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.012)}
+.inspector-trace-row strong{font-size:10px;text-transform:uppercase;letter-spacing:.06em}.inspector-trace-row span{font-size:10px;color:var(--muted)}
+.inspector-code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:9px;line-height:1.55;color:#bdb3c4;word-break:break-word}
+.chart-crosshair{position:absolute;inset:10px 12px 12px;display:none;pointer-events:none;overflow:hidden;border-radius:12px}
+.chart-crosshair .cx{position:absolute;top:0;bottom:0;width:1px;transform:translate3d(0,0,0);background:linear-gradient(to bottom,transparent,rgba(125,232,255,.55),transparent)}
+.chart-crosshair .cy{position:absolute;left:0;right:0;height:1px;transform:translate3d(0,0,0);background:linear-gradient(90deg,transparent,rgba(255,120,200,.55),transparent)}
+.chart-crosshair .badge{
+  position:absolute;right:8px;top:8px;padding:5px 7px;border-radius:8px;
+  background:rgba(8,5,13,.9);border:1px solid rgba(125,232,255,.2);font-size:9px;color:#d8d0df;
+  box-shadow:0 0 18px rgba(125,232,255,.08);white-space:nowrap;
+}
+.chart-regime{
+  position:absolute;left:22px;top:18px;padding:4px 7px;border-radius:999px;
+  background:rgba(11,8,17,.82);border:1px solid rgba(125,232,255,.16);font-size:9px;
+  color:var(--muted);letter-spacing:.08em;text-transform:uppercase;pointer-events:none;backdrop-filter:blur(8px);
+}
+@keyframes operatorFloat{0%,100%{transform:translateY(0) rotate(.2deg)}50%{transform:translateY(-5px) rotate(-.4deg)}}
+@keyframes operatorScan{0%,100%{opacity:.08;transform:translateX(-18%)}50%{opacity:.7;transform:translateX(18%)}}
+@media(max-width:760px){
+  .decision-hero{min-height:220px}.decision-hero .reason-strip{max-width:100%;padding-right:0;padding-bottom:34px}
+  .operator-stage{width:94px;height:94px;right:7px;bottom:6px}.operator-caption{display:none}
+  .signal-timeline{min-width:0}.timeline-entry::before{display:none}.timeline-stages{grid-template-columns:1fr 1fr}
+  .inspector-drawer{top:8px;right:8px;bottom:8px;width:calc(100vw - 16px)}
+}
+@media(prefers-reduced-motion:reduce){
+  .operator-stage{animation:none}.operator-stage .operator-scan{animation:none}
+}
+
 </style>
 </head>
 <body>
@@ -675,6 +788,7 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
     <button class="nav-btn active" data-target="market">Market</button>
     <button class="nav-btn" data-target="detail">Intelligence</button>
     <button class="nav-btn" data-target="journal">Journal</button>
+    <button class="nav-btn" data-target="timeline">Timeline</button>
     <button class="nav-btn" data-target="evidencePanel">Evidence</button>
   </nav>
 
@@ -696,7 +810,32 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
         <div class="mini-stat"><div class="k">Robust edge</div><div class="v" id="deckEdge">—</div></div>
       </div>
       <div class="reason-strip" id="deckReasons"></div>
-    </div>
+
+      <div class="operator-stage" aria-hidden="true">
+        <div class="operator-scan"></div>
+        <svg viewBox="0 0 140 140" fill="none">
+          <defs>
+            <linearGradient id="opHair" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#ffb0e0"/><stop offset=".55" stop-color="#ff78c8"/><stop offset="1" stop-color="#c85cff"/>
+            </linearGradient>
+            <linearGradient id="opSuit" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#34283e"/><stop offset="1" stop-color="#17131e"/>
+            </linearGradient>
+          </defs>
+          <circle cx="73" cy="67" r="45" fill="rgba(255,120,200,.035)" stroke="rgba(255,120,200,.18)" stroke-dasharray="2 6"/>
+          <path d="M37 70c0-28 13-44 34-44 23 0 35 18 38 42-6-7-13-11-21-11-6 0-12 2-18 7-6-7-13-10-20-9-4 0-8 5-13 15Z" fill="url(#opHair)"/>
+          <path d="M48 61c4-11 12-17 24-17 12 0 20 7 25 18l-4 24c-5 11-12 17-22 17-11 0-19-6-24-17l1-25Z" fill="#f7d2cb"/>
+          <path d="M53 61c5-8 11-12 18-12 9 0 16 4 22 12-5-3-10-4-15-4-7 0-14 2-21 7l-4-3Z" fill="#ff8fd1"/>
+          <ellipse cx="63" cy="72" rx="3.2" ry="4.2" fill="#37253a"/><ellipse cx="84" cy="72" rx="3.2" ry="4.2" fill="#37253a"/>
+          <circle cx="64" cy="71" r="1.1" fill="#fff"/><circle cx="85" cy="71" r="1.1" fill="#fff"/>
+          <path d="M69 83c3 2 7 2 10 0" stroke="#a95380" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M45 90c7 10 18 14 30 14 11 0 22-5 30-14 4 3 8 9 11 17l8 23H32l7-23c2-7 4-13 6-17Z" fill="url(#opSuit)" stroke="rgba(255,120,200,.22)"/>
+          <path d="M69 104l4 8 5-8 7 13-12 13-11-13 7-13Z" fill="#ff78c8" fill-opacity=".22"/>
+          <path d="M31 126h78" stroke="#7de8ff" stroke-opacity=".35" stroke-width="1"/>
+          <path d="M111 39l12 8-8 3 7 9-15-4 4-8-8-4 8-4Z" fill="#7de8ff" fill-opacity=".16" stroke="#7de8ff" stroke-opacity=".4"/>
+        </svg>
+        <span class="operator-caption">OPERATOR // WATCHING</span>
+      </div>    </div>
     <div class="trace">
       <div class="trace-head"><div><div class="title">Decision trace</div><div class="small">Ogni blocco è una condizione osservabile del gate.</div></div><div class="small" id="deckAsset">—</div></div>
       <div class="trace-grid" id="traceGrid"></div>
@@ -718,6 +857,11 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
       </div>
       <div class="chart-wrap" id="chartWrap">
         <canvas id="chart"></canvas>
+        <div id="chartRegime" class="chart-regime">REGIME —</div>
+        <div id="chartCrosshair" class="chart-crosshair" aria-hidden="true">
+          <span class="cx" id="crossX"></span><span class="cy" id="crossY"></span>
+          <span class="badge" id="crossBadge">—</span>
+        </div>
         <div id="cursor"></div>
         <div id="chartEmpty" class="chart-empty">Caricamento storico…</div>
       </div>
@@ -737,6 +881,20 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
           <tbody id="radarRows"></tbody>
         </table>
       </div>
+    </div>
+  </div>
+
+
+  <div class="panel" id="timeline">
+    <div class="panel-head">
+      <div>
+        <div class="title">Signal timeline</div>
+        <div class="small">Prediction → observation → maturity → outcome. La timeline mostra cosa il modello ha dichiarato e cosa è già stato osservato.</div>
+      </div>
+      <div class="small" id="timelineStatus">—</div>
+    </div>
+    <div class="timeline-shell">
+      <div id="signalTimeline" class="signal-timeline"></div>
     </div>
   </div>
 
@@ -771,6 +929,18 @@ tbody tr:hover{background:rgba(255,120,200,.035)}
     <div class="panel-head"><div><div class="title">Training / deployment evidence</div><div class="small">Un segnale è ammissibile solo con bundle compatibile e provenance coerente.</div></div></div>
     <div class="grid3" id="evidence"></div>
   </div>
+
+
+<div id="inspectorBackdrop" class="inspector-backdrop"></div>
+<aside id="inspectorDrawer" class="inspector-drawer" aria-label="Decision inspector" aria-hidden="true">
+  <div class="inspector-head">
+    <div><div class="title">Decision inspector</div><div class="small" id="inspectorSubtitle">Asset —</div></div>
+    <button class="inspector-close" id="inspectorClose" aria-label="Chiudi inspector">×</button>
+  </div>
+  <div class="inspector-scroll" id="inspectorContent">
+    <div class="timeline-empty">Seleziona un asset da Radar o Intelligence.</div>
+  </div>
+</aside>
 
   <div class="footer" id="footer"></div>
 </div>
@@ -978,6 +1148,8 @@ function bindInteractiveRows(){
         loadHistory(symbol);
         const market=$("market");
         if(market)market.scrollIntoView({behavior:"smooth",block:"start"});
+        openInspector(symbol);
+        renderTimeline((state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[]);
       }
     };
   });
@@ -1018,6 +1190,129 @@ function renderDecisionDeck(signals){
   trace.innerHTML=nodes.map(n=>'<div class="trace-node '+(n[1]?"ready":"wait")+'"><i class="trace-dot"></i><strong>'+n[0]+'</strong><span>'+n[2]+'</span></div>').join("");
 }
 
+
+function timeLabel(v){
+  if(!v)return "—";
+  const d=new Date(v); return Number.isFinite(d.getTime())?d.toLocaleString():String(v);
+}
+function signalOutcomeClass(outcome){
+  return outcome==="WIN"?"good":outcome==="LOSS"?"bad":outcome==="TIMEOUT"?"warn":"";
+}
+function traceState(ok,label){
+  return '<span class="pill '+(ok?'good':'warn')+'"><span class="dot"></span>'+esc(label)+'</span>';
+}
+
+function renderTimeline(signals,journal){
+  const box=$("signalTimeline");
+  if(!box)return;
+  const selected=state.selected || (signals[0]&&signals[0].symbol);
+  const active=(signals||[]).find(x=>x.symbol===selected);
+  const records=(journal||[])
+    .filter(r=>r.symbol===selected)
+    .slice()
+    .sort((a,b)=>new Date(a.data_timestamp||a.timestamp||0)-new Date(b.data_timestamp||b.timestamp||0))
+    .slice(-8)
+    .reverse();
+  if(active && !records.some(r=>String(r.data_timestamp||r.timestamp)===String(active.timestamp))){
+    records.unshift({...active,data_timestamp:active.timestamp,outcome:"OPEN",_live:true});
+  }
+  if(!records.length){
+    box.innerHTML='<div class="timeline-empty">Nessuna traccia prequentiale disponibile per l’asset selezionato.</div>';
+    $("timelineStatus").textContent="nessun evento";
+    return;
+  }
+  $("timelineStatus").textContent=records.length+" tracce · "+(selected||"—");
+  box.innerHTML=records.map((r,i)=>{
+    const outcome=r.outcome||"OPEN";
+    const closed=outcome!=="OPEN" && outcome!=="EARLY";
+    const mature=r.holding_hours!=null || closed;
+    const signal=r.signal||"WAIT";
+    const forecast=r.expected_return==null?"—":pct(r.expected_return,2);
+    const support=r.confidence==null?"—":pct(r.confidence,1);
+    const held=r.holding_hours==null?"in corso":num(r.holding_hours,1)+"h";
+    const outcomeLabel=closed?outcome:(outcome==="EARLY"?"EARLY":"OPEN");
+    return '<article class="timeline-entry interactive-row" data-symbol="'+esc(r.symbol||selected||"")+'" tabindex="0" role="button">'+
+      '<div class="timeline-top">'+
+        '<div class="timeline-title"><span class="signal '+cls(signal)+'">'+esc(signal)+'</span><strong>'+esc(r.symbol||selected||"—")+'</strong><span class="small">confidence '+support+'</span></div>'+
+        '<div class="small">'+esc(timeLabel(r.data_timestamp||r.timestamp))+'</div>'+
+      '</div>'+
+      '<div class="timeline-stages">'+
+        '<div class="timeline-stage ready"><i class="stage-dot"></i><strong>Prediction</strong><span>edge '+esc(forecast)+' · score '+num((r.details&&r.details.score)||r.score,3)+'</span></div>'+
+        '<div class="timeline-stage '+(closed?'ready':'pending')+'"><i class="stage-dot"></i><strong>Observation</strong><span>'+esc(closed?"market observed":"waiting for later candles")+'</span></div>'+
+        '<div class="timeline-stage '+(mature?'final':'pending')+'"><i class="stage-dot"></i><strong>Maturity</strong><span>'+esc(held)+'</span></div>'+
+        '<div class="timeline-stage '+(closed?'ready':'pending')+'"><i class="stage-dot"></i><strong>Outcome</strong><span class="'+signalOutcomeClass(outcome)+'">'+esc(outcomeLabel)+'</span></div>'+
+      '</div>'+
+    '</article>';
+  }).join("");
+  bindTimelineRows();
+}
+
+function bindTimelineRows(){
+  document.querySelectorAll("#signalTimeline .interactive-row").forEach(row=>{
+    const open=()=>{const symbol=row.dataset.symbol;if(symbol)openInspector(symbol);};
+    row.onclick=open;
+    row.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();open();}};
+  });
+}
+
+function openInspector(symbol){
+  const active=((state.data&&state.data.signals)||[]).find(x=>x.symbol===symbol);
+  const content=$("inspectorContent"), drawer=$("inspectorDrawer");
+  if(!content||!drawer)return;
+  $("inspectorSubtitle").textContent=(active?.symbol||symbol||"—")+" · decision trace";
+  if(!active){
+    content.innerHTML='<div class="timeline-empty">Nessun dato attivo disponibile per '+esc(symbol||"asset")+'.</div>';
+  }else{
+    const d=active.decision||{}, b=active.bundle||{}, h=b.holdout||{};
+    const signal=active.signal||"WAIT";
+    const trace=[
+      ["Data",d.data_age_minutes!=null && Number(d.data_age_minutes)<=30,"fresh · "+age(d.data_age_minutes)],
+      ["Model",d.p_up!=null,"p(up) · "+pct(d.p_up,1)],
+      ["Meta",d.meta_success!=null && Number(d.meta_success)>=.5,"success · "+pct(d.meta_success,0)],
+      ["Memory",d.analog_n!=null && Number(d.analog_n)>0,"support · "+esc(d.analog_n??"—")],
+      ["Duration",!!d.trade_window_ready,d.trade_window_ready?"ready":"wait"],
+      ["Deployment",!!b.compatible&&!!b.manifest_ready,b.compatible&&b.manifest_ready?"compatible":"wait"]
+    ];
+    content.innerHTML=
+      '<div class="inspector-hero signal-live-'+signal.toLowerCase()+'">'+
+        '<div class="eyebrow">Selected verdict</div>'+
+        '<div class="verdict '+cls(signal)+'">'+esc(signal)+'</div>'+
+        '<div class="decision-meta">'+esc(signal==="LONG"?"Bias LONG ammesso dal gate.":signal==="SHORT"?"Bias SHORT ammesso dal gate.":"Nessun edge robusto ammesso dal gate.")+'</div>'+
+        '<div class="inspector-grid">'+
+          '<div class="inspector-card"><div class="k">Prezzo</div><div class="v num">'+num(active.realtime_price??active.price,2)+'</div></div>'+
+          '<div class="inspector-card"><div class="k">Confidence</div><div class="v">'+pct(active.confidence,1)+'</div></div>'+
+          '<div class="inspector-card"><div class="k">Robust edge</div><div class="v num">'+(d.expected_return_lcb==null?"—":num(d.expected_return_lcb,4)+" / "+num(d.expected_return_ucb,4))+'</div></div>'+
+          '<div class="inspector-card"><div class="k">Holdout</div><div class="v">'+pct(h.total_return??h.net_compounded_return,2)+'</div></div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="inspector-section"><h3>Machine reasons</h3><div class="inspector-reasons">'+
+        (active.reason_codes||[]).slice(0,12).map(x=>'<span class="reason">'+esc(x)+'</span>').join("")+
+      '</div></div>'+
+      '<div class="inspector-section"><h3>Decision trace</h3><div class="inspector-trace">'+
+        trace.map(t=>'<div class="inspector-trace-row"><strong>'+t[0]+'</strong><span>'+t[2]+'</span>'+traceState(t[1],t[1]?"READY":"WAIT")+'</div>').join("")+
+      '</div></div>'+
+      '<div class="inspector-section"><h3>Provenance</h3>'+
+        '<div class="inspector-card"><div class="k">Training</div><div class="v">'+esc(b.training_rows??"—")+' rows</div><div class="small">'+esc(b.training_end??"—")+'</div></div>'+
+        '<div class="inspector-card" style="margin-top:8px"><div class="k">Compatibility</div><div class="small" style="margin-top:5px">'+esc(b.compatibility||"—")+'</div></div>'+
+        '<div class="inspector-code" style="margin-top:8px">dataset: '+esc(b.data_fingerprint||"—")+'<br>artifact: '+esc(b.artifact_fingerprint||"—")+'</div>'+
+      '</div>';
+  }
+  drawer.setAttribute("aria-hidden","false");
+  document.body.classList.add("drawer-open");
+}
+
+function closeInspector(){
+  const drawer=$("inspectorDrawer"); if(!drawer)return;
+  drawer.setAttribute("aria-hidden","true");
+  document.body.classList.remove("drawer-open");
+}
+
+function initInspector(){
+  $("inspectorClose")?.addEventListener("click",closeInspector);
+  $("inspectorBackdrop")?.addEventListener("click",closeInspector);
+  document.addEventListener("keydown",e=>{if(e.key==="Escape")closeInspector();});
+}
+
 function render(data){
   state.data=data;
   renderMetrics(data);
@@ -1029,7 +1324,7 @@ function render(data){
   }
   const signals=data.signals||[];
   populateAssets(signals);
-  renderRadar(signals); renderDetail(signals); renderJournal(data); renderEvidence(signals); renderDecisionDeck(signals); bindInteractiveRows();
+  renderRadar(signals); renderDetail(signals); renderJournal(data); renderEvidence(signals); renderDecisionDeck(signals); renderTimeline(signals,data.journal||[]); bindInteractiveRows();
   const notes=(data.notes||[]).join(" · ");
   $("footer").textContent=notes+" · refresh "+data.refresh_seconds+"s · scan "+data.scan_seconds+"s";
 }
@@ -1044,7 +1339,7 @@ function drawChart(history, signals, journal, realtimePrice){
   const ctx=canvas.getContext("2d"); ctx.scale(dpr,dpr);
   const W=rect.width,H=rect.height;
   ctx.clearRect(0,0,W,H);
-  const pad={l:58,r:18,t:18,b:32}, cw=W-pad.l-pad.r, ch=H-pad.t-pad.b;
+  const pad={l:58,r:18,t:18,b:46}, cw=W-pad.l-pad.r, ch=H-pad.t-pad.b;
   const lows=bars.map(x=>x.l), highs=bars.map(x=>x.h);
   let lo=Math.min(...lows), hi=Math.max(...highs);
   const rp=Number(realtimePrice); if(Number.isFinite(rp)){lo=Math.min(lo,rp);hi=Math.max(hi,rp);}
@@ -1055,6 +1350,15 @@ function drawChart(history, signals, journal, realtimePrice){
   ctx.strokeStyle="rgba(132,146,164,.14)";ctx.lineWidth=1;
   for(let i=0;i<=5;i++){const y=pad.t+(i/5)*ch;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();}
   ctx.font="10px system-ui";ctx.fillStyle="#718096";ctx.textAlign="right";
+  const volumeMax=Math.max(...bars.map(b=>Number(b.v)||0),1);
+  const volBase=H-14, volHeight=24;
+  bars.forEach((b,i)=>{
+    const x=xAt(i),vw=Math.max(1,candleW*.72),vh=((Number(b.v)||0)/volumeMax)*volHeight;
+    ctx.fillStyle=b.c>=b.o?"rgba(69,227,154,.12)":"rgba(255,111,136,.12)";
+    ctx.fillRect(x-vw/2,volBase-vh,vw,vh);
+  });
+  ctx.fillStyle="rgba(148,138,164,.42)";ctx.textAlign="left";ctx.fillText("VOL",pad.l,H-4);
+  
   for(let i=0;i<=5;i++){const v=hi-(i/5)*(hi-lo),y=pad.t+(i/5)*ch;ctx.fillText(v.toFixed(2),pad.l-8,y+3);}
   
   const candleW=Math.max(2,cw/bars.length*.62);
@@ -1090,20 +1394,33 @@ function drawChart(history, signals, journal, realtimePrice){
     ctx.fillStyle="#ffd166";ctx.textAlign="left";ctx.fillText("REALTIME",W-pad.r-64,y-6);
   }
 
-  ctx.strokeStyle="#78b8ff";ctx.lineWidth=1.7;ctx.beginPath();
-  bars.forEach((b,i)=>{const x=xAt(i),y=yAt(b.c);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();
+  const area=ctx.createLinearGradient(0,pad.t,0,pad.t+ch);
+  area.addColorStop(0,"rgba(120,184,255,.10)");area.addColorStop(1,"rgba(120,184,255,0)");
+  ctx.fillStyle=area;ctx.beginPath();
+  bars.forEach((b,i)=>{const x=xAt(i),y=yAt(b.c);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});
+  ctx.lineTo(xAt(bars.length-1),pad.t+ch);ctx.lineTo(xAt(0),pad.t+ch);ctx.closePath();ctx.fill();
+  ctx.strokeStyle="#78b8ff";ctx.lineWidth=1.7;ctx.shadowColor="rgba(120,184,255,.24)";ctx.shadowBlur=7;ctx.beginPath();
+  bars.forEach((b,i)=>{const x=xAt(i),y=yAt(b.c);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();ctx.shadowBlur=0;
 
   const first=new Date(bars[0].t), last=new Date(bars[bars.length-1].t);
   ctx.fillStyle="#718096";ctx.textAlign="left";ctx.fillText(first.toLocaleDateString(),pad.l,H-8);ctx.textAlign="right";ctx.fillText(last.toLocaleDateString(),W-pad.r,H-8);
 
+  const regimeBadge=$("chartRegime");
+  const activeSignal=(signals||[]).find(x=>x.symbol===state.selected);
+  if(regimeBadge)regimeBadge.textContent="REGIME · "+esc((activeSignal&&activeSignal.decision&&activeSignal.decision.regime)||"—");
   canvas.onmousemove=(ev)=>{
     const r=canvas.getBoundingClientRect(), mx=ev.clientX-r.left;
     const idx=Math.max(0,Math.min(bars.length-1,Math.round((mx-pad.l)/cw*(bars.length-1))));
-    const b=bars[idx], x=xAt(idx);
+    const b=bars[idx], x=xAt(idx), y=yAt(b.c);
     const cur=$("cursor");cur.style.display="block";cur.style.left=Math.min(W-150,Math.max(8,x+10))+"px";cur.style.top="12px";
     cur.innerHTML=new Date(b.t).toLocaleString()+"<br>O "+num(b.o,2)+" · H "+num(b.h,2)+" · L "+num(b.l,2)+" · C "+num(b.c,2);
+    const chrome=$("chartCrosshair"), cx=$("crossX"), cy=$("crossY"), badge=$("crossBadge");
+    if(chrome){chrome.style.display="block";cx.style.transform=`translate3d(${x}px,0,0)`;cy.style.transform=`translate3d(0,${y}px,0)`;badge.textContent=new Date(b.t).toLocaleString()+" · "+num(b.c,2);}
   };
-  canvas.onmouseleave=()=>{$("cursor").style.display="none";};
+  canvas.onmouseleave=()=>{
+    $("cursor").style.display="none";
+    $("chartCrosshair").style.display="none";
+  };
 }
 
 let quoteBusy=false;
@@ -1170,12 +1487,13 @@ function scheduleRefresh(seconds){
   refreshTimer=setInterval(()=>refresh(false),Math.max(10,Number(seconds||20))*1000);
 }
 $("refresh").addEventListener("click",()=>refresh(true));
-$("asset").addEventListener("change",()=>{state.selected=$("asset").value;loadHistory(state.selected);});
+$("asset").addEventListener("change",()=>{state.selected=$("asset").value;loadHistory(state.selected);renderTimeline((state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[]);});
 $("range").addEventListener("change",()=>loadHistory(state.selected));
 window.addEventListener("resize",()=>{if(state.history)drawChart(state.history,(state.data&&state.data.signals)||[],(state.data&&state.data.journal)||[],(state.data&&state.data.signals||[]).find(x=>x.symbol===state.selected)?.realtime_price);});
 initAmbientFX();
 initAlphaMotion();
 initNavigation();
+initInspector();
 refresh(true);
 setInterval(()=>loadQuote(state.selected),5000);
 </script>
