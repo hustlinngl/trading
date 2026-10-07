@@ -559,7 +559,7 @@ HTML = r"""<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
 <meta http-equiv="X-Content-Type-Options" content="nosniff">
-<title>Adaptive AI Signal Terminal</title>
+<title>Signal Monitor</title>
 <style>
 :root{
   --bg:#07050b;--panel:#100d18;--panel2:#151020;--line:#2a2035;
@@ -838,6 +838,46 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
 .history-badge{padding:4px 8px;border-radius:999px;background:rgba(125,232,255,.06);border:1px solid rgba(125,232,255,.12);color:#9eeeff}.top5-empty{padding:48px 24px;text-align:center;border:1px dashed rgba(255,120,200,.18);border-radius:18px;background:rgba(255,255,255,.015)}
 .legacy-hidden{display:none!important}@media(max-width:980px){.top5-grid{grid-template-columns:1fr}.pick-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:640px){.wrap{padding:16px 12px 40px}.focus-only .top5-title{font-size:23px}.pick-chart{height:190px}}@media(prefers-reduced-motion:reduce){.pick-card{transition:none}}
 </style>
+<style>
+/* Product-clean pass */
+:root{--bg:#090b0f;--panel:#10141a;--panel2:#141922;--line:#232a35;--text:#edf1f5;--muted:#7f8997;--green:#55d79a;--red:#f2768e;--amber:#e7bc62;--blue:#79b5f0;--pink:#e58ab8;--pink2:#aa73c4;--cyan:#80c9dd;--shadow:0 16px 42px rgba(0,0,0,.22)}
+body{background:linear-gradient(180deg,#0a0c10 0%,#090b0f 100%)}
+body::before{display:none}
+.wrap{max-width:1380px;padding:28px 28px 48px}
+.top{align-items:center;margin-bottom:22px}
+.eyebrow{letter-spacing:.14em;color:#77818e}
+h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
+.sub{max-width:820px;font-size:13px;color:#858f9c}
+.actions button{background:#121820;border-color:#28303b;border-radius:9px;box-shadow:none;padding:8px 12px}
+.actions button:hover{border-color:#3c4654;box-shadow:0 4px 16px rgba(0,0,0,.18);transform:none}
+.actions button::after{display:none}
+.focus-only .top5-head{margin:4px 0 14px;padding-bottom:13px;border-bottom:1px solid var(--line)}
+.focus-only .top5-title{font-size:22px;font-weight:700;letter-spacing:-.015em}
+.focus-only .top5-sub{margin-top:4px;max-width:720px;font-size:12px;color:#737e8b}
+.top5-grid{grid-template-columns:repeat(3,minmax(280px,1fr));gap:12px}
+.pick-card{border:1px solid #222a34;border-radius:12px;background:#10141a;box-shadow:none;transition:border-color .16s ease,background .16s ease}
+.pick-card::before{display:none}
+.pick-card:hover{transform:none;border-color:#34404e;box-shadow:0 8px 26px rgba(0,0,0,.18)}
+.pick-head{padding:14px 14px 10px}
+.pick-rank{font-size:10px;letter-spacing:.12em;color:#6f7986}
+.pick-symbol{font-size:17px;font-weight:720}
+.pick-signal{font-size:11px;padding:5px 8px;border-radius:7px;box-shadow:none}
+.pick-stats{grid-template-columns:repeat(4,1fr);gap:5px;padding:0 14px 10px}
+.pick-stat{padding:7px 8px;border-radius:7px;background:#0d1116}
+.pick-stat .k{font-size:8px;letter-spacing:.08em;color:#697481}
+.pick-stat .v{margin-top:3px;font-size:12px;font-weight:670}
+.pick-chart{height:165px;padding:0 4px 4px}
+.pick-foot{padding:9px 14px 12px;border-top:1px solid #1b222c;font-size:10px;color:#697481}
+.history-badge{padding:3px 6px;border-radius:5px;background:transparent;border:1px solid #252d38;color:#7e8996}
+.top5-empty{padding:56px 20px;border:1px dashed #2a313b;border-radius:12px;background:#0d1116}
+.top5-empty h2{font-size:18px;font-weight:680}
+#ambient-canvas{opacity:.10}
+#pointer-aura{opacity:.38}
+#anime-cursor{filter:drop-shadow(0 0 6px rgba(229,138,184,.28));width:40px;height:40px}
+.click-ripple{border-color:rgba(229,138,184,.38);box-shadow:none}
+@media(max-width:1050px){.top5-grid{grid-template-columns:repeat(2,minmax(280px,1fr))}}
+@media(max-width:700px){.wrap{padding:20px 14px 34px}.top5-grid{grid-template-columns:1fr}.pick-chart{height:150px}}
+</style>
 </head>
 <body>
 <canvas id="ambient-canvas" aria-hidden="true"></canvas>
@@ -859,12 +899,12 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
 <div class="wrap">
   <div class="top">
     <div>
-      <div class="eyebrow">Pre-alpha · signal intelligence · sakura tactical</div>
-      <h1>Adaptive AI Signal Terminal</h1>
-      <div class="sub">Radar read-only basato sul training del repository: dati pubblici, gate conservativi, provenance verificata e feedback prequentiale. Nessuna funzione di esecuzione ordini.</div>
+      <div class="eyebrow">Signal monitor · 15m</div>
+      <h1>Signal Monitor</h1>
+      <div class="sub">Closed-candle signals, live market quote e storico delle evidenze. Solo segnali che superano i controlli correnti.</div>
     </div>
     <div class="actions">
-      <div class="operator-badge" aria-hidden="true">
+      <div class="operator-badge" aria-hidden="true" style="display:none">
         <div class="operator-art">
           <svg viewBox="0 0 64 64" fill="none">
             <path d="M8 52L54 13" stroke="#ff78c8" stroke-width="2.1" stroke-linecap="round"/>
@@ -880,7 +920,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
         <div class="operator-copy"><strong>SAKURA</strong><span>WATCHER // ONLINE</span></div>
       </div>
       <span id="stamp">Connessione…</span>
-      <button id="refresh">Aggiorna</button>
+      <button id="refresh">Refresh</button>
     </div>
   </div>
 
@@ -896,7 +936,7 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
 
   <section class="focus-only" id="focusDashboard" aria-live="polite">
     <div class="top5-head">
-      <div><div class="eyebrow">Live signal surface · verified only</div><div class="top5-title">Top 5 Picks</div><div class="top5-sub">Solo LONG/SHORT che superano il gate corrente. Ogni pick mostra il proprio storico; WAIT e asset senza evidenza valida non vengono presentati come pick.</div></div>
+      <div><div class="eyebrow">Current signals</div><div class="top5-title">Top 5</div><div class="top5-sub">Solo LONG e SHORT attivi. I dati restano separati dalla decisione del modello.</div></div>
       <span id="focusStatus" class="pill warn">SCANSIONE…</span>
     </div>
     <div id="top5Grid" class="top5-grid"></div>
@@ -1189,27 +1229,27 @@ function renderFocus(data){
   const box=$("top5Grid"),status=$("focusStatus");
   if(!box)return;
   if(!data.ok){
-    box.innerHTML='<div class="top5-empty"><div class="eyebrow">TERMINAL ERROR</div><h2 style="margin:8px 0 6px">Nessun dato disponibile</h2><div class="small">'+esc(data.error||"Errore nel terminale locale")+'</div></div>';
-    status.textContent="OFFLINE";status.className="pill warn";return;
+    box.innerHTML='<div class="top5-empty"><div class="eyebrow">Offline</div><h2 style="margin:8px 0 6px">Market data unavailable</h2><div class="small">'+esc(data.error||"Il terminale locale non è disponibile.")+'</div></div>';
+    status.textContent="offline";status.className="pill warn";return;
   }
   const picks=(data.signals||[]).filter(x=>x.signal==="LONG"||x.signal==="SHORT").slice(0,5);
   if(!picks.length){
-    box.innerHTML='<div class="top5-empty"><div class="eyebrow">NO VERIFIED PICK</div><h2 style="margin:8px 0 6px">Nessuna pick qualificata</h2><div class="small">Il gate non ha prodotto un LONG/SHORT sufficientemente validato. Non mostro WAIT o dati tecnici come se fossero opportunità.</div></div>';
-    status.textContent="0 VERIFIED PICKS";status.className="pill warn";return;
+    box.innerHTML='<div class="top5-empty"><div class="eyebrow">No active signals</div><h2 style="margin:8px 0 6px">Nessun segnale</h2><div class="small">Il gate corrente non trova un LONG o SHORT abbastanza solido da mostrare.</div></div>';
+    status.textContent="0 signals";status.className="pill warn";return;
   }
-  status.textContent=picks.length+" VERIFIED PICKS";status.className="pill good";
+  status.textContent=picks.length+" signal"+(picks.length===1?"":"s");status.className="pill good";
   box.innerHTML=picks.map((r,i)=>{
     const d=r.decision||{};
     return '<article class="pick-card pick-'+(r.signal==="LONG"?"long":"short")+'" data-focus-symbol="'+esc(r.symbol)+'">'+
-      '<div class="pick-head"><div><div class="pick-rank">PICK #'+(i+1)+'</div><div class="pick-symbol">'+esc(r.symbol)+'</div></div><span class="pick-signal '+cls(r.signal)+'">'+esc(r.signal)+'</span></div>'+
+      '<div class="pick-head"><div><div class="pick-rank">#'+(i+1)+'</div><div class="pick-symbol">'+esc(r.symbol)+'</div></div><span class="pick-signal '+cls(r.signal)+'">'+esc(r.signal)+'</span></div>'+
       '<div class="pick-stats">'+
-      '<div class="pick-stat"><div class="k">Prezzo</div><div class="v">'+num(r.realtime_price??r.price,2)+'</div></div>'+
+      '<div class="pick-stat"><div class="k">Price</div><div class="v">'+num(r.realtime_price??r.price,2)+'</div></div>'+
       '<div class="pick-stat"><div class="k">Confidence</div><div class="v">'+pct(r.confidence,1)+'</div></div>'+
       '<div class="pick-stat"><div class="k">Expected</div><div class="v">'+pct(r.expected_return,2)+'</div></div>'+
-      '<div class="pick-stat"><div class="k">Data</div><div class="v">'+age(d.data_age_minutes)+'</div></div>'+
+      '<div class="pick-stat"><div class="k">Age</div><div class="v">'+age(d.data_age_minutes)+'</div></div>'+
       '</div>'+
       '<div class="pick-chart"><canvas data-pick-chart="'+esc(r.symbol)+'"></canvas></div>'+
-      '<div class="pick-foot"><span>15m · close confermati</span><span class="history-badge" data-history-badge="'+esc(r.symbol)+'">storico…</span></div>'+
+      '<div class="pick-foot"><span>15m · closed candles</span><span class="history-badge" data-history-badge="'+esc(r.symbol)+'">240 bars</span></div>'+
       '</article>';
   }).join("");
   loadFocusHistories(picks);
@@ -1233,7 +1273,7 @@ async function loadFocusHistories(picks){
     const badge=Array.from(document.querySelectorAll("[data-history-badge]")).find(el=>el.dataset.historyBadge===r.symbol);
     if(canvas)drawPickChart(canvas,h,r.signal);
     if(badge){
-      const labels={network:"LIVE",local_cache:"CACHE",bundled:"BUNDLED",unavailable:"OFFLINE"};
+      const labels={network:"live",local_cache:"cache",bundled:"bundled",unavailable:"offline"};
       badge.textContent=labels[h.source]||"—";
     }
   });
