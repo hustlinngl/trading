@@ -527,8 +527,17 @@ def main():
     elif cache_path.exists():
         df=load_cached(cache_path, timeframe=s.timeframe)
     else:
-        ex = exchange_client(getattr(s, 'exchange', 'binance'), sandbox=False)
-        df=fetch_ohlcv(ex,s.symbol,s.timeframe,s.lookback_bars); cache_ohlcv(df,cache_path)
+        # Training commands may run in restricted/offline CI where Binance's REST API
+        # is unavailable even though bundled historical data has already been staged.
+        bundled_path = Path('data/historical') / (
+            f"{s.symbol.replace('/','_').replace(':','_')}_{s.timeframe}.csv"
+        )
+        if bundled_path.exists():
+            from .dataset import read_market_file
+            df = read_market_file(bundled_path)
+        else:
+            ex = exchange_client(getattr(s, 'exchange', 'binance'), sandbox=False)
+            df=fetch_ohlcv(ex,s.symbol,s.timeframe,s.lookback_bars); cache_ohlcv(df,cache_path)
     if args.command == 'train':
         validate_research_data(df, s)
         asset_dir, art = train_base_asset(df, s)
