@@ -258,6 +258,12 @@ def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
         "model_provenance_present":bool(meta.get("data_fingerprint")) and bool(meta.get("model_semantics_fingerprint")) and bool(meta.get("deployment_semantics_fingerprint")),
         "deployment_semantics_match":str(meta.get("deployment_semantics_fingerprint"))==deployment_semantics_fingerprint(settings),
         "holdout_report_present":bool(base),
+        "holdout_provenance_match":(
+            bool(base)
+            and str(base.get("data_fingerprint"))==str(meta.get("data_fingerprint"))
+            and str(base.get("symbol"))==str(getattr(settings,"symbol",""))
+            and str(base.get("timeframe"))==str(getattr(settings,"timeframe",""))
+        ),
         "holdout_trade_support":int(h.get("trades_taken",h.get("trades",0)))>=int(getattr(settings,"base_min_holdout_trades",20)),
         "positive_holdout_return":float(h.get("net_compounded_return",h.get("total_return",h.get("return",-1.0))))>0.0 if bool(getattr(settings,"base_require_positive_holdout_return",True)) else True,
         "profit_factor":float(h.get("profit_factor",0.0))>=float(getattr(settings,"base_min_holdout_profit_factor",1.0)),
