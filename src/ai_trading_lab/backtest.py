@@ -140,7 +140,8 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
         close = float(row['close']); open_ = float(row['open'])
         high = float(row.get('high', close)); low = float(row.get('low', close))
         prev_row = df.iloc[i - 1] if i > 0 else None
-        atr = float(prev_row.get('atr_14', np.nan)) if prev_row is not None else np.nan
+        prev_atr = prev_row.get('atr_14', np.nan) if prev_row is not None else np.nan
+        atr = float(prev_atr) if pd.notna(prev_atr) else np.nan
         if not np.isfinite(atr) or atr <= 0:
             atr = max((float(prev_row['close']) if prev_row is not None else close) * 0.01, 1e-8)
         if prev_row is not None:
