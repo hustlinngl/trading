@@ -190,7 +190,11 @@ class Settings:
     master_audit_folds: int = 18
     master_optimization_folds: int = 6
     historical_sources: tuple[str, ...] = ("binance", "fred", "sec", "cftc", "treasury", "alpha_vantage")
-    live_symbols: tuple[str, ...] = (\n        "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT",\n        "ADA/USDT", "DOGE/USDT", "AVAX/USDT", "LINK/USDT", "DOT/USDT",\n        "LTC/USDT", "BCH/USDT", "ATOM/USDT", "UNI/USDT", "ETC/USDT",\n    )
+    live_symbols: tuple[str, ...] = (
+        "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT",
+        "ADA/USDT", "DOGE/USDT", "AVAX/USDT", "LINK/USDT", "DOT/USDT",
+        "LTC/USDT", "BCH/USDT", "ATOM/USDT", "UNI/USDT", "ETC/USDT",
+    )
 
 
 def load_settings(path: str | Path = ROOT / "config.yaml") -> Settings:
@@ -208,7 +212,7 @@ def load_settings(path: str | Path = ROOT / "config.yaml") -> Settings:
         timeframe=os.getenv("TIMEFRAME", d.get("timeframe", "15m")),
         research_timeframe=str(d.get("research_timeframe", d.get("timeframe", "15m"))),
         broad_timeframe=str(d.get("broad_timeframe", "1d")),
-        lookback_bars=int(os.getenv("LOOKBACK_BARS", d.get("lookback_bars", 8000))),
+        lookback_bars=int(os.getenv("LOOKBACK_BARS", d.get("lookback_bars", 30000))),
         horizon_bars=int(d.get("horizon_bars", 8)),
         min_train_rows=int(d.get("min_train_rows", 1500)),
         retrain_every_bars=int(d.get("retrain_every_bars", 96)),
@@ -267,7 +271,7 @@ def load_settings(path: str | Path = ROOT / "config.yaml") -> Settings:
         paper_only=_bool(os.getenv("PAPER_ONLY", d.get("paper_only", True))),
         sandbox=_bool(os.getenv("SANDBOX", d.get("sandbox", True))),
         poll_seconds=int(d.get("poll_seconds", 60)),
-        live_lookback_bars=int(d.get("live_lookback_bars", 600)),
+        live_lookback_bars=int(d.get("live_lookback_bars", 1200)),
         live_max_symbols=int(d.get("live_max_symbols", 0)),
         live_market_types=tuple(d.get("live_market_types", ("spot", "swap", "future", "margin", "option")) or ("spot", "swap", "future", "margin")),
         live_default_refresh_seconds=int(d.get("live_default_refresh_seconds", 60)),
@@ -362,12 +366,12 @@ def load_settings(path: str | Path = ROOT / "config.yaml") -> Settings:
         force_daily_loss_exit=_bool(d.get("force_daily_loss_exit", True)),
         online_warmup_rows=int(d.get("online_warmup_rows", 64)),
         universe_manifest=str(d.get("universe_manifest", "data/real_universe/manifest.json")),
-        max_parallel_downloads=int(d.get("max_parallel_downloads", 6)),
-        broad_crypto_symbol_cap=int(d.get("broad_crypto_symbol_cap", 250)),
-        intraday_research_top_n=int(d.get("intraday_research_top_n", 10)),
+        max_parallel_downloads=int(d.get("max_parallel_downloads", 10)),
+        broad_crypto_symbol_cap=int(d.get("broad_crypto_symbol_cap", 500)),
+        intraday_research_top_n=int(d.get("intraday_research_top_n", 30)),
         final_holdout_frac=float(d.get("final_holdout_frac", 0.15)),
         master_audit_folds=int(d.get("master_audit_folds", 18)),
         master_optimization_folds=int(d.get("master_optimization_folds", 6)),
         historical_sources=tuple(d.get("historical_sources", ("binance", "fred", "sec", "cftc", "treasury", "alpha_vantage")) or ()),
-        live_symbols=tuple(d.get("live_symbols", ("BTC/USDT", "ETH/USDT", "SOL/USDT")) or ()),
+        live_symbols=tuple(d.get("live_symbols", ("BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT", "DOGE/USDT", "AVAX/USDT", "LINK/USDT", "DOT/USDT", "LTC/USDT", "BCH/USDT", "ATOM/USDT", "UNI/USDT", "ETC/USDT")) or ()),
     )
