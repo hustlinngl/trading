@@ -736,15 +736,8 @@ class SignalTerminal:
                 universe_meta.get("universe_model_eligible", len(signals))
             )
             fresh = sum(
-                float((x.get("decision") or {}).get("data_age_minutes", 1e9))
-                <= float(
-                    getattr(
-                        self.settings, "live_max_data_age_minutes", 30.0
-                    )
-                )
-                for x in signals
-                if (x.get("decision") or {}).get("data_age_minutes")
-                is not None
+                age <= float(getattr(self.settings, "live_max_data_age_minutes", 30.0))
+                for age in ages
             )
 
             state = {
@@ -2278,6 +2271,13 @@ function render(data){
   const liveSymbols=((data.market_data||{}).symbols||[]).filter(Boolean);
   populateAssets(signals,liveSymbols);
   renderRadar(signals);
+  renderLiveData(data);
+  const coverage=(data.summary&&data.summary.universe_total!=null)?Number(data.summary.universe_total):null;
+  const covered=(data.summary&&data.summary.model_backed_assets!=null)?Number(data.summary.model_backed_assets):null;
+  const coverageNode=$("coverageSummary");
+  if(coverageNode){
+    coverageNode.textContent=coverage==null?"—":coverage+" markets · "+(covered==null?"—":covered+" model-ready");
+  }
   const notes=(data.notes||[]).join(" · ");
   $("footer").textContent=notes+" · refresh "+data.refresh_seconds+"s · scan "+data.scan_seconds+"s";
   if(!data.scan_in_progress && state.selected && !state.history)loadHistory(state.selected);
@@ -2361,7 +2361,7 @@ function drawChart(history, signals, journal, realtimePrice){
 
   const regimeBadge=$("chartRegime");
   const activeSignal=(signals||[]).find(x=>x.symbol===state.selected);
-  if(regimeBadge)regimeBadge.textContent="REGIME · "+esc((activeSignal&&activeSignal.decision&&activeSignal.decision.regime)||"—");
+  if(regimeBadge)regimeBadge.textContent="SIGNAL · "+esc((activeSignal&&activeSignal.signal)||"—");
   canvas.onmousemove=(ev)=>{
     const r=canvas.getBoundingClientRect(), mx=ev.clientX-r.left;
     const idx=Math.max(0,Math.min(bars.length-1,Math.round((mx-pad.l)/cw*(bars.length-1))));
