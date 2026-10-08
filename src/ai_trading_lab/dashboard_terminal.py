@@ -1254,8 +1254,6 @@ h1{font-size:32px;letter-spacing:-.025em;margin:5px 0 7px;font-weight:760}
 .click-ripple{border-color:rgba(229,138,184,.38);box-shadow:none}
 @media(max-width:1050px){.top5-grid{grid-template-columns:repeat(2,minmax(280px,1fr))}.pick-primary{grid-column:span 2}}
 @media(max-width:700px){.wrap{padding:20px 14px 34px}.top5-grid{grid-template-columns:1fr}.pick-primary{grid-column:span 1}.pick-chart,.pick-primary .pick-chart{height:150px}}
-<style>
-</style>
 </style>
 
 <style>
