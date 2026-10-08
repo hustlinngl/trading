@@ -92,8 +92,14 @@ def train_base_asset(df, settings, *, promote_champion: bool = False):
         "deployment_semantics_fingerprint": deployment_semantics_fingerprint(settings),
         "trained_at": datetime.now(timezone.utc).isoformat(),
     }, indent=2), encoding="utf-8")
-    refresh_deployment_manifest(settings)
+    deployment = refresh_deployment_manifest(settings)
     if promote_champion:
+        if not bool(deployment.get("ready")):
+            failed = [name for name, ok in deployment.get("checks", {}).items() if not bool(ok)]
+            raise RuntimeError(
+                f"Refusing champion promotion for {settings.symbol}: deployment evidence is not ready"
+                + (f" ({', '.join(failed)})" if failed else "")
+            )
         _promote_asset_bundle(asset_dir)
     return asset_dir, art
 
