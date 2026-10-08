@@ -19,7 +19,7 @@ concurrency:
 jobs:
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
@@ -82,6 +82,22 @@ jobs:
               print(symbol, len(frame), frame["timestamp"].min(), frame["timestamp"].max())
           PY
 
+      - name: Train and validate bundled signal assets
+        shell: bash
+        run: |
+          python -m ai_trading_lab.main train-complete-all --config config.yaml --holdout-frac 0.15
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path("logs/train_complete_all_report.json").read_text(encoding="utf-8"))
+          expected = {"BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT","ADA/USDT","DOGE/USDT","AVAX/USDT","LINK/USDT","DOT/USDT","LTC/USDT","BCH/USDT","ATOM/USDT","UNI/USDT","ETC/USDT"}
+          trained = {str(row.get("symbol")) for row in report if row.get("status") == "trained"}
+          missing = sorted(expected - trained)
+          if missing:
+              raise RuntimeError(f"Bundled model training did not produce all expected assets: {missing}")
+          print("bundled-model-assets-ok", len(trained))
+          PY
+
       - name: Verify dashboard imports
         shell: bash
         run: |
@@ -117,6 +133,9 @@ jobs:
           Copy-Item .\config.yaml .\dist\config.yaml
           New-Item -ItemType Directory -Force -Path .\dist\data\historical | Out-Null
           Copy-Item .\data\historical\*.csv .\dist\data\historical\
+          New-Item -ItemType Directory -Force -Path .\dist\models\assets | Out-Null
+          Copy-Item .\models\assets\* .\dist\models\assets\ -Recurse -Force
+          Write-Host "Staged config, bundled history, and validated model assets beside the exact user-facing EXE."
           Write-Host "Staged config and bundled history beside the exact user-facing EXE."
 
       - name: Smoke test frozen executable
@@ -162,6 +181,10 @@ jobs:
             if (-not $page.Content.Contains("Top 5 signals")) { throw "Packaged dashboard does not contain the focused Top 5 signals surface" }
             if (-not $page.Content.Contains("pick-stat-meter")) { throw "Packaged dashboard is missing the confidence result meter" }
             if (-not $health.ok) { throw "Packaged health endpoint did not report ok=true" }
+            $state = Invoke-RestMethod -Uri "http://127.0.0.1:$port/api/state?force=1" -TimeoutSec 20
+            if ([int]$state.summary.model_backed_assets -lt 15) {
+              throw "Packaged executable started but did not load all 15 bundled model assets: $($state.summary.model_backed_assets)"
+            }
 
             $symbols = @(
               "BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT",
@@ -185,6 +208,8 @@ jobs:
           Copy-Item .\config.yaml .\release\config.yaml
           New-Item -ItemType Directory -Force -Path .\release\data\historical | Out-Null
           Copy-Item .\data\historical\*.csv .\release\data\historical\
+          New-Item -ItemType Directory -Force -Path .\release\models\assets | Out-Null
+          Copy-Item .\models\assets\* .\release\models\assets\ -Recurse -Force
           Copy-Item .\SETUP_WINDOWS.md .\release\SETUP_WINDOWS.md
           Copy-Item .\README.md .\release\README.md
           @"
@@ -194,8 +219,8 @@ jobs:
           The executable is read-only: it exposes no order endpoints.
           
           Keep config.yaml beside the EXE.
-          Trained model bundles are intentionally external and should remain
-          beside the executable in the repository's expected model layout.
+          Validated model bundles are shipped beside the executable under
+          models/assets/<SYMBOL>/ and are checked before live signals are emitted.
           "@ | Set-Content .\release\RUN.txt -Encoding UTF8
 
       - name: Upload Windows package
