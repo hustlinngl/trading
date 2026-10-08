@@ -167,7 +167,7 @@ def test_signal_terminal_publishes_market_data_without_model_signals(tmp_path, m
 
 
 
-def test_signal_terminal_uses_discovered_market_universe_for_realtime_quotes(tmp_path, monkeypatch):
+def test_signal_terminal_quotes_visible_symbols_without_scanning_all_tickers(tmp_path, monkeypatch):
     import signal_dashboard as terminal_mod
 
     settings = load_settings("config.yaml")
@@ -175,16 +175,14 @@ def test_signal_terminal_uses_discovered_market_universe_for_realtime_quotes(tmp
     seen = {}
 
     class FakeExchange:
-        def fetch_tickers(self):
-            seen["called_without_symbols"] = True
+        def fetch_tickers(self, symbols):
+            seen["symbols"] = list(symbols)
             return {
                 "BTC/USDT": {"last": 100.0, "bid": 99.9, "ask": 100.1, "timestamp": 1},
-                "ETH/USDT": {"last": 5.0, "bid": 4.9, "ask": 5.1, "timestamp": 1},
-                "SOL/USDT": {"last": 2.0, "bid": 1.9, "ask": 2.1, "timestamp": 1},
             }
 
         def fetch_ticker(self, symbol):
-            raise AssertionError("exchange-wide ticker path should cover discovered universe")
+            raise AssertionError("targeted visible-quote path should avoid per-symbol fallback")
 
     monkeypatch.setattr(
         terminal_mod, "exchange_client", lambda *args, **kwargs: FakeExchange()
@@ -213,10 +211,81 @@ def test_signal_terminal_uses_discovered_market_universe_for_realtime_quotes(tmp
     terminal = terminal_mod.SignalTerminal(settings, tmp_path, refresh_seconds=30)
     state = terminal._terminal_state(force=True)
 
-    assert seen["called_without_symbols"] is True
+    assert seen["symbols"] == ["BTC/USDT"]
     assert len(state["market_data"]["symbols"]) == 150
-    assert state["market_data"]["quotes"]["ETH/USDT"]["price"] == 5.0
+    assert state["market_data"]["quote_symbols"] == ["BTC/USDT"]
+    assert state["market_data"]["quotes"]["BTC/USDT"]["price"] == 100.0
 
+
+def test_signal_terminal_preserves_engine_top5_order(tmp_path, monkeypatch):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    settings.live_symbols = ("A/USDT", "B/USDT")
+    first = LiveAssessment(
+        "A/USDT", "2026-10-07T00:00:00+00:00", "SIGNAL", "LONG",
+        0.71, 0.02, 10.0, [], "fp",
+        {"selection_score": 0.95, "data_age_minutes": 1.0},
+    )
+    second = LiveAssessment(
+        "B/USDT", "2026-10-07T00:00:00+00:00", "SIGNAL", "LONG",
+        0.99, 0.01, 20.0, [], "fp",
+        {"selection_score": 0.20, "data_age_minutes": 1.0},
+    )
+    monkeypatch.setattr(
+        terminal_mod,
+        "scan_top5",
+        lambda *args, **kwargs: ([first, second], {
+            "universe_total": 2,
+            "universe_model_backed": 2,
+            "universe_model_eligible": 2,
+            "universe_evaluated": 2,
+            "universe_signals": 2,
+            "universe_waits": 0,
+            "assessment_failures": 0,
+            "market_symbols": ["A/USDT", "B/USDT"],
+            "market_counts": {"spot": 2},
+        }),
+    )
+    monkeypatch.setattr(terminal_mod, "update_live_signal_outcomes", lambda *args, **kwargs: {"updated": 0, "open": 2, "closed": 0})
+    monkeypatch.setattr(terminal_mod, "exchange_client", lambda *args, **kwargs: object())
+
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path, refresh_seconds=30)
+    state = terminal._terminal_state(force=True)
+
+    assert [row["symbol"] for row in state["signals"]] == ["A/USDT", "B/USDT"]
+    assert state["signals"][0]["confidence"] == 0.71
+
+
+def test_signal_terminal_freshness_uses_internal_assessment_metadata(tmp_path, monkeypatch):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    settings.live_symbols = ("BTC/USDT",)
+    assessment = LiveAssessment(
+        "BTC/USDT", "2026-10-07T00:00:00+00:00", "SIGNAL", "LONG",
+        0.91, 0.006, 100.0, [], "fp",
+        {"data_age_minutes": 1.0},
+    )
+    monkeypatch.setattr(
+        terminal_mod,
+        "scan_top5",
+        lambda *args, **kwargs: ([assessment], {
+            "universe_total": 1,
+            "universe_model_backed": 1,
+            "universe_model_eligible": 1,
+            "universe_evaluated": 1,
+            "universe_signals": 1,
+            "universe_waits": 0,
+            "assessment_failures": 0,
+            "market_symbols": ["BTC/USDT"],
+            "market_counts": {"spot": 1},
+        }),
+    )
+    monkeypatch.setattr(terminal_mod, "update_live_signal_outcomes", lambda *args, **kwargs: {"updated": 0, "open": 1, "closed": 0})
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path, refresh_seconds=30)
+    state = terminal._terminal_state(force=True)
+    assert state["summary"]["fresh_data_assets"] == 1
 
 def test_bootstrap_command_is_available():
     from ai_trading_lab import main as main_mod
