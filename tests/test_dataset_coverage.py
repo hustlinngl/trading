@@ -61,3 +61,19 @@ def test_champion_promotion_requires_deployment_readiness():
     source = Path("src/ai_trading_lab/main.py").read_text(encoding="utf-8")
     assert 'Refusing champion promotion' in source
     assert 'deployment.get("ready")' in source
+
+def test_holdout_report_records_temporal_validation_provenance():
+    from pathlib import Path
+    source = Path("src/ai_trading_lab/main.py").read_text(encoding="utf-8")
+    assert "validation_train_data_fingerprint" in source
+    assert "validation_holdout_data_fingerprint" in source
+    assert "validation_holdout_start" in source
+    assert "model_semantics_fingerprint" in source
+
+
+def test_deployment_requires_validation_recipe_match():
+    from pathlib import Path
+    source = Path("src/ai_trading_lab/deployment.py").read_text(encoding="utf-8")
+    assert 'base.get("model_semantics_fingerprint")' in source
+    assert 'base.get("deployment_semantics_fingerprint")' in source
+    assert 'validation_train_data_fingerprint' in source
