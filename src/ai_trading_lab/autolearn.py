@@ -1,5 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
+import shutil, tempfile
 import json, numpy as np, pandas as pd
 from .engine import AdaptiveEngine
 from .research import walk_forward
@@ -121,6 +122,13 @@ def auto_update(df,settings,model_dir="models"):
         "data_fingerprint":fp,
     }
     if gate["approved"]:
+        # Stage the candidate in the canonical bundle only after a gated holdout.
+        # Keep a byte-for-byte rollback because deployment readiness depends on the
+        # actual persisted artifacts, not merely on the research score.
+        backup_dir = Path(tempfile.mkdtemp(prefix="autolearn-backup-"))
+        for existing in mdir.iterdir():
+            if existing.is_file():
+                shutil.copy2(existing, backup_dir / existing.name)
         engine=AdaptiveEngine(settings)
         engine.fit(df)
         engine.save(mdir)
@@ -146,6 +154,13 @@ def auto_update(df,settings,model_dir="models"):
             "holdout_rows":int(holdout.get("holdout_rows",0)),
             "holdout":holdout.get("stats",{}),
             "utility":float(holdout.get("utility",-np.inf)),
+            "model_semantics_fingerprint":model_semantics,
+            "deployment_semantics_fingerprint":deployment_semantics,
+            "validation_train_data_fingerprint":strong_dataset_fingerprint(df.iloc[:len(df)-int(holdout.get("holdout_rows",0))]),
+            "validation_holdout_data_fingerprint":strong_dataset_fingerprint(df.iloc[len(df)-int(holdout.get("holdout_rows",0)):]),
+            "validation_holdout_start":str(df.index[-int(holdout.get("holdout_rows",0))]),
+            "validation_holdout_end":str(df.index[-1]),
+            "validation_holdout_frac":float(getattr(settings,"final_holdout_frac",0.15)),
         },indent=2,default=str),encoding="utf-8")
         try:
             from .trade_window import train_trade_window_backbone
@@ -175,6 +190,18 @@ def auto_update(df,settings,model_dir="models"):
         result["deployment_manifest"]=deployment_manifest
         result["deployment_ready"]=bool(deployment_manifest.get("ready",False))
         result["duration_report"]=duration_report
+        if not result["deployment_ready"]:
+            # A research gate is not sufficient for deployment. Restore the exact
+            # previous executable bundle and leave the failed candidate non-live.
+            for path in mdir.iterdir():
+                if path.is_file():
+                    path.unlink()
+            for path in backup_dir.iterdir():
+                shutil.copy2(path, mdir / path.name)
+            result["promoted"]=False
+            result["promotion_rejected_reason"]="deployment_not_ready_after_artifact_validation"
+            refresh_deployment_manifest(settings, manifest_root)
+        shutil.rmtree(backup_dir, ignore_errors=True)
         try:
             GrowthRegistry(getattr(settings,"memory_db","data/memory.sqlite")).add_model_version("signal","promoted",score,stats,str(mdir))
         except Exception:
