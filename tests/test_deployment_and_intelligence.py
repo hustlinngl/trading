@@ -296,3 +296,53 @@ def test_train_complete_all_uses_local_history_without_exchange(monkeypatch, tmp
         "rows": 32,
         "source": "historical",
     }]
+
+
+def test_train_all_ignores_stale_registry_path_when_historical_asset_exists(monkeypatch, tmp_path):
+    import sys
+    from types import SimpleNamespace
+    import pandas as pd
+    import ai_trading_lab.main as main_module
+
+    settings = SimpleNamespace(symbol="BTC/USDT", timeframe="15m")
+    monkeypatch.setattr(main_module, "load_settings", lambda _path: settings)
+    monkeypatch.setattr(main_module, "validate_research_data", lambda _df, _settings: None)
+    monkeypatch.setattr(
+        main_module,
+        "train_base_asset",
+        lambda df, ss: (tmp_path / "models" / "assets" / "BTC_USDT", None),
+    )
+    monkeypatch.setattr(
+        main_module,
+        "imported_registry",
+        lambda _data_dir: {
+            "BTC/USDT": {"path": str(tmp_path / "missing" / "BTC.csv")}
+        },
+    )
+    monkeypatch.chdir(tmp_path)
+
+    history = tmp_path / "data" / "historical"
+    history.mkdir(parents=True)
+    frame = pd.DataFrame(
+        {
+            "open": [100.0] * 10,
+            "high": [101.0] * 10,
+            "low": [99.0] * 10,
+            "close": [100.0] * 10,
+            "volume": [1000.0] * 10,
+        },
+        index=pd.date_range("2026-01-01", periods=10, freq="15min", tz="UTC"),
+    )
+    frame.to_csv(history / "BTC_USDT_15m.csv", index_label="timestamp")
+
+    monkeypatch.setattr(
+        sys, "argv", ["main.py", "train-all", "--config", "config.yaml"]
+    )
+    main_module.main()
+
+    import json
+    report = json.loads(
+        (tmp_path / "logs" / "train_all_report.json").read_text(encoding="utf-8")
+    )
+    assert report[0]["status"] == "trained"
+    assert report[0]["source"] == "historical"
