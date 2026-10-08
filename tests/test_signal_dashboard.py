@@ -904,6 +904,8 @@ def test_signal_terminal_http_state_route_exposes_exact_public_signal_contract(t
     server = terminal_mod.ThreadingHTTPServer(
         ("127.0.0.1", 0), terminal_mod.make_handler(terminal)
     )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
     try:
         with urlopen(
             f"http://127.0.0.1:{server.server_address[1]}/api/state?force=1",
