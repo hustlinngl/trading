@@ -155,7 +155,7 @@ class SignalTerminal:
         self.state_root.joinpath("data", "history").mkdir(parents=True, exist_ok=True)
 
     def start_live_streams(self) -> None:
-        """Start the async market-data loop without blocking HTTP or model work."""
+        """Start the websocket tracker explicitly; normal UI startup keeps it lazy."""
         symbols = tuple(
             dict.fromkeys(
                 list(getattr(self.settings, "live_symbols", ()) or ())
@@ -2767,7 +2767,9 @@ def main():
         )
         return
 
-    terminal.start_live_streams()
+    # The visible signal dashboard uses closed-candle inference plus targeted quote/history
+    # requests. Start the websocket tracker lazily only when /api/live is explicitly requested,
+    # avoiding unused background streams during normal signal-terminal operation.
     try:
         server = ThreadingHTTPServer((args.host, args.port), make_handler(terminal))
     except OSError as exc:
