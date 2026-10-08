@@ -91,9 +91,14 @@ def test_signal_terminal_builds_read_only_state(tmp_path, monkeypatch):
     assert state["ok"] is True
     assert state["summary"]["assets_scanned"] == 1
     assert state["summary"]["active_signals"] == 1
-    assert state["signals"][0]["signal"] == "LONG"
-    assert state["signals"][0]["decision"]["score"] == 0.41
-    assert "bundle" in state["signals"][0]
+    assert state["signals"][0] == {
+        "symbol": "BTC/USDT",
+        "signal": "LONG",
+        "confidence": 0.91,
+        "expected_return": 0.006,
+        "price": 100000.0,
+        "horizon_bars": 8,
+    }
     assert state["notes"][0].startswith("Sola lettura")
 
 
