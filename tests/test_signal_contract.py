@@ -5,13 +5,14 @@ import math
 import pytest
 
 from ai_trading_lab.signal_contract import (
+    PUBLIC_SIGNAL_FIELDS,
     DirectSignal,
     SignalContractError,
     compile_direct_signal,
 )
 
 
-def test_long_compiles_to_public_contract():
+def test_long_compiles_to_the_exact_six_field_public_contract():
     signal = compile_direct_signal(
         {"action": "LONG", "p_up": 0.91, "expected_return": 0.0062, "score": 999},
         symbol="BTC/USDT",
@@ -21,15 +22,13 @@ def test_long_compiles_to_public_contract():
     )
     assert signal.to_dict() == {
         "symbol": "BTC/USDT",
-        "timestamp": "2026-10-08T00:00:00+00:00",
         "signal": "LONG",
         "confidence": 0.91,
         "expected_return": 0.0062,
         "price": 100000.0,
         "horizon_bars": 8,
-        "actionable": True,
-        "reason": "qualified",
     }
+    assert set(signal.to_dict()) == PUBLIC_SIGNAL_FIELDS
 
 
 def test_short_confidence_is_directional():
@@ -42,10 +41,9 @@ def test_short_confidence_is_directional():
     )
     assert signal.signal == "SHORT"
     assert signal.confidence == pytest.approx(0.83)
-    assert signal.actionable is True
 
 
-def test_flat_is_not_actionable():
+def test_flat_has_zero_confidence_without_actionability_telemetry():
     signal = compile_direct_signal(
         {"action": "FLAT", "p_up": 0.54, "expected_return": 0.0001},
         symbol="SOL/USDT",
@@ -55,7 +53,7 @@ def test_flat_is_not_actionable():
     )
     assert signal.signal == "FLAT"
     assert signal.confidence == 0.0
-    assert signal.actionable is False
+    assert set(signal.to_dict()) == PUBLIC_SIGNAL_FIELDS
 
 
 @pytest.mark.parametrize(
@@ -87,6 +85,7 @@ def test_public_contract_does_not_leak_internal_fields():
             "analog_edge": 0.4,
             "meta_success": 0.8,
             "selection_score": 0.7,
+            "reason": "private_policy_reason",
         },
         symbol="BTC/USDT",
         timestamp="2026-10-08T00:00:00+00:00",
@@ -94,20 +93,20 @@ def test_public_contract_does_not_leak_internal_fields():
         horizon_bars=8,
     )
     public = signal.to_dict()
-    assert set(public) == {
-        "symbol",
-        "timestamp",
-        "signal",
-        "confidence",
-        "expected_return",
-        "price",
-        "horizon_bars",
-        "actionable",
-        "reason",
-    }
+    assert set(public) == PUBLIC_SIGNAL_FIELDS
     assert "regime" not in public
     assert "analog_edge" not in public
     assert "meta_success" not in public
+    assert "reason" not in public
+    assert "timestamp" not in public
+    assert "actionable" not in public
+
+
+def test_direct_signal_rejects_invalid_price_and_horizon():
+    with pytest.raises(SignalContractError, match="invalid_price"):
+        DirectSignal("BTC/USDT", "LONG", 0.9, 0.01, 0.0, 8)
+    with pytest.raises(SignalContractError, match="invalid_horizon"):
+        DirectSignal("BTC/USDT", "LONG", 0.9, 0.01, 100.0, 0)
 
 
 def test_engine_rejects_a_missing_required_feature_before_prediction():

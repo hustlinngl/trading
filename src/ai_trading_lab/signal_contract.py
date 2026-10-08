@@ -6,6 +6,16 @@ from typing import Any, Mapping
 
 
 PUBLIC_SIGNALS = frozenset({"LONG", "SHORT", "FLAT"})
+PUBLIC_SIGNAL_FIELDS = frozenset(
+    {
+        "symbol",
+        "signal",
+        "confidence",
+        "expected_return",
+        "price",
+        "horizon_bars",
+    }
+)
 
 
 class SignalContractError(ValueError):
@@ -17,20 +27,15 @@ class DirectSignal:
     """The only model result allowed to cross the live/user boundary."""
 
     symbol: str
-    timestamp: str
     signal: str
     confidence: float
     expected_return: float
     price: float
     horizon_bars: int
-    actionable: bool
-    reason: str = ""
 
     def __post_init__(self) -> None:
         if not str(self.symbol).strip():
             raise SignalContractError("invalid_symbol")
-        if not str(self.timestamp).strip():
-            raise SignalContractError("invalid_timestamp")
         if self.signal not in PUBLIC_SIGNALS:
             raise SignalContractError("invalid_signal")
         for name, value in (
@@ -42,15 +47,14 @@ class DirectSignal:
                 raise SignalContractError(f"non_finite_{name}")
         if not 0.0 <= float(self.confidence) <= 1.0:
             raise SignalContractError("invalid_confidence")
+        if float(self.price) <= 0.0:
+            raise SignalContractError("invalid_price")
         if int(self.horizon_bars) < 1:
             raise SignalContractError("invalid_horizon")
-        if bool(self.actionable) != (self.signal in {"LONG", "SHORT"}):
-            raise SignalContractError("invalid_actionable_state")
 
     def to_dict(self) -> dict[str, Any]:
         """Return exactly the public contract; never include internal model state."""
         return asdict(self)
-
 
 
 def compile_direct_signal(
@@ -61,7 +65,13 @@ def compile_direct_signal(
     price: float,
     horizon_bars: int,
 ) -> DirectSignal:
-    """Compile a validated internal decision into the public direct-signal contract."""
+    """Compile a validated internal decision into the six-field public contract.
+
+    Timestamp remains an internal input for compatibility with live/paper callers;
+    it belongs to their records, not to the public signal payload.
+    """
+    if not str(timestamp).strip():
+        raise SignalContractError("invalid_timestamp")
     required = ("action", "p_up", "expected_return")
     missing = [key for key in required if row.get(key) is None]
     if missing:
@@ -85,15 +95,11 @@ def compile_direct_signal(
     elif signal == "SHORT":
         confidence = 1.0 - p_up
 
-    reason = "qualified" if signal in {"LONG", "SHORT"} else "no_actionable_setup"
     return DirectSignal(
         symbol=str(symbol),
-        timestamp=str(timestamp),
         signal=signal,
         confidence=confidence,
         expected_return=expected_return,
         price=float(price),
         horizon_bars=int(horizon_bars),
-        actionable=signal in {"LONG", "SHORT"},
-        reason=reason,
     )
