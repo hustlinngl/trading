@@ -139,7 +139,6 @@ jobs:
           New-Item -ItemType Directory -Force -Path .\dist\models\assets | Out-Null
           Copy-Item .\models\assets\* .\dist\models\assets\ -Recurse -Force
           Write-Host "Staged config, bundled history, and validated model assets beside the exact user-facing EXE."
-          Write-Host "Staged config and bundled history beside the exact user-facing EXE."
 
       - name: Smoke test frozen executable
         shell: pwsh
@@ -159,6 +158,22 @@ jobs:
             throw "Frozen executable smoke test failed with exit code $($smoke.ExitCode)"
           }
           Write-Host "Frozen executable smoke test passed: $sizeMb MB"
+
+      - name: Functional frozen inference contract test
+        shell: pwsh
+        run: |
+          $symbols = @(
+            "BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT",
+            "ADA/USDT","DOGE/USDT","AVAX/USDT","LINK/USDT","DOT/USDT",
+            "LTC/USDT","BCH/USDT","ATOM/USDT","UNI/USDT","ETC/USDT"
+          )
+          foreach ($symbol in $symbols) {
+            $proc = Start-Process -FilePath .\dist\SakuraSignalTerminal.exe -ArgumentList "--self-test-inference --symbol $symbol" -Wait -PassThru -NoNewWindow
+            if ($proc.ExitCode -ne 0) {
+              throw "Frozen inference contract failed for \${symbol}: exit code $($proc.ExitCode)"
+            }
+          }
+          Write-Host "Frozen inference contract passed for all 15 bundled assets."
 
       - name: Functional packaged dashboard smoke test
         shell: pwsh
