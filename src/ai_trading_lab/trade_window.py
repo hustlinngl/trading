@@ -5,6 +5,7 @@ import numpy as np, pandas as pd
 from sklearn.ensemble import ExtraTreesClassifier
 from .features import make_features
 from .fingerprint import strong_dataset_fingerprint
+from .deployment import model_semantics_fingerprint, deployment_semantics_fingerprint
 
 def timeframe_minutes(timeframe):
     tf=str(timeframe).lower()
@@ -125,8 +126,8 @@ def train_trade_window_backbone(df,settings,holdout_frac=.15,save_path=None):
         "symbol":str(getattr(settings,"symbol","")),
         "timeframe":str(getattr(settings,"timeframe","15m")),
         "data_fingerprint":strong_dataset_fingerprint(df),
-        "model_semantics_fingerprint":__import__("ai_trading_lab.deployment", fromlist=["model_semantics_fingerprint"]).model_semantics_fingerprint(settings),
-        "deployment_semantics_fingerprint":__import__("ai_trading_lab.deployment", fromlist=["deployment_semantics_fingerprint"]).deployment_semantics_fingerprint(settings),
+        "model_semantics_fingerprint":model_semantics_fingerprint(settings),
+        "deployment_semantics_fingerprint":deployment_semantics_fingerprint(settings),
         "trained_at":pd.Timestamp.now(tz="UTC").isoformat(),
     }
     if save_path is not None:
