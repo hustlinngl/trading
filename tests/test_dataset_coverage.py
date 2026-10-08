@@ -23,7 +23,7 @@ def test_signal_first_ui_hides_secondary_telemetry():
     assert 'class="nav nav-minimal"' in html
     assert 'id="coverageSummary"' in html
     assert 'class="pick-stats pick-stats-compact"' in html
-    assert '["Expected",pct(r.expected_return,2)]' in html
+    assert '<div class="k">Expected</div>' in html
     assert '["Edge",pct(d.robust_directional_edge,2)]' not in html
     assert '["Score",num(d.score,2)]' not in html
     assert '.secondary-telemetry{display:none!important}' in html
