@@ -14,6 +14,7 @@ def row(**overrides):
         "p_up": 0.90,
         "expected_return": 0.006,
         "expected_return_lcb": 0.004,
+        "expected_return_ucb": 0.008,
         "score": 0.40,
         "meta_success": 0.80,
         "model_disagreement": 0.01,
