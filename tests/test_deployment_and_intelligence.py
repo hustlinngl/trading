@@ -139,7 +139,7 @@ def test_refresh_deployment_manifest_requires_matching_evidence(tmp_path):
         encoding="utf-8",
     )
     (bundle / "trade_window_training_report.json").write_text(
-        json.dumps({"production_ready":True,"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"holdout":{"backtest":duration_stats}}),
+        json.dumps({"production_ready":True,"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem,"holdout":{"backtest":duration_stats}}),
         encoding="utf-8",
     )
     manifest = refresh_deployment_manifest(settings, tmp_path)
