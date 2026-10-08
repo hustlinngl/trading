@@ -64,6 +64,78 @@ def bundle_artifact_fingerprint(bundle: str | Path) -> str:
     return h.hexdigest()[:24]
 
 
+def _deployment_evidence_is_current(settings, bundle: str | Path, symbol: str, meta: dict) -> bool:
+    """Recompute deployment readiness from persisted evidence instead of trusting the manifest."""
+    bundle = Path(bundle)
+    try:
+        base_path = bundle / "base_holdout_report.json"
+        duration_path = bundle / "trade_window_training_report.json"
+        if not base_path.exists():
+            return False
+        base = json.loads(base_path.read_text(encoding="utf-8"))
+        duration = (
+            json.loads(duration_path.read_text(encoding="utf-8"))
+            if duration_path.exists()
+            else {}
+        )
+        holdout = base.get("holdout", {}) if isinstance(base, dict) else {}
+        current_fp = meta.get("data_fingerprint")
+        if (
+            str(base.get("symbol")) != str(symbol)
+            or str(base.get("timeframe")) != str(getattr(settings, "timeframe", ""))
+            or str(base.get("data_fingerprint")) != str(current_fp)
+            or str(base.get("model_semantics_fingerprint")) != str(meta.get("model_semantics_fingerprint"))
+            or str(base.get("deployment_semantics_fingerprint")) != str(meta.get("deployment_semantics_fingerprint"))
+            or not base.get("validation_train_data_fingerprint")
+            or not base.get("validation_holdout_data_fingerprint")
+            or str(base.get("validation_holdout_start")) > str(base.get("validation_holdout_end"))
+        ):
+            return False
+
+        base_ok = (
+            int(holdout.get("trades_taken", holdout.get("trades", 0))) >= int(getattr(settings, "base_min_holdout_trades", 20))
+            and (
+                float(holdout.get("net_compounded_return", holdout.get("total_return", holdout.get("return", -1.0)))) > 0.0
+                if bool(getattr(settings, "base_require_positive_holdout_return", True))
+                else True
+            )
+            and float(holdout.get("profit_factor", 0.0)) >= float(getattr(settings, "base_min_holdout_profit_factor", 1.0))
+            and float(holdout.get("max_drawdown", -1.0)) >= float(getattr(settings, "base_max_holdout_drawdown", -0.25))
+            and robust_performance_utility(
+                holdout,
+                min_trades=int(getattr(settings, "base_min_holdout_trades", 20)),
+                max_drawdown=float(getattr(settings, "base_max_holdout_drawdown", -0.25)),
+            ) >= float(getattr(settings, "base_min_holdout_utility", 0.0))
+        )
+        if not base_ok:
+            return False
+
+        if bool(getattr(settings, "trade_window_enabled", True)):
+            duration_bt = duration.get("holdout", {}).get("backtest", {}) if isinstance(duration, dict) else {}
+            duration_ok = (
+                (bundle / "trade_window_specialist.joblib").exists()
+                and bool(duration.get("production_ready", False))
+                and str(duration.get("symbol")) == str(symbol)
+                and str(duration.get("timeframe")) == str(getattr(settings, "timeframe", ""))
+                and str(duration.get("data_fingerprint")) == str(current_fp)
+                and str(duration.get("model_semantics_fingerprint")) == str(meta.get("model_semantics_fingerprint"))
+                and str(duration.get("deployment_semantics_fingerprint")) == str(meta.get("deployment_semantics_fingerprint"))
+                and (
+                    not duration_bt
+                    or robust_performance_utility(
+                        duration_bt,
+                        min_trades=int(getattr(settings, "trade_window_min_holdout_trades", 12)),
+                        max_drawdown=float(getattr(settings, "trade_window_max_holdout_drawdown", -0.25)),
+                    ) >= float(getattr(settings, "trade_window_min_holdout_utility", 0.0))
+                )
+            )
+            if not duration_ok:
+                return False
+        return True
+    except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError):
+        return False
+
+
 def deployment_semantics_fingerprint(settings) -> str:
     """Fingerprint every runtime/economic rule that can change signal eligibility."""
     import hashlib
@@ -237,6 +309,8 @@ def bundle_compatibility(settings, bundle: str | Path, symbol: str) -> tuple[boo
             recorded_artifacts=str(manifest.get("bundle_artifact_fingerprint") or "")
             if recorded_artifacts != bundle_artifact_fingerprint(bundle):
                 return False, "deployment_manifest_artifact_mismatch"
+            if not _deployment_evidence_is_current(settings, bundle, symbol, meta):
+                return False, "deployment_manifest_evidence_mismatch"
         except Exception as exc:
             return False, f"deployment_manifest_error:{type(exc).__name__}"
     return True, "ok"
