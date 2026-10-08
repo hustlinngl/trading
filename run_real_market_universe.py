@@ -65,13 +65,30 @@ def main():
     broad_path = Path("data/real_universe/manifest.json")
     write_manifest(specs, broad_path)
 
-    ranked = sorted(
+    # Intraday research starts from the curated core, then fills remaining slots
+    # from the discovered universe. This avoids treating alphabetical discovery order
+    # as a liquidity ranking.
+    core_crypto = [
+        spec for spec in specs
+        if spec.asset_class == "crypto" and spec.source == "binance"
+        and spec not in discovered_specs
+    ]
+    ranked_discovered = sorted(
         discovered_specs,
         key=lambda item: (-int(item.priority), item.symbol),
     )
-    research_specs = ranked[:research_top]
+    research_pool = core_crypto + ranked_discovered
+    research_specs = []
+    seen = set()
+    for spec in research_pool:
+        if spec.symbol in seen:
+            continue
+        seen.add(spec.symbol)
+        research_specs.append(spec)
+        if len(research_specs) >= research_top:
+            break
     if not research_specs:
-        research_specs = list(specs[:research_top])
+        research_specs = [spec for spec in specs if spec.asset_class == "crypto"][:research_top]
     research_path = Path("data/real_universe/intraday_research_manifest.json")
     write_manifest(research_specs, research_path)
 
