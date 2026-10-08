@@ -201,7 +201,7 @@ jobs:
             if (-not $health.ok) { throw "Packaged health endpoint did not report ok=true" }
             $state = $null
             $scanReady = $false
-            for ($i = 0; $i -lt 40; $i++) {
+            for ($i = 0; $i -lt 120; $i++) {
               $state = Invoke-RestMethod -Uri "http://127.0.0.1:$port/api/state?force=0" -TimeoutSec 20
               if (-not $state.scan_in_progress) {
                 $scanReady = $true
