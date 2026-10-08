@@ -252,7 +252,7 @@ def test_train_complete_all_uses_local_history_without_exchange(monkeypatch, tmp
     monkeypatch.setattr(
         main_module,
         "train_complete_asset",
-        lambda df, ss, holdout_frac: {
+        lambda df, ss, holdout_frac, promote_champion=True: {
             "symbol": ss.symbol,
             "status": "trained",
             "production_ready": True,
@@ -347,3 +347,46 @@ def test_train_all_ignores_stale_registry_path_when_historical_asset_exists(monk
     )
     assert report[0]["status"] == "trained"
     assert report[0]["source"] == "historical"
+
+
+def test_train_complete_asset_can_skip_global_champion_promotion(monkeypatch, tmp_path):
+    import ai_trading_lab.main as main_module
+
+    settings = SimpleNamespace(symbol="ETH/USDT")
+    calls = {}
+
+    monkeypatch.setattr(
+        main_module,
+        "train_base_asset",
+        lambda df, ss: (tmp_path / "bundle", object()),
+    )
+    monkeypatch.setattr(
+        main_module,
+        "test_base_holdout",
+        lambda df, ss, holdout_frac: {"holdout": {}},
+    )
+    monkeypatch.setattr(
+        main_module,
+        "train_duration_asset",
+        lambda df, ss, *, holdout_frac, copy_legacy: (
+            calls.update(copy_legacy=copy_legacy) or (tmp_path / "duration.joblib", {"production_ready": True})
+        ),
+    )
+    monkeypatch.setattr(
+        main_module,
+        "refresh_deployment_manifest",
+        lambda ss: {"ready": True},
+    )
+    promoted = []
+    monkeypatch.setattr(
+        main_module,
+        "_promote_asset_bundle",
+        lambda path: promoted.append(path),
+    )
+
+    main_module.train_complete_asset(
+        object(), settings, holdout_frac=0.15, promote_champion=False
+    )
+
+    assert calls["copy_legacy"] is False
+    assert promoted == []
