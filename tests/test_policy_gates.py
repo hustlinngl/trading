@@ -51,7 +51,11 @@ def test_strict_signal_gate_rejects_insufficient_memory_support():
 
 
 def test_short_signal_uses_upper_bound_for_directional_uncertainty():
-    settings = replace(load_settings("config.yaml"), signal_only_mode=True)
+    settings = replace(
+        load_settings("config.yaml"),
+        signal_only_mode=True,
+        require_short_borrow_cost=False,
+    )
     # A bearish forecast is only robust if the upper confidence bound remains below zero.
     risky = row(p_up=0.10, expected_return=-0.004, expected_return_lcb=-0.010, expected_return_ucb=0.002)
     action, reasons = live_signal_gate(risky, settings)

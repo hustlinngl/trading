@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
+import os
 import time
+import numpy as np
 import pandas as pd
 
 from .autolearn import auto_update
@@ -14,6 +16,42 @@ from .state_fusion import build_market_state
 from .deployment import asset_bundle_dir
 
 
+
+
+def _offline_synthetic_data(settings: Settings, n: int | None = None) -> pd.DataFrame:
+    """Create deterministic closed-candle data for network-isolated CI/research smoke runs."""
+    rows = int(n or max(getattr(settings, "min_train_rows", 1500) + 512, 2500))
+    freq = {
+        "1m": "1min",
+        "3m": "3min",
+        "5m": "5min",
+        "15m": "15min",
+        "30m": "30min",
+        "1h": "1h",
+        "4h": "4h",
+        "1d": "1D",
+    }.get(str(settings.timeframe), str(settings.timeframe))
+    try:
+        offset = pd.tseries.frequencies.to_offset(freq)
+    except Exception:
+        offset = pd.Timedelta(minutes=15)
+    end = pd.Timestamp.now(tz="UTC").floor(freq) - offset
+    index = pd.date_range(end=end, periods=rows, freq=freq)
+    rng = np.random.default_rng(int(settings.seed))
+    regimes = np.repeat([0, 1, 2, 3], rows // 4 + 1)[:rows]
+    drift = np.choose(regimes, [0.00002, 0.00010, -0.00008, 0.0])
+    vol = np.choose(regimes, [0.0025, 0.0035, 0.0045, 0.0060])
+    returns = drift + rng.normal(0.0, vol, rows)
+    close = 100.0 * np.exp(np.cumsum(returns))
+    open_ = close * (1.0 + rng.normal(0.0, 0.0008, rows))
+    high = np.maximum(open_, close) * (1.0 + rng.uniform(0.0, 0.0025, rows))
+    low = np.minimum(open_, close) * (1.0 - rng.uniform(0.0, 0.0025, rows))
+    volume = rng.lognormal(10.0, 0.40, rows)
+    return pd.DataFrame(
+        {"open": open_, "high": high, "low": low, "close": close, "volume": volume},
+        index=index,
+    )
+
 def refresh_market_dataset(settings: Settings, root: str | Path = ".", exchange=None) -> pd.DataFrame:
     root = Path(root)
     cache = root / "data" / f"{settings.symbol.replace('/','_')}_{settings.timeframe}.parquet"
@@ -23,8 +61,19 @@ def refresh_market_dataset(settings: Settings, root: str | Path = ".", exchange=
 
 def autonomous_cycle(settings: Settings, query: str, root: str | Path = ".") -> dict:
     root = Path(root)
-    ex = exchange_client(getattr(settings, "exchange", "binance"), sandbox=False)
-    df = refresh_market_dataset(settings, root, ex)
+    offline = str(os.getenv("AUTONOMOUS_OFFLINE", "")).strip().lower() in {"1", "true", "yes", "on"}
+
+    if offline:
+        # CI/offline mode must not contact an exchange or external intelligence provider.
+        ex = None
+        df = _offline_synthetic_data(settings)
+        settings.external_deep_search = False
+        settings.fred_series = ()
+        settings.sec_ciks = ()
+    else:
+        ex = exchange_client(getattr(settings, "exchange", "binance"), sandbox=False)
+        df = refresh_market_dataset(settings, root, ex)
+
     quality = audit_market_data(df, settings.timeframe)
     if not quality.passed:
         raise RuntimeError(f"Market data quality gate failed: {quality.to_dict()}")
@@ -50,15 +99,18 @@ def autonomous_cycle(settings: Settings, query: str, root: str | Path = ".") -> 
         for key, value in event_summary.items():
             if isinstance(value, (int,float)):
                 ext_health[key]=float(value)
-        state = build_market_state(
-            ex, settings.symbol, settings.timeframe, float(df["close"].iloc[-1]),
-            macro=macro_vals, external=ext_health,
-            cross_symbols=list(getattr(settings, "cross_asset_symbols", ()) or ()),
-            orderbook_levels=getattr(settings, "orderbook_levels", 50),
-            impact_notional=getattr(settings, "orderbook_impact_notional", 10000.0),
-        )
-        cognition.registry.add_market_state(settings.symbol, state.timestamp, state.price, state.flatten())
-        growth["market_state"] = state.flatten()
+        if not offline:
+            state = build_market_state(
+                ex, settings.symbol, settings.timeframe, float(df["close"].iloc[-1]),
+                macro=macro_vals, external=ext_health,
+                cross_symbols=list(getattr(settings, "cross_asset_symbols", ()) or ()),
+                orderbook_levels=getattr(settings, "orderbook_levels", 50),
+                impact_notional=getattr(settings, "orderbook_impact_notional", 10000.0),
+            )
+            cognition.registry.add_market_state(settings.symbol, state.timestamp, state.price, state.flatten())
+            growth["market_state"] = state.flatten()
+        else:
+            growth["market_state"] = {"mode": "offline", "exchange_access": False}
     except Exception as exc:
         growth["market_state_error"] = str(exc)
 

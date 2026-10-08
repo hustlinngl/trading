@@ -559,9 +559,8 @@ class SignalTerminal:
         return rows
 
     def _assessment_payload(self, assessment: LiveAssessment) -> dict:
-        payload = _json_safe(assessment.to_dict())
-        payload["signal_class"] = _signal_class(str(payload.get("signal", "WAIT")))
-        return payload
+        """Expose only the canonical six-field DirectSignal payload."""
+        return _json_safe(assessment.to_dict())
 
     def _bootstrap_state(self) -> dict:
         return {
@@ -712,39 +711,20 @@ class SignalTerminal:
                 "quotes": _json_safe(quotes),
             }
             signals = []
+            ages = []
             for assessment in assessments:
-                row = self._assessment_payload(assessment)
-                row["bundle"] = self._bundle_snapshot(assessment.symbol)
-                realtime = quotes.get(assessment.symbol, {})
-                if realtime.get("price") is not None:
-                    row["realtime_price"] = realtime["price"]
-                row["quote"] = realtime
-
-                details = row.get("details") or {}
-                row["decision"] = {
-                    "p_up": details.get("p_up"),
-                    "expected_return": row.get("expected_return"),
-                    "expected_return_lcb": details.get("expected_return_lcb"),
-                    "expected_return_ucb": details.get("expected_return_ucb"),
-                    "robust_directional_edge": details.get("robust_directional_edge"),
-                    "selection_score": details.get("selection_score"),
-                    "score": details.get("score"),
-                    "meta_success": details.get("meta_success"),
-                    "model_disagreement": details.get("model_disagreement"),
-                    "return_disagreement": details.get("return_disagreement"),
-                    "regime": details.get("regime"),
-                    "analog_n": details.get("analog_n"),
-                    "analog_agreement": details.get("analog_agreement"),
-                    "trade_window_ready": details.get("trade_window_ready"),
-                    "trade_window_direction": details.get(
-                        "trade_window_direction"
-                    ),
-                    "trade_window_confidence": details.get(
-                        "trade_window_confidence"
-                    ),
-                    "data_age_minutes": details.get("data_age_minutes"),
-                }
-                signals.append(row)
+                # The public signal array is deliberately restricted to DirectSignal.
+                signals.append(self._assessment_payload(assessment))
+                try:
+                    ages.append(
+                        float(
+                            assessment.details.get("data_age_minutes", 1e9)
+                            if isinstance(assessment.details, dict)
+                            else 1e9
+                        )
+                    )
+                except (TypeError, ValueError):
+                    ages.append(1e9)
 
             signals.sort(
                 key=lambda x: (
@@ -1478,7 +1458,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
       <div class="decision-stats">
         <div class="mini-stat"><div class="k">Prezzo</div><div class="v num" id="deckPrice">—</div></div>
         <div class="mini-stat"><div class="k">Confidence</div><div class="v" id="deckConfidence">—</div></div>
-        <div class="mini-stat"><div class="k">Robust edge</div><div class="v" id="deckEdge">—</div></div>
+        <div class="mini-stat"><div class="k">Expected return</div><div class="v" id="deckEdge">—</div></div>
       </div>
       <div class="reason-strip" id="deckReasons"></div>
 
@@ -1572,12 +1552,12 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
 
   <div class="legacy-hidden panel" id="detail">
     <div class="panel-head">
-      <div><div class="title">Signal detail</div><div class="small">Stessa decisione usata dal motore: robust edge, meta, memoria, regime e duration gate.</div></div>
+      <div><div class="title">Signal data</div><div class="small">Solo i sei campi del contratto diretto, senza diagnostica interna del modello.</div></div>
     </div>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Asset</th><th>Segnale</th><th>Prezzo</th><th>Robust edge</th><th>Score</th><th>Meta</th><th>Memoria</th><th>Regime</th><th>Duration</th><th>Dati</th><th>Provenienza</th></tr>
+          <tr><th>Asset</th><th>Segnale</th><th>Prezzo</th><th>Confidence</th><th>Expected return</th><th>Horizon</th></tr>
         </thead>
         <tbody id="detailRows"></tbody>
       </table>
@@ -1998,24 +1978,15 @@ function renderRadar(signals){
 
 function renderDetail(signals){
   $("detailRows").innerHTML=signals.map(r=>{
-    const d=r.decision||{}, b=r.bundle||{};
-    const robust=(d.expected_return_lcb==null)?"—":num(d.expected_return_lcb,4)+" / "+num(d.expected_return_ucb,4);
-    const duration=d.trade_window_direction?esc(d.trade_window_direction)+" · "+pct(d.trade_window_confidence,0):"—";
-    const why=(r.reason_codes||[]).map(x=>'<span class="reason">'+esc(x)+'</span>').join("");
-    return '<tr class="interactive-row" data-symbol="'+esc(r.symbol)+'" tabindex="0" role="button" aria-label="Apri '+esc(r.symbol)+' nel market inspector">'+
+    return '<tr class="interactive-row" data-symbol="'+esc(r.symbol)+'" tabindex="0" role="button" aria-label="Apri '+esc(r.symbol)+' nel signal inspector">'+
       '<td><strong>'+esc(r.symbol)+'</strong></td>'+
-      '<td><span class="signal '+cls(r.signal)+'">'+esc(r.signal||"WAIT")+'</span><div class="small">'+esc(r.status||"WAIT")+'</div></td>'+
-      '<td class="num">'+num(r.realtime_price??r.price,2)+'</td>'+
-      '<td class="num">'+robust+'</td>'+
-      '<td class="num">'+num(d.score,3)+'</td>'+
-      '<td class="num">'+pct(d.meta_success,0)+'</td>'+
-      '<td class="num">'+(d.analog_n==null?"—":esc(d.analog_n))+" · "+pct(d.analog_agreement,0)+'</td>'+
-      '<td>'+esc(d.regime||"—")+'</td>'+
-      '<td>'+duration+'</td>'+
-      '<td class="num">'+age(d.data_age_minutes)+'</td>'+
-      '<td>'+why+'</td>'+
+      '<td><span class="signal '+cls(r.signal)+'">'+esc(r.signal||"FLAT")+'</span></td>'+
+      '<td class="num">'+num(r.price,2)+'</td>'+
+      '<td class="num">'+pct(r.confidence,1)+'</td>'+
+      '<td class="num">'+pct(r.expected_return,2)+'</td>'+
+      '<td>'+esc(r.horizon_bars==null?"—":String(r.horizon_bars)+" bars")+'</td>'+
     '</tr>';
-  }).join("")||'<tr><td colspan="11" class="small">Nessun dato.</td></tr>';
+  }).join("")||'<tr><td colspan="6" class="small">Nessun dato.</td></tr>';
 }
 
 function renderJournal(data){
@@ -2087,24 +2058,22 @@ function renderDecisionDeck(signals){
     $("deckAsset").textContent="—";$("deckPrice").textContent="—";$("deckConfidence").textContent="—";$("deckEdge").textContent="—";
     trace.innerHTML="";reasons.innerHTML="";return;
   }
-  const d=active.decision||{};
-  const sig=active.signal||"WAIT";
+  const sig=active.signal||"FLAT";
   deckSignal.textContent=sig;deckSignal.className="decision-signal "+cls(sig);
   deck.className="decision-deck signal-live-"+sig.toLowerCase();
   deck.classList.remove("decision-flash");void deck.offsetWidth;deck.classList.add("decision-flash");
-  deckMeta.textContent=sig==="LONG"?"Bias LONG · risultato del modello":sig==="SHORT"?"Bias SHORT · risultato del modello":"Nessun segnale attivo";
+  deckMeta.textContent=sig==="LONG"?"LONG · direct signal":sig==="SHORT"?"SHORT · direct signal":"FLAT · no actionable setup";
   $("deckAsset").textContent=active.symbol||"—";
-  $("deckPrice").textContent=num(active.realtime_price??active.price,2);
+  $("deckPrice").textContent=num(active.price,2);
   $("deckConfidence").textContent=pct(active.confidence,1);
-  $("deckEdge").textContent=d.expected_return_lcb==null?"—":num(d.expected_return_lcb,4)+" / "+num(d.expected_return_ucb,4);
-  reasons.innerHTML=(active.reason_codes||[]).slice(0,8).map(x=>'<span class="reason">'+esc(x)+'</span>').join("");
+  $("deckEdge").textContent=pct(active.expected_return,2);
+  reasons.innerHTML="";
   const nodes=[
-    ["p(up)",d.p_up==null?"—":pct(d.p_up,1)],
-    ["Meta success",d.meta_success==null?"—":pct(d.meta_success,0)],
-    ["Memory",d.analog_n==null?"—":String(d.analog_n)+" · "+pct(d.analog_agreement,0)],
-    ["Duration",d.trade_window_confidence==null?"—":pct(d.trade_window_confidence,0)+" · "+esc(d.trade_window_direction||"—")],
-    ["Expected return",d.expected_return==null?"—":pct(d.expected_return,2)],
-    ["Score",d.score==null?"—":num(d.score,3)]
+    ["Signal",sig],
+    ["Confidence",pct(active.confidence,1)],
+    ["Expected return",pct(active.expected_return,2)],
+    ["Price",num(active.price,2)],
+    ["Horizon",active.horizon_bars==null?"—":String(active.horizon_bars)+" bars"]
   ];
   trace.innerHTML=nodes.map(n=>'<div class="trace-node"><strong>'+esc(n[0])+'</strong><span>'+esc(n[1])+'</span></div>').join("");
 }
@@ -2174,41 +2143,33 @@ function openInspector(symbol){
   const active=((state.data&&state.data.signals)||[]).find(x=>x.symbol===symbol);
   const content=$("inspectorContent"), drawer=$("inspectorDrawer");
   if(!content||!drawer)return;
-  $("inspectorSubtitle").textContent=(active?.symbol||symbol||"—")+" · signal details";
+  $("inspectorSubtitle").textContent=(active?.symbol||symbol||"—")+" · direct signal";
   if(!active){
     content.innerHTML='<div class="timeline-empty">Nessun risultato disponibile per '+esc(symbol||"asset")+'.</div>';
   }else{
-    const d=active.decision||{};
-    const signal=active.signal||"WAIT";
+    const signal=active.signal||"FLAT";
     const trace=[
-      ["p(up)",d.p_up==null?"—":pct(d.p_up,1)],
+      ["Symbol",active.symbol||"—"],
+      ["Signal",signal],
       ["Confidence",active.confidence==null?"—":pct(active.confidence,1)],
-      ["Robust edge",d.robust_directional_edge==null?"—":pct(d.robust_directional_edge,2)],
-      ["Expected return",d.expected_return==null?"—":pct(d.expected_return,2)],
-      ["Score",d.score==null?"—":num(d.score,3)],
-      ["Meta success",d.meta_success==null?"—":pct(d.meta_success,0)],
-      ["Memory",d.analog_n==null?"—":String(d.analog_n)+" · "+pct(d.analog_agreement,0)],
-      ["Duration",d.trade_window_confidence==null?"—":pct(d.trade_window_confidence,0)+" · "+String(d.trade_window_direction||"—")],
-      ["Regime",d.regime||"—"],
-      ["Data age",d.data_age_minutes==null?"—":age(d.data_age_minutes)]
+      ["Expected return",active.expected_return==null?"—":pct(active.expected_return,2)],
+      ["Price",active.price==null?"—":num(active.price,2)],
+      ["Horizon",active.horizon_bars==null?"—":String(active.horizon_bars)+" bars"]
     ];
     content.innerHTML=
       '<div class="inspector-hero signal-live-'+signal.toLowerCase()+'">'+
-        '<div class="eyebrow">Signal result</div>'+
+        '<div class="eyebrow">Direct signal</div>'+
         '<div class="verdict '+cls(signal)+'">'+esc(signal)+'</div>'+
-        '<div class="decision-meta">'+esc(signal==="LONG"?"Bias LONG":signal==="SHORT"?"Bias SHORT":"No active signal")+'</div>'+
+        '<div class="decision-meta">'+esc(signal==="LONG"?"Long setup":signal==="SHORT"?"Short setup":"No active signal")+'</div>'+
         '<div class="inspector-grid">'+
-          '<div class="inspector-card"><div class="k">Prezzo</div><div class="v num">'+num(active.realtime_price??active.price,2)+'</div></div>'+
+          '<div class="inspector-card"><div class="k">Prezzo</div><div class="v num">'+num(active.price,2)+'</div></div>'+
           '<div class="inspector-card"><div class="k">Confidence</div><div class="v">'+pct(active.confidence,1)+'</div></div>'+
-          '<div class="inspector-card"><div class="k">Robust edge</div><div class="v">'+(d.robust_directional_edge==null?"—":pct(d.robust_directional_edge,2))+'</div></div>'+
-          '<div class="inspector-card"><div class="k">Score</div><div class="v">'+num(d.score,3)+'</div></div>'+
+          '<div class="inspector-card"><div class="k">Expected</div><div class="v">'+pct(active.expected_return,2)+'</div></div>'+
+          '<div class="inspector-card"><div class="k">Horizon</div><div class="v">'+(active.horizon_bars==null?"—":String(active.horizon_bars)+" bars")+'</div></div>'+
         '</div>'+
       '</div>'+
       '<div class="inspector-section"><h3>Signal data</h3><div class="inspector-trace">'+
         trace.map(t=>'<div class="inspector-trace-row"><strong>'+esc(t[0])+'</strong><span>'+esc(t[1])+'</span></div>').join("")+
-      '</div></div>'+
-      '<div class="inspector-section"><h3>Reasons</h3><div class="inspector-reasons">'+
-        (active.reason_codes||[]).slice(0,12).map(x=>'<span class="reason">'+esc(x)+'</span>').join("")+
       '</div></div>';
   }
   const backdrop=$("inspectorBackdrop");

@@ -34,7 +34,7 @@ def decide_actions(pred, regime, analog, meta_p, settings, *, regime_persistence
 def live_signal_gate(row, settings):
     """Apply live/paper gates with explicit missing-data rejection."""
     required = (
-        "p_up","expected_return","expected_return_lcb","expected_return_ucb",
+        "p_up","expected_return","expected_return_lcb",
         "meta_success","score","model_disagreement","analog_n","analog_agreement",
     )
     missing = []
@@ -54,7 +54,7 @@ def live_signal_gate(row, settings):
     p_up = float(row["p_up"])
     expected_return = float(row["expected_return"])
     expected_return_lcb = float(row["expected_return_lcb"])
-    expected_return_ucb = float(row["expected_return_ucb"])
+    expected_return_ucb = float(row.get("expected_return_ucb", expected_return))
     action = str(row.get("action", "FLAT"))
     direction = 1.0 if p_up >= 0.5 else -1.0
     p_direction = p_up if direction > 0 else 1.0 - p_up
