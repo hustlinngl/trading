@@ -66,17 +66,35 @@ def _load_bundled_history(root, symbol, timeframe, limit):
 
 
 def _market_type(exchange,symbol):
+    """Return an exchange-authoritative market type, or unknown when it cannot be verified."""
     try:
-        market=(getattr(exchange,"markets",{}) or {}).get(symbol,{})
+        market=(getattr(exchange,"markets",{}) or {}).get(symbol)
         if not isinstance(market,dict):
+            return "unknown"
+        market_type=market.get("type")
+        if market_type:
+            return str(market_type).lower()
+        if market.get("swap"):
+            return "swap"
+        if market.get("future"):
+            return "future"
+        if market.get("spot") or market.get("margin"):
             return "spot"
-        return str(market.get("type") or ("swap" if market.get("swap") else "future" if market.get("future") else "spot")).lower()
+        return "unknown"
     except Exception:
-        return "spot"
+        return "unknown"
 
 
 def _funding_snapshot(exchange,symbol,settings):
     market_type=_market_type(exchange,symbol)
+    if market_type == "unknown":
+        return {
+            "market_type":"unknown",
+            "funding_rate":None,
+            "funding_cost_return":0.0,
+            "funding_data_missing":True,
+            "funding_error":"market_type_unverified",
+        }
     if market_type not in {"swap","future","perpetual"}:
         return {"market_type":market_type,"funding_rate":None,"funding_cost_return":0.0,"funding_data_missing":False}
     try:
@@ -167,7 +185,7 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
             return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[f"stale_data:{age_minutes:.1f}m"],fp,{"data_age_minutes":age_minutes})
 
         funding=_funding_snapshot(exchange,symbol,settings)
-        if funding["funding_data_missing"] and bool(getattr(settings,"require_funding_data_for_derivatives",True)) and funding["market_type"] in {"swap","future","perpetual"}:
+        if funding["funding_data_missing"] and bool(getattr(settings,"require_funding_data_for_derivatives",True)) and funding["market_type"] in {"swap","future","perpetual","unknown"}:
             return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,["funding_data_missing"],fp,{"market_type":funding["market_type"],**funding})
 
         correlation_returns=pd.to_numeric(df["close"],errors="coerce").pct_change().dropna().tail(max(2,int(getattr(settings,"live_portfolio_correlation_bars",96))))
