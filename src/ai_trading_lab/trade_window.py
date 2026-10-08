@@ -125,6 +125,8 @@ def train_trade_window_backbone(df,settings,holdout_frac=.15,save_path=None):
         "symbol":str(getattr(settings,"symbol","")),
         "timeframe":str(getattr(settings,"timeframe","15m")),
         "data_fingerprint":strong_dataset_fingerprint(df),
+        "model_semantics_fingerprint":__import__("ai_trading_lab.deployment", fromlist=["model_semantics_fingerprint"]).model_semantics_fingerprint(settings),
+        "deployment_semantics_fingerprint":__import__("ai_trading_lab.deployment", fromlist=["deployment_semantics_fingerprint"]).deployment_semantics_fingerprint(settings),
         "trained_at":pd.Timestamp.now(tz="UTC").isoformat(),
     }
     if save_path is not None:
