@@ -284,3 +284,19 @@ def test_settings_still_construct():
     settings = load_settings("config.yaml")
     assert settings.symbol
     assert 1 <= settings.live_scan_workers <= 8
+
+
+def test_market_type_lookup_fails_closed_when_exchange_metadata_is_missing():
+    import ai_trading_lab.live as live_mod
+
+    class IncompleteExchange:
+        markets = {}
+
+    assert live_mod._market_type(IncompleteExchange(), "BTC/USDT:USDT") == "unknown"
+    snapshot = live_mod._funding_snapshot(
+        IncompleteExchange(),
+        "BTC/USDT:USDT",
+        load_settings("config.yaml"),
+    )
+    assert snapshot["market_type"] == "unknown"
+    assert snapshot["funding_data_missing"] is True
