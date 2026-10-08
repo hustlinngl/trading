@@ -711,39 +711,20 @@ class SignalTerminal:
                 "quotes": _json_safe(quotes),
             }
             signals = []
+            ages = []
             for assessment in assessments:
-                row = self._assessment_payload(assessment)
-                row["bundle"] = self._bundle_snapshot(assessment.symbol)
-                realtime = quotes.get(assessment.symbol, {})
-                if realtime.get("price") is not None:
-                    row["realtime_price"] = realtime["price"]
-                row["quote"] = realtime
-
-                details = row.get("details") or {}
-                row["decision"] = {
-                    "p_up": details.get("p_up"),
-                    "expected_return": row.get("expected_return"),
-                    "expected_return_lcb": details.get("expected_return_lcb"),
-                    "expected_return_ucb": details.get("expected_return_ucb"),
-                    "robust_directional_edge": details.get("robust_directional_edge"),
-                    "selection_score": details.get("selection_score"),
-                    "score": details.get("score"),
-                    "meta_success": details.get("meta_success"),
-                    "model_disagreement": details.get("model_disagreement"),
-                    "return_disagreement": details.get("return_disagreement"),
-                    "regime": details.get("regime"),
-                    "analog_n": details.get("analog_n"),
-                    "analog_agreement": details.get("analog_agreement"),
-                    "trade_window_ready": details.get("trade_window_ready"),
-                    "trade_window_direction": details.get(
-                        "trade_window_direction"
-                    ),
-                    "trade_window_confidence": details.get(
-                        "trade_window_confidence"
-                    ),
-                    "data_age_minutes": details.get("data_age_minutes"),
-                }
-                signals.append(row)
+                # The public signal array is deliberately restricted to DirectSignal.
+                signals.append(self._assessment_payload(assessment))
+                try:
+                    ages.append(
+                        float(
+                            assessment.details.get("data_age_minutes", 1e9)
+                            if isinstance(assessment.details, dict)
+                            else 1e9
+                        )
+                    )
+                except (TypeError, ValueError):
+                    ages.append(1e9)
 
             signals.sort(
                 key=lambda x: (
