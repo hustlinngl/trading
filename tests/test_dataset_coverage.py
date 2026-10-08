@@ -55,3 +55,9 @@ def test_real_universe_cli_writes_separate_research_slice():
     assert "intraday_research_manifest.json" in source
     assert "broad_crypto_symbol_cap" in source
     assert "intraday_research_top_n" in source
+
+def test_champion_promotion_requires_deployment_readiness():
+    from pathlib import Path
+    source = Path("src/ai_trading_lab/main.py").read_text(encoding="utf-8")
+    assert 'Refusing champion promotion' in source
+    assert 'deployment.get("ready")' in source
