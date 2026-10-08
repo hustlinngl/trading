@@ -919,3 +919,17 @@ def test_signal_terminal_http_state_route_exposes_exact_public_signal_contract(t
         }
     finally:
         server.server_close()
+
+
+def test_signal_terminal_health_reflects_failed_last_scan(tmp_path):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path, refresh_seconds=30)
+    terminal._cached_state = {"ok": False}
+    terminal._cached_at = time.time()
+
+    health = terminal.health()
+
+    assert health["ok"] is False
+    assert health["last_scan_ok"] is False
