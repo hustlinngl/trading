@@ -565,7 +565,9 @@ def main():
         reports = []
         sources = {}
         for sym, meta in imported_registry(args.data_dir).items():
-            sources[str(sym)] = ('imported', meta.get('path'))
+            imported_path = meta.get('path')
+            if imported_path and Path(imported_path).exists():
+                sources[str(sym)] = ('imported', imported_path)
         historical_root = Path('data/historical')
         if historical_root.exists():
             for path in sorted(historical_root.iterdir()):
@@ -607,7 +609,9 @@ def main():
         reports = []
         sources = {}
         for sym, meta in imported_registry(args.data_dir).items():
-            sources[str(sym)] = ('imported', meta.get('path'))
+            imported_path = meta.get('path')
+            if imported_path and Path(imported_path).exists():
+                sources[str(sym)] = ('imported', imported_path)
         historical_root = Path('data/historical')
         if historical_root.exists():
             for path in sorted(historical_root.iterdir()):
