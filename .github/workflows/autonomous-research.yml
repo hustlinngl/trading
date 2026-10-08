@@ -28,6 +28,9 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           PAPER_ONLY: 'true'
           SANDBOX: 'true'
+          # GitHub-hosted runners can be geo-restricted from exchange APIs (e.g. Binance 451).
+          # Exercise the full autonomous pipeline deterministically without network access.
+          AUTONOMOUS_OFFLINE: 'true'
         run: python -m ai_trading_lab.main autonomous --config config.yaml --cycles 1
       - name: Upload research artifacts
         uses: actions/upload-artifact@v4
