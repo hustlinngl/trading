@@ -48,7 +48,7 @@ def _atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
         ],
         axis=1,
     ).max(axis=1)
-    return tr.rolling(period, min_periods=period).mean()
+    # Benchmark controls must remain causal too; never backfill from future bars.\n    return tr.rolling(period, min_periods=1).mean()
 
 
 def _baseline_actions(df: pd.DataFrame, kind: str) -> pd.Series:
@@ -70,7 +70,7 @@ def _baseline_actions(df: pd.DataFrame, kind: str) -> pd.Series:
 
 def _evaluate_actions(df: pd.DataFrame, actions: pd.Series, settings: Settings) -> dict:
     bt = df.copy()
-    bt["atr_14"] = _atr(bt).bfill()
+    bt["atr_14"] = _atr(bt)
     result = run_configured_backtest(bt, actions, settings)
     return {**result.stats, "robust_score": robust_score(result.stats)}
 
