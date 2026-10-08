@@ -135,7 +135,7 @@ def test_refresh_deployment_manifest_requires_matching_evidence(tmp_path):
     }
     duration_stats = {**base_stats,"trades":15}
     (bundle / "base_holdout_report.json").write_text(
-        json.dumps({"symbol":"BTC/USDT","data_fingerprint":fp,"holdout":base_stats}),
+        json.dumps({"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"validation_train_data_fingerprint":"train-fp","validation_holdout_data_fingerprint":"holdout-fp","validation_holdout_start":"2026-01-01T00:00:00+00:00","validation_holdout_end":"2026-03-01T00:00:00+00:00","validation_holdout_frac":0.15,"model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem,"holdout":base_stats}),
         encoding="utf-8",
     )
     (bundle / "trade_window_training_report.json").write_text(
