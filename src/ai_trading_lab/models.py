@@ -136,10 +136,13 @@ class SignalModel:
                     self.conformal_scaled_residuals_ = None
                     self.conformal_scaled_error_ = 0.0
             self.calibration_oos_ = pd.DataFrame({'p_up': raw_p, 'expected_return': raw_er, 'model_disagreement': probs_cal.std(axis=1), 'return_disagreement': rets_cal.std(axis=1)}, index=Xcal.index)
-            Xfit = Xcore
+            # Calibration remains strictly OOS. Once calibration evidence is frozen,
+            # refit the production learners on the full chronological training dataset so
+            # deployment uses every available labeled row without contaminating validation.
+            Xfit = Xraw.fillna(self.fill_values).ffill().fillna(0.0)
             self.fit_rows_ = int(len(Xfit))
-            for clf in self.clfs: clf.fit(Xfit, ycore_c)
-            for reg in self.regs: reg.fit(Xfit, ycore_r)
+            for clf in self.clfs: clf.fit(Xfit, yc)
+            for reg in self.regs: reg.fit(Xfit, yr)
         else:
             self.fill_values = Xraw.median(numeric_only=True)
             Xfit = Xraw.fillna(self.fill_values).ffill().fillna(0.0)
