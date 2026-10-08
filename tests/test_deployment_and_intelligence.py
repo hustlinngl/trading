@@ -395,6 +395,12 @@ def test_train_complete_asset_can_skip_global_champion_promotion(monkeypatch, tm
 
 def test_bundle_compatibility_recomputes_deployment_evidence_instead_of_trusting_ready_flag(tmp_path):
     import json
+    from ai_trading_lab.deployment import (
+        model_semantics_fingerprint,
+        deployment_semantics_fingerprint,
+        bundle_artifact_fingerprint,
+        bundle_compatibility,
+    )
     settings = load_settings("config.yaml")
     bundle = asset_bundle_dir(tmp_path, "BTC/USDT")
     bundle.mkdir(parents=True)
