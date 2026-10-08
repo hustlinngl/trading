@@ -47,6 +47,20 @@ def one_iteration(settings, root: str | Path = "."):
             if age_minutes > float(getattr(settings,"live_max_data_age_minutes",30.0)):
                 result["reason"]=[f"stale_data:{age_minutes:.1f}m"]
             else:
+                from .live import _funding_snapshot
+                funding = _funding_snapshot(ex, settings.symbol, settings)
+                if (
+                    funding["funding_data_missing"]
+                    and bool(getattr(settings, "require_funding_data_for_derivatives", True))
+                    and funding["market_type"] in {"swap", "future", "perpetual", "unknown"}
+                ):
+                    result["reason"]=["funding_data_missing"]
+                    result["market_type"]=funding["market_type"]
+                    result["funding_error"]=funding.get("funding_error")
+                    previous_path.write_text(
+                        json.dumps(result,indent=2,default=str),encoding="utf-8"
+                    )
+                    return result
                 model_dir=model.parent
                 try:
                     bundle=InferenceBundle.load(settings,root,settings.symbol)
@@ -65,6 +79,13 @@ def one_iteration(settings, root: str | Path = "."):
                     tw = assess_trade_window(df, settings, tw_path)
                     for key, value in tw.items():
                         last[key] = value
+                    last["funding_cost_return"] = float(
+                        funding.get("funding_cost_return", 0.0) or 0.0
+                    )
+                    last["funding_data_missing"] = bool(
+                        funding.get("funding_data_missing", False)
+                    )
+                    last["market_type"] = funding.get("market_type", "spot")
                     signal,reasons=live_signal_gate(last,settings)
                     p=float(last.get("p_up",0.5))
                     confidence=p if signal=="LONG" else (1.0-p if signal=="SHORT" else 0.0)
