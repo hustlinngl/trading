@@ -10,6 +10,12 @@ on:
 permissions:
   contents: read
 
+# Only the newest package build for a branch/ref is useful.
+# This prevents expensive historical-cache builds from piling up after UI/data commits.
+concurrency:
+  group: windows-package-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-windows:
     runs-on: windows-latest
