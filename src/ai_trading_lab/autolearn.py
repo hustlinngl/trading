@@ -200,12 +200,17 @@ def auto_update(df,settings,model_dir="models"):
                 shutil.copy2(path, mdir / path.name)
             result["promoted"]=False
             result["promotion_rejected_reason"]="deployment_not_ready_after_artifact_validation"
-            refresh_deployment_manifest(settings, manifest_root)
+            deployment_manifest = refresh_deployment_manifest(settings, manifest_root)
+            state["bundle_artifact_fingerprint"] = bundle_artifact_fingerprint(mdir)
+            state["deployment_ready"] = bool(deployment_manifest.get("ready", False))
+            state["deployment_manifest"] = deployment_manifest
+            state_path.write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
         shutil.rmtree(backup_dir, ignore_errors=True)
-        try:
-            GrowthRegistry(getattr(settings,"memory_db","data/memory.sqlite")).add_model_version("signal","promoted",score,stats,str(mdir))
-        except Exception:
-            pass
+        if result["promoted"]:
+            try:
+                GrowthRegistry(getattr(settings,"memory_db","data/memory.sqlite")).add_model_version("signal","promoted",score,stats,str(mdir))
+            except Exception:
+                pass
     else:
         state.update({
             "data_fingerprint":fp,
