@@ -172,15 +172,20 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     return report
 
 
-def train_complete_asset(df, settings, *, holdout_frac: float):
+def train_complete_asset(df, settings, *, holdout_frac: float, promote_champion: bool = True):
     """One-click training: fit, untouched holdout, duration validation, then manifest."""
     asset_dir, _ = train_base_asset(df, settings)
     base_holdout = test_base_holdout(df, settings, holdout_frac)
     Path("logs").mkdir(exist_ok=True)
     Path("logs/test_report.json").write_text(json.dumps(base_holdout, indent=2, default=str), encoding="utf-8")
-    asset_model, duration_report = train_duration_asset(df, settings, holdout_frac=holdout_frac)
+    asset_model, duration_report = train_duration_asset(
+        df,
+        settings,
+        holdout_frac=holdout_frac,
+        copy_legacy=promote_champion,
+    )
     deployment = refresh_deployment_manifest(settings)
-    if deployment.get("ready"):
+    if deployment.get("ready") and promote_champion:
         _promote_asset_bundle(asset_dir)
     return {
         "symbol": settings.symbol, "rows": len(df), "status": "trained",
@@ -626,7 +631,9 @@ def main():
                 ss = load_settings(args.config); ss.symbol = sym
                 data = read_asset_dataframe({'path': path})
                 validate_research_data(data, ss)
-                out = train_complete_asset(data, ss, holdout_frac=args.holdout_frac)
+                out = train_complete_asset(
+                    data, ss, holdout_frac=args.holdout_frac, promote_champion=False
+                )
                 out['source'] = source
                 reports.append(out)
             except Exception as exc:
@@ -634,6 +641,18 @@ def main():
                     'symbol': sym, 'source': source, 'status': 'error',
                     'error': f'{type(exc).__name__}: {exc}',
                 })
+        # Multi-asset training must never leave the global champion bound to whichever
+        # asset happened to finish last. Promote only the configured primary symbol.
+        primary = str(s.symbol)
+        primary_row = next(
+            (
+                row for row in reports
+                if str(row.get('symbol')) == primary and bool(row.get('production_ready'))
+            ),
+            None,
+        )
+        if primary_row:
+            _promote_asset_bundle(asset_model_dir(primary))
         Path('logs/train_complete_all_report.json').write_text(
             json.dumps(reports, indent=2, default=str), encoding='utf-8'
         )
