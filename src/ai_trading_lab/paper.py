@@ -6,7 +6,7 @@ import pandas as pd
 
 from .data import exchange_client, fetch_ohlcv
 from .data_quality import audit_market_data
-from .engine import AdaptiveEngine
+from .inference import InferenceBundle, InferenceBundleError
 from .fingerprint import strong_dataset_fingerprint
 from .policy import live_signal_gate
 from .trade_window import assess_trade_window
@@ -48,14 +48,15 @@ def one_iteration(settings, root: str | Path = "."):
                 result["reason"]=[f"stale_data:{age_minutes:.1f}m"]
             else:
                 model_dir=model.parent
-                compatible, compatibility_reason=bundle_compatibility(settings,model_dir,settings.symbol)
-                if not compatible:
-                    result["reason"]=[compatibility_reason]
-                    (root/"logs"/"paper_last.json").write_text(json.dumps(result,indent=2,default=str),encoding="utf-8")
+                try:
+                    bundle=InferenceBundle.load(settings,root,settings.symbol)
+                except InferenceBundleError as exc:
+                    result["reason"]=[exc.reason]
+                    (root/"logs"/"paper_last.json").write_text(
+                        json.dumps(result,indent=2,default=str),encoding="utf-8"
+                    )
                     return result
-                eng=AdaptiveEngine(settings).load(model_dir)
-                feat=eng.features(df)
-                pred=eng.predict_frame(feat)
+                feat,pred=bundle.predict(df,strict=True)
                 if pred.empty:
                     result["reason"]=["empty_prediction"]
                 else:
