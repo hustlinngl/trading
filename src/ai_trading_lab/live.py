@@ -98,8 +98,9 @@ def _funding_snapshot(exchange,symbol,settings):
 
 
 def _abs_return_correlation(a,b,min_observations):
+    # Missing correlation evidence must not masquerade as perfect correlation.
     if a is None or b is None:
-        return 1.0
+        return 0.0
     try:
         joined=pd.concat([a.rename("a"),b.rename("b")],axis=1,join="inner").dropna()
         if len(joined)<int(min_observations):
