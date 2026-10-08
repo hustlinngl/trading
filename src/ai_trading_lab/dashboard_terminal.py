@@ -559,9 +559,8 @@ class SignalTerminal:
         return rows
 
     def _assessment_payload(self, assessment: LiveAssessment) -> dict:
-        payload = _json_safe(assessment.to_dict())
-        payload["signal_class"] = _signal_class(str(payload.get("signal", "WAIT")))
-        return payload
+        """Expose only the canonical six-field DirectSignal payload."""
+        return _json_safe(assessment.to_dict())
 
     def _bootstrap_state(self) -> dict:
         return {
