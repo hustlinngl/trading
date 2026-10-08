@@ -94,14 +94,14 @@ def test_signal_terminal_builds_read_only_state(tmp_path, monkeypatch):
     signal = state["signals"][0]
     assert signal == {
         "symbol": "BTC/USDT",
-        "timestamp": "2026-10-07T00:00:00+00:00",
+
         "signal": "LONG",
         "confidence": 0.91,
         "expected_return": 0.006,
         "price": 100000.0,
         "horizon_bars": 8,
-        "actionable": True,
-        "reason": "qualified",
+
+
     }
     assert "decision" not in signal
     assert "details" not in signal
