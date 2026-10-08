@@ -1,3 +1,8 @@
+## 0.9.40
+- Expanded the model/data defaults to 30k training bars, 1.2k live bars and 15 configured live assets.
+- Hardened dashboard presentation around the direct six-field signal contract and removed malformed CSS boundaries.
+- Added duplicate-universe and dashboard-markup regression guards.
+
 ## 0.9.34
 - Hardened full-universe live scanning with bounded parallel assessment workers and an explicit `live_scan_workers` setting.
 - Made explicit live symbol scopes authoritative even when exchange-wide discovery is available.
