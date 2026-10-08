@@ -148,9 +148,22 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     bt["atr_14"] = feat["atr_14"].reindex(test_df.index).ffill()
     result = run_configured_backtest(bt, actions, settings)
     report = {
-        "symbol": settings.symbol, "rows": len(df), "train_rows": len(train_df),
+        "symbol": settings.symbol,
+        "rows": len(df),
+        "train_rows": len(train_df),
+        "holdout_rows": len(test_df),
+        # The final production bundle is intentionally refit on the full dataset
+        # after this untouched temporal validation. Keep both fingerprints so the
+        # deployment manifest can distinguish validation provenance from refit data.
         "data_fingerprint": strong_dataset_fingerprint(df),
-        "holdout_rows": len(test_df), "holdout": result.stats,
+        "validation_train_data_fingerprint": strong_dataset_fingerprint(train_df),
+        "validation_holdout_data_fingerprint": strong_dataset_fingerprint(test_df),
+        "validation_holdout_start": str(test_df.index.min()),
+        "validation_holdout_end": str(test_df.index.max()),
+        "validation_holdout_frac": float(holdout_frac),
+        "model_semantics_fingerprint": model_semantics_fingerprint(settings),
+        "deployment_semantics_fingerprint": deployment_semantics_fingerprint(settings),
+        "holdout": result.stats,
     }
     asset_dir = asset_model_dir(settings.symbol)
     asset_dir.mkdir(parents=True, exist_ok=True)
