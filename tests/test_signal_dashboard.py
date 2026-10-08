@@ -43,6 +43,16 @@ def test_dashboard_responsive_ui_and_chart_edge_case():
     assert 'fetch("/api/state?force="+(force?"1":"0")' in html
 
 
+def test_dashboard_js_dom_references_resolve():
+    import re
+    import signal_dashboard as terminal_mod
+
+    html = terminal_mod.HTML
+    ids = set(re.findall(r'id="([^"]+)"', html))
+    refs = set(re.findall(r'\$\("([^"]+)"\)', html))
+    assert refs <= ids
+
+
 def test_dashboard_market_explorer_ui():
     import signal_dashboard as terminal_mod
 
