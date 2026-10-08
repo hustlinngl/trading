@@ -54,10 +54,12 @@ jobs:
           start = "2024-10-01"
           end = "2026-10-01"
 
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+
           out = Path("data/historical")
           out.mkdir(parents=True, exist_ok=True)
 
-          for symbol in symbols:
+          def build_symbol_history(symbol):
               archives = download_range(
                   symbol,
                   "15m",
@@ -71,15 +73,30 @@ jobs:
               )
               frame = merge_archives(archives)
               if frame.empty or len(frame) < 5000:
-                  raise RuntimeError(f"Insufficient Binance Vision history for {symbol}: {len(frame)} bars")
+                  raise RuntimeError(
+                      f"Insufficient Binance Vision history for {symbol}: {len(frame)} bars"
+                  )
               frame = frame.sort_values("timestamp")
               frame = frame[["timestamp", "open", "high", "low", "close", "volume"]].copy()
+              path = out / f"{symbol.replace('/', '_')}_15m.csv"
               frame.to_csv(
-                  out / f"{symbol.replace('/', '_')}_15m.csv",
+                  path,
                   index=False,
                   date_format="%Y-%m-%dT%H:%M:%S%z",
               )
-              print(symbol, len(frame), frame["timestamp"].min(), frame["timestamp"].max())
+              return symbol, path, len(frame), frame["timestamp"].min(), frame["timestamp"].max()
+
+          # Download a few independent symbols concurrently. The bound avoids hammering
+          # Binance Vision while cutting the wall-clock time of this reproducible build step.
+          with ThreadPoolExecutor(max_workers=4, thread_name_prefix="vision") as pool:
+              futures = {pool.submit(build_symbol_history, symbol): symbol for symbol in symbols}
+              for future in as_completed(futures):
+                  symbol = futures[future]
+                  try:
+                      done_symbol, path, rows, start_ts, end_ts = future.result()
+                      print(done_symbol, rows, start_ts, end_ts)
+                  except Exception as exc:
+                      raise RuntimeError(f"Historical cache build failed for {symbol}: {type(exc).__name__}: {exc}") from exc
           PY
 
       - name: Train and validate bundled signal assets
