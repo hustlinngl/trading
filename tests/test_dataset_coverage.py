@@ -77,3 +77,16 @@ def test_deployment_requires_validation_recipe_match():
     assert 'base.get("model_semantics_fingerprint")' in source
     assert 'base.get("deployment_semantics_fingerprint")' in source
     assert 'validation_train_data_fingerprint' in source
+
+def test_duration_specialist_carries_recipe_provenance():
+    from pathlib import Path
+    source = Path("src/ai_trading_lab/trade_window.py").read_text(encoding="utf-8")
+    assert "model_semantics_fingerprint(settings)" in source
+    assert "deployment_semantics_fingerprint(settings)" in source
+
+
+def test_deployment_validates_duration_recipe_provenance():
+    from pathlib import Path
+    source = Path("src/ai_trading_lab/deployment.py").read_text(encoding="utf-8")
+    assert 'duration.get("model_semantics_fingerprint")' in source
+    assert 'duration.get("deployment_semantics_fingerprint")' in source
