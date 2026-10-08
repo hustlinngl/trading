@@ -520,18 +520,49 @@ def main():
         report = train_complete_asset(df, s, holdout_frac=args.holdout_frac)
         print(json.dumps(report, default=str, indent=2)); return
     if args.command == 'train-all':
-        from .dataset import imported_registry
+        # Train every locally available asset, not only explicitly imported files.
+        # This makes bundled historical data (data/historical/*) first-class training
+        # input while preserving the imported registry as the primary override.
+        from .dataset import imported_registry, read_market_file, infer_symbol
         reports = []
+        sources = {}
         for sym, meta in imported_registry(args.data_dir).items():
+            sources[str(sym)] = ('imported', meta.get('path'))
+        historical_root = Path('data/historical')
+        if historical_root.exists():
+            for path in sorted(historical_root.iterdir()):
+                if path.suffix.lower() not in {'.csv', '.parquet', '.pq', '.json'}:
+                    continue
+                try:
+                    sym = infer_symbol(path)
+                    sources.setdefault(str(sym), ('historical', str(path)))
+                except Exception:
+                    continue
+
+        for sym, (source, path) in sources.items():
             try:
-                ss = load_settings(args.config); ss.symbol = sym
-                data = read_asset_dataframe(meta)
+                ss = load_settings(args.config)
+                ss.symbol = sym
+                data = read_asset_dataframe({'path': path})
                 validate_research_data(data, ss)
                 asset_dir, _ = train_base_asset(data, ss)
-                reports.append({'symbol': sym, 'rows': len(data), 'status': 'trained', 'bundle': str(asset_dir)})
+                reports.append({
+                    'symbol': sym,
+                    'rows': len(data),
+                    'source': source,
+                    'status': 'trained',
+                    'bundle': str(asset_dir),
+                })
             except Exception as exc:
-                reports.append({'symbol': sym, 'status': 'error', 'error': str(exc)})
-        Path('logs/train_all_report.json').write_text(json.dumps(reports, indent=2, default=str), encoding='utf-8')
+                reports.append({
+                    'symbol': sym,
+                    'source': source,
+                    'status': 'error',
+                    'error': f'{type(exc).__name__}: {exc}',
+                })
+        Path('logs/train_all_report.json').write_text(
+            json.dumps(reports, indent=2, default=str), encoding='utf-8'
+        )
         print(json.dumps(reports, indent=2, default=str)); return
     if args.command == 'train-complete-all':
         from .dataset import imported_registry
