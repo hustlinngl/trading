@@ -2456,10 +2456,6 @@ async function refresh(force=false){
     button.disabled=true;
     button.setAttribute("aria-busy","true");
   }
-  // The focused UI intentionally has no persistent status stamp; keep refresh side effects
-  // independent from optional legacy DOM nodes.
-  const stamp=$("stamp");
-  if(stamp)stamp.textContent="Aggiornamento…";
   try{
     const res=await fetch("/api/state?force="+(force?"1":"0"),{cache:"no-store"});
     const data=await res.json();
