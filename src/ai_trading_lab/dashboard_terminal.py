@@ -851,10 +851,15 @@ class SignalTerminal:
         return cached_state
 
     def health(self) -> dict:
+        cached = self._cached_state
+        last_scan_ok = bool(cached.get("ok")) if cached is not None else None
+        # Before the first scan the process itself is healthy; after a scan, reflect
+        # the actual last terminal state instead of reporting a permanently green API.
+        process_ok = True if cached is None else last_scan_ok
         return {
-            "ok": True,
+            "ok": process_ok,
             "version": __version__,
-            "cached": self._cached_state is not None,
+            "cached": cached is not None,
             "scan_in_progress": bool(self._scan_thread is not None and self._scan_thread.is_alive()),
             "scan_age_seconds": (
                 round(time.time() - self._scan_started_at, 1)
@@ -863,14 +868,10 @@ class SignalTerminal:
             ),
             "cache_age_seconds": (
                 round(time.time() - self._cached_at, 1)
-                if self._cached_state is not None
+                if cached is not None
                 else None
             ),
-            "last_scan_ok": (
-                bool(self._cached_state.get("ok"))
-                if self._cached_state is not None
-                else None
-            ),
+            "last_scan_ok": last_scan_ok,
         }
 
 
