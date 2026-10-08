@@ -6,19 +6,45 @@ import json, numpy as np, pandas as pd
 
 from .data import exchange_client, fetch_ohlcv, timeframe_offset
 from .data_quality import audit_market_data
-from .engine import AdaptiveEngine
+from .inference import InferenceBundle, InferenceBundleError
 from .fingerprint import strong_dataset_fingerprint
 from .policy import live_signal_gate
 from .trade_window import assess_trade_window
 from .deployment import resolve_signal_bundle, resolve_trade_window_model, bundle_compatibility
+from .signal_contract import compile_direct_signal
 
 @dataclass
 class LiveAssessment:
     symbol:str; timestamp:str; status:str; signal:str; confidence:float; expected_return:float; price:float; reason_codes:list[str]; data_fingerprint:str
     details:dict[str, object] = field(default_factory=dict)
     correlation_returns:pd.Series|None = field(default=None, repr=False, compare=False)
+    horizon_bars:int = 8
 
     def to_dict(self):
+        """Return only the exact six-field caller-facing signal contract."""
+        signal = str(self.signal).upper()
+        confidence = float(self.confidence)
+        p_up = (
+            confidence
+            if signal == "LONG"
+            else 1.0 - confidence
+            if signal == "SHORT"
+            else 0.5
+        )
+        return compile_direct_signal(
+            {
+                "action": signal,
+                "p_up": p_up,
+                "expected_return": float(self.expected_return),
+            },
+            symbol=self.symbol,
+            timestamp=self.timestamp,
+            price=float(self.price),
+            horizon_bars=max(1, int(self.horizon_bars)),
+        ).to_dict()
+
+    def to_internal_dict(self):
+        """Return private operational/research telemetry for local persistence."""
         data=asdict(self)
         data.pop("correlation_returns",None)
         return data
@@ -146,15 +172,17 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
         correlation_returns=pd.to_numeric(df["close"],errors="coerce").pct_change().dropna().tail(max(2,int(getattr(settings,"live_portfolio_correlation_bars",96))))
 
         model_dir=resolve_signal_bundle(settings,root,symbol)
-        if not (model_dir/"signal_model.joblib").exists():
-            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,["model_missing"],fp,{"bundle":str(model_dir)})
-        compatible, compatibility_reason=bundle_compatibility(settings,model_dir,symbol)
-        if not compatible:
-            return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[compatibility_reason],fp,{"bundle":str(model_dir),"compatibility":compatibility_reason})
+        try:
+            bundle=InferenceBundle.load(settings,root,symbol)
+        except InferenceBundleError as exc:
+            details={"bundle":str(exc.bundle)}
+            if exc.reason != "model_missing":
+                details["compatibility"]=exc.reason
+            return LiveAssessment(
+                symbol,stamp,"WAIT","FLAT",0.0,0.0,price,[exc.reason],fp,details
+            )
 
-        eng=AdaptiveEngine(settings).load(model_dir)
-        feat=eng.features(df)
-        pred=eng.predict_frame(feat)
+        feat,pred=bundle.predict(df,strict=True)
         if pred.empty:
             return LiveAssessment(symbol,stamp,"WAIT","FLAT",0.0,0.0,price,["empty_prediction"],fp,{"bundle":str(model_dir)})
 
@@ -492,6 +520,6 @@ def append_live_signal_history(results,root="."):
             key=(str(r.symbol),str(r.timestamp))
             if key in seen:
                 continue
-            fh.write(json.dumps(r.to_dict(),default=str)+"\n")
+            fh.write(json.dumps(r.to_internal_dict(),default=str)+"\n")
             seen.add(key); added+=1
     return {"path":str(p),"added":int(added),"duplicates_skipped":int(len(results)-added)}
