@@ -288,7 +288,11 @@ def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
     duration_checks={
         "duration_artifact_present":(asset_dir/"trade_window_specialist.joblib").exists(),
         "duration_report_present":bool(duration),
-        "duration_provenance_match":duration_provenance_match,
+        "duration_provenance_match":(
+            duration_provenance_match
+            and str(duration.get("model_semantics_fingerprint"))==str(meta.get("model_semantics_fingerprint"))
+            and str(duration.get("deployment_semantics_fingerprint"))==str(meta.get("deployment_semantics_fingerprint"))
+        ),
         "duration_production_ready":bool(duration.get("production_ready",False)),
         "risk_adjusted_utility":(not bool(duration_bt)) or duration_utility>=float(getattr(settings,"trade_window_min_holdout_utility",0.0)),
     }
