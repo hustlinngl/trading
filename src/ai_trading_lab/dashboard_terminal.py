@@ -1458,7 +1458,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
       <div class="decision-stats">
         <div class="mini-stat"><div class="k">Prezzo</div><div class="v num" id="deckPrice">—</div></div>
         <div class="mini-stat"><div class="k">Confidence</div><div class="v" id="deckConfidence">—</div></div>
-        <div class="mini-stat"><div class="k">Robust edge</div><div class="v" id="deckEdge">—</div></div>
+        <div class="mini-stat"><div class="k">Expected return</div><div class="v" id="deckEdge">—</div></div>
       </div>
       <div class="reason-strip" id="deckReasons"></div>
 
@@ -1552,12 +1552,12 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
 
   <div class="legacy-hidden panel" id="detail">
     <div class="panel-head">
-      <div><div class="title">Signal detail</div><div class="small">Stessa decisione usata dal motore: robust edge, meta, memoria, regime e duration gate.</div></div>
+      <div><div class="title">Signal data</div><div class="small">Solo i sei campi del contratto diretto, senza diagnostica interna del modello.</div></div>
     </div>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Asset</th><th>Segnale</th><th>Prezzo</th><th>Robust edge</th><th>Score</th><th>Meta</th><th>Memoria</th><th>Regime</th><th>Duration</th><th>Dati</th><th>Provenienza</th></tr>
+          <tr><th>Asset</th><th>Segnale</th><th>Prezzo</th><th>Confidence</th><th>Expected return</th><th>Horizon</th></tr>
         </thead>
         <tbody id="detailRows"></tbody>
       </table>
