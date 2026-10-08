@@ -2708,6 +2708,12 @@ def parse_args():
         action="store_true",
         help="Validate frozen/source startup without contacting the market.",
     )
+    parser.add_argument(
+        "--self-test-inference",
+        action="store_true",
+        help="Run one real bundled model inference and validate the six-field DirectSignal contract without network access.",
+    )
+    parser.add_argument("--symbol", default=None, help="Symbol used by --self-test-inference")
     return parser.parse_args()
 
 
@@ -2718,6 +2724,35 @@ def main():
         print("dashboard-smoke-ok")
         return
     settings = load_settings(args.config or ROOT / "config.yaml")
+    if args.self_test_inference:
+        import pandas as pd
+        from .inference import InferenceBundle
+        from .signal_contract import compile_direct_signal
+
+        symbol = args.symbol or settings.symbol
+        path = ROOT / "data" / "historical" / f"{symbol.replace('/', '_').replace(':', '_')}_{settings.timeframe}.csv"
+        if not path.exists():
+            raise SystemExit(f"self-test-inference: missing historical asset {path}")
+        frame = pd.read_csv(path, parse_dates=["timestamp"])
+        frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
+        frame = frame.set_index("timestamp").sort_index()
+        settings.symbol = symbol
+        bundle = InferenceBundle.load(settings, ROOT, symbol)
+        features, predictions = bundle.predict(frame.tail(max(1200, int(settings.lookback_bars))), strict=True)
+        if predictions.empty:
+            raise SystemExit("self-test-inference: empty prediction frame")
+        row = predictions.iloc[-1]
+        signal = compile_direct_signal(
+            row,
+            symbol=symbol,
+            timestamp=str(predictions.index[-1]),
+            price=float(frame["close"].iloc[-1]),
+            horizon_bars=int(settings.horizon_bars),
+        ).to_dict()
+        if set(signal) != {"symbol", "signal", "confidence", "expected_return", "price", "horizon_bars"}:
+            raise SystemExit("self-test-inference: public signal contract mismatch")
+        print(json.dumps({"ok": True, "symbol": symbol, "signal": signal}, ensure_ascii=False))
+        return
     if args.symbols:
         settings.live_symbols = tuple(
             x.strip() for x in args.symbols.split(",") if x.strip()
