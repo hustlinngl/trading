@@ -17,6 +17,17 @@ def test_default_dataset_coverage_is_broad():
     assert len(settings.live_symbols) == len(set(settings.live_symbols))
 
 
+def test_settings_constructor_matches_expanded_defaults():
+    from ai_trading_lab.config import Settings
+    settings = Settings()
+    assert settings.lookback_bars >= 30_000
+    assert settings.live_lookback_bars >= 1_200
+    assert settings.max_parallel_downloads >= 10
+    assert settings.broad_crypto_symbol_cap >= 500
+    assert settings.intraday_research_top_n >= 30
+    assert len(settings.live_symbols) >= 15
+
+
 def test_signal_first_ui_hides_secondary_telemetry():
     import signal_dashboard as terminal_mod
 
