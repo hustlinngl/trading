@@ -43,32 +43,41 @@ class AnalogMemory:
         dist,idx=self.nn.kneighbors(zx,n_neighbors=requested)
         mem_ts=pd.Index(self.timestamps) if self.timestamps is not None else pd.Index([])
 
+        neighbors=[]
         for row_i,ts in enumerate(pd.Index(frame.index)):
+            row_idx=np.asarray(idx[row_i],dtype=int)
+            row_dist=np.asarray(dist[row_i],dtype=float)
             if not (exclusion>0 and len(mem_ts)):
                 if exclude_self and len(mem_ts):
                     matches=np.flatnonzero(mem_ts==ts)
                     if len(matches):
                         anchor=int(matches[0])
-                        keep=np.abs(idx[row_i]-anchor)>0
-                        idx[row_i],dist[row_i]=idx[row_i][keep][:self.k],dist[row_i][keep][:self.k]
+                        keep=np.abs(row_idx-anchor)>0
+                        row_idx,row_dist=row_idx[keep],row_dist[keep]
+                neighbors.append((row_idx[:self.k],row_dist[:self.k]))
                 continue
             matches=np.flatnonzero(mem_ts==ts)
             if not len(matches):
+                neighbors.append((row_idx[:self.k],row_dist[:self.k]))
                 continue
             anchor=int(matches[0])
-            keep=np.abs(idx[row_i]-anchor)>exclusion
-            filtered,filtered_dist=idx[row_i][keep],dist[row_i][keep]
+            keep=np.abs(row_idx-anchor)>exclusion
+            filtered,filtered_dist=row_idx[keep],row_dist[keep]
             if len(filtered)<min(self.k,len(self.matrix)) and len(self.matrix)>requested:
                 all_dist,all_idx=self.nn.kneighbors(zx[row_i:row_i+1],n_neighbors=len(self.matrix))
                 keep_all=np.abs(all_idx[0]-anchor)>exclusion
                 filtered,filtered_dist=all_idx[0][keep_all],all_dist[0][keep_all]
-            idx[row_i],dist[row_i]=filtered[:self.k],filtered_dist[:self.k]
+            neighbors.append((filtered[:self.k],filtered_dist[:self.k]))
 
         edges=[]; dispersions=[]; agreements=[]; counts=[]
-        for row_i in range(len(idx)):
-            y=self.outcomes[idx[row_i]]
-            d=dist[row_i]
-            finite=np.isfinite(y)
+        for row_idx,row_dist in neighbors:
+            if len(row_idx)==0:
+                edges.append(np.nan); dispersions.append(np.nan); agreements.append(np.nan)
+                counts.append(0)
+                continue
+            y=self.outcomes[row_idx]
+            d=row_dist
+            finite=np.isfinite(y) & np.isfinite(d)
             y=y[finite]; d=d[finite]
             n=int(len(y)); counts.append(n)
             if n==0:
