@@ -38,6 +38,9 @@ def test_dashboard_responsive_ui_and_chart_edge_case():
     assert 'id="deckBundle"' not in html
     assert 'function renderMetrics' not in html
     assert 'function pill(' not in html
+    assert "renderRadar(signals);" in html
+    assert "renderLiveData(data);" in html
+    assert 'fetch("/api/state?force="+(force?"1":"0")' in html
 
 
 def test_dashboard_market_explorer_ui():
@@ -861,3 +864,46 @@ def test_signal_terminal_frontend_music_and_click_effect_are_bounded():
     assert 'document.addEventListener("click",e=>' not in html
     assert 'history-badge' not in html
     assert 'class="focus-status"' not in html
+
+
+def test_signal_terminal_http_state_route_exposes_exact_public_signal_contract(tmp_path):
+    import json
+    import signal_dashboard as terminal_mod
+    from urllib.request import urlopen
+
+    settings = load_settings("config.yaml")
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path, refresh_seconds=30)
+    expected = {
+        "ok": True,
+        "signals": [{
+            "symbol": "BTC/USDT",
+            "signal": "LONG",
+            "confidence": 0.91,
+            "expected_return": 0.006,
+            "price": 100000.0,
+            "horizon_bars": 8,
+        }],
+        "summary": {
+            "model_backed_assets": 1,
+            "compatible_bundles": 1,
+            "universe_total": 1,
+        },
+        "scan_in_progress": False,
+    }
+    terminal._terminal_state = lambda *args, **kwargs: expected
+    server = terminal_mod.ThreadingHTTPServer(
+        ("127.0.0.1", 0), terminal_mod.make_handler(terminal)
+    )
+    try:
+        with urlopen(
+            f"http://127.0.0.1:{server.server_address[1]}/api/state?force=1",
+            timeout=2,
+        ) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        assert payload["ok"] is True
+        assert payload["signals"][0] == expected["signals"][0]
+        assert set(payload["signals"][0]) == {
+            "symbol", "signal", "confidence", "expected_return", "price", "horizon_bars"
+        }
+    finally:
+        server.server_close()
