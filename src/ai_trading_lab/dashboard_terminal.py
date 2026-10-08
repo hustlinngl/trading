@@ -673,19 +673,18 @@ class SignalTerminal:
                     "universe_evaluated": len(assessments),
                     "universe_mode": "compatibility_fallback",
                 }
-            # Realtime quotes follow the discovered exchange universe when available,
-            # while model inference remains limited to compatible model-backed markets.
+            # Keep the full discovered universe for navigation, but only fetch tickers
+            # needed for the visible dashboard. Arbitrary active markets are quoted on demand
+            # through /api/quote when the user opens the Market data view.
             market_symbols = sorted({
                 str(symbol).strip()
                 for symbol in (universe_meta.get("market_symbols") or [])
                 if str(symbol).strip()
             })
-            self._live_tracker.add_symbols(
-                list(dict.fromkeys(configured_symbols + [x.symbol for x in assessments[:5]]))
-            )
-            symbols = list(dict.fromkeys(
-                market_symbols or configured_symbols or [x.symbol for x in assessments]
+            quote_symbols = list(dict.fromkeys(
+                configured_symbols + [x.symbol for x in assessments[:5]]
             ))
+            self._live_tracker.add_symbols(quote_symbols)
             write_live_snapshot(assessments, str(self.state_root))
             append_live_signal_history(assessments, str(self.state_root))
 
@@ -701,13 +700,14 @@ class SignalTerminal:
                     "error": f"{type(exc).__name__}:{exc}",
                 }
 
-            quotes = self._quotes(symbols)
+            quotes = self._quotes(quote_symbols)
             market_data = {
                 "generated_at": datetime.now(timezone.utc).isoformat(),
                 "exchange": getattr(self.settings, "exchange", "binance"),
                 "available": self._get_exchange() is not None,
                 "error": self._exchange_error,
-                "symbols": list(symbols),
+                "symbols": list(market_symbols or quote_symbols),
+                "quote_symbols": list(quote_symbols),
                 "quotes": _json_safe(quotes),
             }
             signals = []
@@ -726,16 +726,9 @@ class SignalTerminal:
                 except (TypeError, ValueError):
                     ages.append(1e9)
 
-            signals.sort(
-                key=lambda x: (
-                    _signal_rank(str(x.get("signal", "WAIT"))),
-                    float((x.get("decision") or {}).get("selection_score", 0.0) or 0.0),
-                    float((x.get("decision") or {}).get("robust_directional_edge", 0.0) or 0.0),
-                    float(x.get("confidence", 0.0) or 0.0),
-                ),
-                reverse=True,
-            )
-
+            # Keep the ranking emitted by scan_top5(). The public DirectSignal contract
+            # intentionally hides selection_score and internal decision telemetry; re-sorting
+            # here would silently degrade the engine's ranking to confidence-only.
             active = sum(
                 str(x.get("signal")) in {"LONG", "SHORT"} for x in signals
             )
@@ -2222,7 +2215,7 @@ function renderLiveData(data){
   const box=$("liveDataFallback");
   if(!box)return;
   const market=data.market_data||{};
-  const symbols=Array.isArray(market.symbols)?market.symbols:[];
+  const symbols=Array.isArray(market.quote_symbols)?market.quote_symbols:(Array.isArray(market.symbols)?market.symbols:[]);
   const quotes=(market.quotes&&typeof market.quotes==="object")?market.quotes:{};
   const signals=data.signals||[];
   const hasSignals=signals.some(x=>x&&["LONG","SHORT"].includes(x.signal));
