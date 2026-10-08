@@ -26,7 +26,7 @@ class Settings:
     timeframe: str = "15m"
     research_timeframe: str = "15m"
     broad_timeframe: str = "1d"
-    lookback_bars: int = 8000
+    lookback_bars: int = 30000
     horizon_bars: int = 8
     min_train_rows: int = 1500
     retrain_every_bars: int = 96
@@ -86,7 +86,7 @@ class Settings:
     paper_only: bool = True
     sandbox: bool = True
     poll_seconds: int = 60
-    live_lookback_bars: int = 600
+    live_lookback_bars: int = 1200
     # 0 means scan every discovered active market with a compatible local model.
     live_max_symbols: int = 0
     live_market_types: tuple[str, ...] = ("spot", "swap", "future", "margin", "option")
@@ -183,14 +183,14 @@ class Settings:
     force_daily_loss_exit: bool = True
     online_warmup_rows: int = 64
     universe_manifest: str = "data/real_universe/manifest.json"
-    max_parallel_downloads: int = 6
-    broad_crypto_symbol_cap: int = 250
-    intraday_research_top_n: int = 10
+    max_parallel_downloads: int = 10
+    broad_crypto_symbol_cap: int = 500
+    intraday_research_top_n: int = 30
     final_holdout_frac: float = 0.15
     master_audit_folds: int = 18
     master_optimization_folds: int = 6
     historical_sources: tuple[str, ...] = ("binance", "fred", "sec", "cftc", "treasury", "alpha_vantage")
-    live_symbols: tuple[str, ...] = ("BTC/USDT", "ETH/USDT", "SOL/USDT")
+    live_symbols: tuple[str, ...] = (\n        "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT",\n        "ADA/USDT", "DOGE/USDT", "AVAX/USDT", "LINK/USDT", "DOT/USDT",\n        "LTC/USDT", "BCH/USDT", "ATOM/USDT", "UNI/USDT", "ETC/USDT",\n    )
 
 
 def load_settings(path: str | Path = ROOT / "config.yaml") -> Settings:
