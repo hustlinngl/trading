@@ -386,7 +386,7 @@ def test_train_complete_asset_can_skip_global_champion_promotion(monkeypatch, tm
     )
 
     main_module.train_complete_asset(
-        object(), settings, holdout_frac=0.15, promote_champion=False
+        [1, 2, 3], settings, holdout_frac=0.15, promote_champion=False
     )
 
     assert calls["copy_legacy"] is False
