@@ -199,9 +199,35 @@ jobs:
             if (-not $page.Content.Contains("Top 5 signals")) { throw "Packaged dashboard does not contain the focused Top 5 signals surface" }
             if (-not $page.Content.Contains("pick-stat-meter")) { throw "Packaged dashboard is missing the confidence result meter" }
             if (-not $health.ok) { throw "Packaged health endpoint did not report ok=true" }
-            $state = Invoke-RestMethod -Uri "http://127.0.0.1:$port/api/state?force=1" -TimeoutSec 20
+            $state = $null
+            $scanReady = $false
+            for ($i = 0; $i -lt 40; $i++) {
+              $state = Invoke-RestMethod -Uri "http://127.0.0.1:$port/api/state?force=0" -TimeoutSec 20
+              if (-not $state.scan_in_progress) {
+                $scanReady = $true
+                break
+              }
+              Start-Sleep -Seconds 1
+            }
+            if (-not $scanReady) {
+              throw "Packaged executable scan did not complete within the functional-test window."
+            }
+            if (-not $state.ok) {
+              throw "Packaged dashboard returned ok=false after scan: $($state.error)"
+            }
             if ([int]$state.summary.model_backed_assets -lt 15) {
-              throw "Packaged executable started but did not load all 15 bundled model assets: $($state.summary.model_backed_assets)"
+              throw "Packaged executable started but did not expose all 15 bundled model assets: $($state.summary.model_backed_assets)"
+            }
+            if ([int]$state.summary.compatible_bundles -lt 15) {
+              throw "Packaged executable did not report all 15 model bundles as compatible: $($state.summary.compatible_bundles)"
+            }
+
+            foreach ($row in @($state.signals)) {
+              $keys = @($row.PSObject.Properties.Name | Sort-Object)
+              $keyString = $keys -join ","
+              if ($keyString -ne "confidence,expected_return,horizon_bars,price,signal,symbol") {
+                throw "Packaged dashboard exposed a non-canonical public signal payload: $keyString"
+              }
             }
 
             $symbols = @(
