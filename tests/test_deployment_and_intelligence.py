@@ -391,3 +391,69 @@ def test_train_complete_asset_can_skip_global_champion_promotion(monkeypatch, tm
 
     assert calls["copy_legacy"] is False
     assert promoted == []
+
+
+def test_bundle_compatibility_recomputes_deployment_evidence_instead_of_trusting_ready_flag(tmp_path):
+    import json
+    settings = load_settings("config.yaml")
+    bundle = asset_bundle_dir(tmp_path, "BTC/USDT")
+    bundle.mkdir(parents=True)
+    fp = "dataset-current"
+    sem = model_semantics_fingerprint(settings)
+    dep_sem = deployment_semantics_fingerprint(settings)
+    for name in ENGINE_ARTIFACTS:
+        (bundle / name).write_bytes(name.encode())
+    (bundle / "trade_window_specialist.joblib").write_bytes(b"window")
+    (bundle / "base_training_meta.json").write_text(
+        json.dumps({
+            "symbol":"BTC/USDT",
+            "timeframe":"15m",
+            "data_fingerprint":fp,
+            "model_semantics_fingerprint":sem,
+            "deployment_semantics_fingerprint":dep_sem,
+        }),
+        encoding="utf-8",
+    )
+    artifact_fp = bundle_artifact_fingerprint(bundle)
+    (bundle / "base_holdout_report.json").write_text(
+        json.dumps({
+            "symbol":"BTC/USDT",
+            "timeframe":"15m",
+            "data_fingerprint":fp,
+            "validation_train_data_fingerprint":"train-fp",
+            "validation_holdout_data_fingerprint":"holdout-fp",
+            "validation_holdout_start":"2026-01-01T00:00:00+00:00",
+            "validation_holdout_end":"2026-03-01T00:00:00+00:00",
+            "model_semantics_fingerprint":sem,
+            "deployment_semantics_fingerprint":dep_sem,
+            "holdout":{"trades":1,"profit_factor":0.1,"max_drawdown":-0.9,"total_return":-0.1},
+        }),
+        encoding="utf-8",
+    )
+    (bundle / "trade_window_training_report.json").write_text(
+        json.dumps({
+            "production_ready":False,
+            "symbol":"BTC/USDT",
+            "timeframe":"15m",
+            "data_fingerprint":fp,
+            "model_semantics_fingerprint":sem,
+            "deployment_semantics_fingerprint":dep_sem,
+        }),
+        encoding="utf-8",
+    )
+    (bundle / "deployment_manifest.json").write_text(
+        json.dumps({
+            "ready":True,
+            "symbol":"BTC/USDT",
+            "timeframe":"15m",
+            "data_fingerprint":fp,
+            "model_semantics_fingerprint":sem,
+            "deployment_semantics_fingerprint":dep_sem,
+            "bundle_artifact_fingerprint":artifact_fp,
+        }),
+        encoding="utf-8",
+    )
+
+    ok, reason = bundle_compatibility(settings, bundle, "BTC/USDT")
+    assert not ok
+    assert reason == "deployment_manifest_evidence_mismatch"
