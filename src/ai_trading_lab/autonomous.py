@@ -36,7 +36,7 @@ def _offline_synthetic_data(settings: Settings, n: int | None = None) -> pd.Data
     except Exception:
         offset = pd.Timedelta(minutes=15)
     end = pd.Timestamp.now(tz="UTC").floor(freq) - offset
-    index = pd.date_range(end=end, periods=rows, freq=freq, tz="UTC")
+    index = pd.date_range(end=end, periods=rows, freq=freq)
     rng = np.random.default_rng(int(settings.seed))
     regimes = np.repeat([0, 1, 2, 3], rows // 4 + 1)[:rows]
     drift = np.choose(regimes, [0.00002, 0.00010, -0.00008, 0.0])
