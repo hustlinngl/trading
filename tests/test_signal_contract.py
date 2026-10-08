@@ -35,7 +35,7 @@ def test_direct_signal_is_exactly_six_fields():
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"signal": "WAIT"},
+        {"signal": "BUY"},
         {"confidence": 1.1},
         {"price": 0.0},
         {"horizon_bars": 0},
