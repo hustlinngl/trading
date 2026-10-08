@@ -41,3 +41,17 @@ def test_signal_first_ui_hides_secondary_telemetry():
     assert '["Score",num(d.score,2)]' not in html
     assert '.secondary-telemetry{display:none!important}' in html
     assert '<style>\n</style>\n</style>' not in html
+
+def test_training_commands_consume_bundled_historical_assets():
+    from pathlib import Path
+    source = Path("src/ai_trading_lab/main.py").read_text(encoding="utf-8")
+    assert "data/historical" in source
+    assert "infer_symbol(path)" in source
+    assert "'source': source" in source
+
+
+def test_real_universe_cli_writes_separate_research_slice():
+    source = Path("run_real_market_universe.py").read_text(encoding="utf-8")
+    assert "intraday_research_manifest.json" in source
+    assert "broad_crypto_symbol_cap" in source
+    assert "intraday_research_top_n" in source
