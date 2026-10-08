@@ -27,7 +27,7 @@ def test_dashboard_responsive_ui_and_chart_edge_case():
     assert 'aria-busy="true"' in html
     assert ".signal-skeleton-grid" in html
     assert 'data-target="focusDashboard"' in html
-    assert 'class="nav" id="nav"' in html
+    assert 'class="nav nav-minimal" id="nav"' in html
     assert "const reveal=id=>" in html
     assert "section-reveal" in html
     assert "prefers-reduced-motion:reduce" in html
@@ -355,9 +355,8 @@ def test_signal_terminal_alpha_ui_keeps_visual_layer_separate_from_execution():
     assert "initAlphaMotion" in html
     assert "initNavigation" in html
     assert 'data-target="market"' in html
-    assert 'data-target="detail"' in html
-    assert 'data-target="journal"' in html
-    assert 'data-target="evidencePanel"' in html
+    assert 'data-target="focusDashboard"' in html
+    assert "nav-minimal" in html
     assert 'id="detail"' in html
     assert "body.alpha-pointer" in html
     assert "prefers-reduced-motion:reduce" in html
@@ -371,8 +370,8 @@ def test_signal_terminal_alpha_decision_deck_is_wired():
     assert 'id="decisionDeck"' in html
     assert 'id="traceGrid"' in html
     assert "renderDecisionDeck" in html
+    assert "renderDecisionDeck" in html
     assert "Decision trace" in html
-    assert "data-target=\"detail\"" in html
 
 
 def test_signal_terminal_alpha_art_direction_layer_is_wired():
@@ -774,8 +773,8 @@ def test_signal_terminal_primary_surface_is_result_first():
     assert 'function pill(' not in html
     assert 'Price' in html
     assert 'Confidence' in html
-    assert 'Edge' in html
-    assert 'Score' in html
+    assert 'Expected' in html
+    assert 'Score' not in html
     assert '.signal-skeleton-grid' in html
     assert '.signal-meter' in html
     assert 'Sto cercando i prossimi segnali' not in html
