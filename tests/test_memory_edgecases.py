@@ -17,13 +17,13 @@ def test_analog_memory_exclusion_handles_fewer_than_k_neighbors():
     )
     future_ret = pd.Series(np.linspace(-0.02, 0.02, 20), index=index)
 
-    memory = AnalogMemory(k=8, exclusion_bars=10)
+    memory = AnalogMemory(k=8, exclusion_bars=9)
     memory.fit(features, future_ret)
 
     result = memory.query_many(
         features.iloc[[10]],
         exclude_self=True,
-        exclusion_bars=10,
+        exclusion_bars=9,
     )
 
     assert len(result) == 1
