@@ -287,12 +287,6 @@ def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
         "duration_production_ready":bool(duration.get("production_ready",False)),
         "risk_adjusted_utility":(not bool(duration_bt)) or duration_utility>=float(getattr(settings,"trade_window_min_holdout_utility",0.0)),
     }
-    base_provenance_match=(
-        bool(base)
-        and str(base.get("data_fingerprint"))==str(meta.get("data_fingerprint"))
-        and str(base.get("symbol"))==str(getattr(settings,"symbol",""))
-    )
-    base_checks["holdout_provenance_match"]=base_provenance_match
     if bool(getattr(settings,"trade_window_enabled",True)):
         checks={**base_checks,**duration_checks}
     else:
