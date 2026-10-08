@@ -234,3 +234,65 @@ def test_global_promotion_removes_stale_managed_artifacts(tmp_path):
     assert (dst / "base_training_meta.json").exists()
     assert not (dst / "trade_window_specialist.joblib").exists()
     assert not (dst / "deployment_manifest.json").exists()
+
+
+def test_train_complete_all_uses_local_history_without_exchange(monkeypatch, tmp_path):
+    """Multi-asset training must not instantiate a live exchange for the default symbol."""
+    import json
+    import sys
+    from types import SimpleNamespace
+    import ai_trading_lab.main as main_module
+
+    settings = SimpleNamespace(
+        symbol="BTC/USDT",
+        timeframe="15m",
+    )
+    monkeypatch.setattr(main_module, "load_settings", lambda _path: settings)
+    monkeypatch.setattr(main_module, "validate_research_data", lambda _df, _settings: None)
+    monkeypatch.setattr(
+        main_module,
+        "train_complete_asset",
+        lambda df, ss, holdout_frac: {
+            "symbol": ss.symbol,
+            "status": "trained",
+            "production_ready": True,
+            "rows": len(df),
+        },
+    )
+    monkeypatch.setattr(
+        main_module,
+        "exchange_client",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("train-complete-all touched the exchange before using local history")
+        ),
+    )
+    monkeypatch.chdir(tmp_path)
+
+    history = tmp_path / "data" / "historical"
+    history.mkdir(parents=True)
+    rows = []
+    start = __import__("pandas").Timestamp("2026-01-01", tz="UTC")
+    for i in range(32):
+        ts = start + __import__("pandas").Timedelta(minutes=15 * i)
+        close = 100.0 + i
+        rows.append(
+            f"{ts.isoformat()},{close - 0.5},{close + 1.0},{close - 1.0},{close},1000"
+        )
+    (history / "BTC_USDT_15m.csv").write_text(
+        "timestamp,open,high,low,close,volume\n" + "\n".join(rows),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(sys, "argv", ["main.py", "train-complete-all", "--config", "config.yaml"])
+    main_module.main()
+
+    report = json.loads(
+        (tmp_path / "logs" / "train_complete_all_report.json").read_text(encoding="utf-8")
+    )
+    assert report == [{
+        "symbol": "BTC/USDT",
+        "status": "trained",
+        "production_ready": True,
+        "rows": 32,
+        "source": "historical",
+    }]
