@@ -1,6 +1,6 @@
 # Windows EXE packaging
 
-The canonical Windows build is produced by GitHub Actions with PyInstaller from the frozen 0.9.18 release tree.
+The canonical Windows build is produced by GitHub Actions with PyInstaller from the current release tree.
 
 ## Output
 
@@ -10,12 +10,13 @@ The artifact contains:
 - `config.yaml` — runtime configuration, kept external so it can be edited safely.
 - `SETUP_WINDOWS.md` and `README.md` — usage/reference.
 - `RUN.txt` — quick launch notes.
+- `models/assets/<SYMBOL>/` — validated signal bundles used by the packaged terminal.
 
 The EXE opens the browser automatically and binds the local terminal to localhost by default.
 
 ## Model bundles
 
-Model and deployment bundles are not embedded in the executable. They stay external so the deployed artifact can use the repository's provenance/compatibility checks without rebuilding the EXE for every model generation.
+Validated model and deployment bundles are shipped beside the executable. The build trains and validates the configured 15 core assets, then the packaged smoke test verifies that all 15 bundles are discoverable by the frozen application. The models remain external to the single-file binary so provenance and compatibility checks remain inspectable.
 
 ## Rebuild
 
