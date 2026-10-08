@@ -1190,6 +1190,16 @@ body.drawer-open .inspector-drawer{transform:translate3d(0,0,0)}
 .legacy-hidden{display:none!important}@media(max-width:980px){.top5-grid,.signal-skeleton-grid{grid-template-columns:1fr}.pick-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:640px){.wrap{padding:16px 12px 40px}.focus-only .top5-title{font-size:23px}.pick-chart{height:190px}}@media(prefers-reduced-motion:reduce){.pick-card{transition:none;animation:none}.signal-skeleton-card::after{animation:none;display:none}}
 </style>
 <style>
+/* UI/data-focus pass */
+.secondary-telemetry{display:none!important}
+.nav-minimal{justify-content:flex-start;gap:10px}
+.nav-coverage{margin-left:auto;padding:7px 10px;color:#697481;font-size:10px;letter-spacing:.06em;font-variant-numeric:tabular-nums}
+.pick-horizon{margin-top:3px;color:#65717f;font-size:9px;letter-spacing:.08em;text-transform:uppercase}
+.pick-stats-compact{grid-template-columns:repeat(3,minmax(0,1fr))}
+.pick-stats-compact .pick-stat{min-width:0}
+@media(max-width:640px){.nav-coverage{display:none}.pick-stats-compact{grid-template-columns:repeat(3,1fr)}}
+</style>
+<style>
 /* Product-clean pass */
 :root{--bg:#090b0f;--panel:#10141a;--panel2:#141922;--line:#232a35;--text:#edf1f5;--muted:#7f8997;--green:#55d79a;--red:#f2768e;--amber:#e7bc62;--blue:#79b5f0;--pink:#e58ab8;--pink2:#aa73c4;--cyan:#80c9dd;--shadow:0 16px 42px rgba(0,0,0,.22)}
 body{background:linear-gradient(180deg,#0a0c10 0%,#090b0f 100%)}
@@ -1396,9 +1406,9 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
 <div class="wrap">
   <div class="top">
     <div>
-      <div class="eyebrow">Signal monitor · 15m</div>
-      <h1>Signal Monitor</h1>
-      <div class="sub">Closed-candle signals, live market quote e storico delle evidenze. Solo segnali che superano i controlli correnti.</div>
+      <div class="eyebrow">SAKURA SIGNAL TERMINAL</div>
+      <h1>Live Signals</h1>
+      <div class="sub">Solo risultati operativi. Un click apre i dettagli; nessun diagnostico del modello viene mostrato qui.</div>
     </div>
     <div class="actions">
       <div class="operator-badge" aria-hidden="true" style="display:none">
@@ -1421,13 +1431,10 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
     </div>
   </div>
 
-  <nav class="nav" id="nav" aria-label="Sezioni dashboard">
-    <button class="nav-btn active" data-target="focusDashboard" aria-current="page">Overview</button>
-    <button class="nav-btn" data-target="market">Market</button>
-    <button class="nav-btn" data-target="detail">Intelligence</button>
-    <button class="nav-btn" data-target="journal">Journal</button>
-    <button class="nav-btn" data-target="timeline">Timeline</button>
-    <button class="nav-btn" data-target="evidencePanel">Evidence</button>
+  <nav class="nav nav-minimal" id="nav" aria-label="Dashboard">
+    <button class="nav-btn active" data-target="focusDashboard" aria-current="page">Signals</button>
+    <button class="nav-btn" data-target="market">Market data</button>
+    <span class="nav-coverage" id="coverageSummary">—</span>
   </nav>
 
   <section class="focus-only" id="focusDashboard" aria-live="polite">
@@ -1436,7 +1443,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
     <div id="liveDataFallback" class="live-data-grid" hidden></div>
   </section>
 
-  <section class="live-intelligence" id="liveIntelligence" aria-live="polite">
+  <section class="live-intelligence secondary-telemetry" id="liveIntelligence" aria-live="polite">
     <div class="live-kpi-grid">
       <article class="live-kpi" id="liveKpiPrice"><div class="k">Prezzo</div><div class="v num" id="kpiPrice">—</div><div class="meta" id="kpiPriceMeta">stream · —</div></article>
       <article class="live-kpi" id="liveKpiRegime"><div class="k">Market Regime</div><div class="v" id="kpiRegime">Unknown</div><div class="meta" id="kpiRegimeMeta">confidence · —</div></article>
@@ -1594,7 +1601,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
   </div>
 </aside>
 
-  <section class="panel cognition-panel" id="liveCognitionPanel" aria-live="polite">
+  <section class="panel cognition-panel secondary-telemetry" id="liveCognitionPanel" aria-live="polite">
     <div class="panel-head">
       <div><div class="title">Live AI Cognition</div><div class="small">Trace operativa dei gate e delle evidenze disponibili; non rappresenta il ragionamento privato del modello.</div></div>
       <div class="live-telemetry-stamp" id="cognitionStamp">—</div>
@@ -1888,17 +1895,22 @@ function renderFocus(data){
     box.innerHTML='<div class="top5-empty"><h2 style="margin:0">Nessun segnale</h2></div>';
     return;
   }
+  const coverage=(data.summary&&data.summary.universe_total!=null)?Number(data.summary.universe_total):null;
+  const covered=(data.summary&&data.summary.model_backed_assets!=null)?Number(data.summary.model_backed_assets):null;
+  const coverageNode=$("coverageSummary");
+  if(coverageNode){
+    coverageNode.textContent=coverage==null?"—":coverage+" markets · "+(covered==null?"—":covered+" model-ready");
+  }
   box.innerHTML=picks.map((r,i)=>{
-    const d=r.decision||{};
     const confidenceNumber=Number(r.confidence);
     const confidenceMeter=Number.isFinite(confidenceNumber)?Math.max(0,Math.min(100,confidenceNumber*100)):0;
-    return '<article class="pick-card pick-'+(r.signal==="LONG"?"long":"short")+(i===0?' pick-primary':'')+'" style="--pick-delay:'+(Math.min(i,4)*45)+'ms" data-focus-symbol="'+esc(r.symbol)+'" tabindex="0" role="button" aria-label="Apri '+esc(r.symbol)+' nel market inspector">'+
-      '<div class="pick-head"><div><div class="pick-rank">#'+(i+1)+'</div><div class="pick-symbol">'+esc(r.symbol)+'</div></div><span class="pick-signal '+cls(r.signal)+'">'+esc(r.signal)+'</span></div>'+
-      '<div class="pick-stats">'+
-      '<div class="pick-stat"><div class="k">Price</div><div class="v">'+num(r.realtime_price??r.price,2)+'</div></div>'+
+    const direction=r.signal==="LONG"?"long":"short";
+    return '<article class="pick-card pick-'+direction+(i===0?' pick-primary':'')+'" style="--pick-delay:'+(Math.min(i,4)*45)+'ms" data-focus-symbol="'+esc(r.symbol)+'" tabindex="0" role="button" aria-label="Apri '+esc(r.symbol)+' nel signal inspector">'+
+      '<div class="pick-head"><div><div class="pick-rank">#'+(i+1)+'</div><div class="pick-symbol">'+esc(r.symbol)+'</div><div class="pick-horizon">'+esc(r.horizon_bars==null?"":String(r.horizon_bars)+" bars")+'</div></div><span class="pick-signal '+cls(r.signal)+'">'+esc(r.signal)+'</span></div>'+
+      '<div class="pick-stats pick-stats-compact">'+
+      '<div class="pick-stat"><div class="k">Price</div><div class="v">'+num(r.price,2)+'</div></div>'+
       '<div class="pick-stat pick-stat-meter"><div class="k">Confidence</div><div class="v">'+pct(r.confidence,1)+'</div><span class="signal-meter" aria-hidden="true" style="--meter:'+confidenceMeter.toFixed(1)+'%"></span></div>'+
-      '<div class="pick-stat"><div class="k">Edge</div><div class="v">'+pct(d.robust_directional_edge,2)+'</div></div>'+
-      '<div class="pick-stat"><div class="k">Score</div><div class="v">'+num(d.score,2)+'</div></div>'+
+      '<div class="pick-stat"><div class="k">Expected</div><div class="v">'+pct(r.expected_return,2)+'</div></div>'+
       '</div>'+
       '<div class="pick-chart"><canvas data-pick-chart="'+esc(r.symbol)+'"></canvas></div>'+
       '</article>';
@@ -2274,8 +2286,7 @@ function render(data){
   const signals=data.signals||[];
   const liveSymbols=((data.market_data||{}).symbols||[]).filter(Boolean);
   populateAssets(signals,liveSymbols);
-  renderLiveData(data);
-  renderRadar(signals); renderDetail(signals); renderJournal(data); renderEvidence(signals); renderDecisionDeck(signals); renderTimeline(signals,data.journal||[]); bindInteractiveRows();
+  renderRadar(signals);
   const notes=(data.notes||[]).join(" · ");
   $("footer").textContent=notes+" · refresh "+data.refresh_seconds+"s · scan "+data.scan_seconds+"s";
   if(!data.scan_in_progress && state.selected && !state.history)loadHistory(state.selected);
@@ -2499,7 +2510,6 @@ initSakuraMusic();
 initAmbientFX();
 initAlphaMotion();
 refresh(true);
-startLiveDeltaLoop();
 </script>
 </body>
 </html>

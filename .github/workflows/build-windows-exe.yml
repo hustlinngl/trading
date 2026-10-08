@@ -39,8 +39,13 @@ jobs:
           import pandas as pd
           from ai_trading_lab.binance_vision import download_range, merge_archives
 
-          symbols = ["BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT"]
-          start = "2025-10-01"
+          # Broader bundled history: fifteen liquid/core assets, two full years of closed 15m candles.
+          symbols = [
+              "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT",
+              "ADA/USDT", "DOGE/USDT", "AVAX/USDT", "LINK/USDT", "DOT/USDT",
+              "LTC/USDT", "BCH/USDT", "ATOM/USDT", "UNI/USDT", "ETC/USDT",
+          ]
+          start = "2024-10-01"
           end = "2026-10-01"
 
           out = Path("data/historical")
@@ -152,13 +157,17 @@ jobs:
             if (-not $page.Content.Contains("pick-stat-meter")) { throw "Packaged dashboard is missing the confidence result meter" }
             if (-not $health.ok) { throw "Packaged health endpoint did not report ok=true" }
 
-            $symbols = @("BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT")
+            $symbols = @(
+              "BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT",
+              "ADA/USDT","DOGE/USDT","AVAX/USDT","LINK/USDT","DOT/USDT",
+              "LTC/USDT","BCH/USDT","ATOM/USDT","UNI/USDT","ETC/USDT"
+            )
             foreach ($symbol in $symbols) {
               $encoded = [System.Uri]::EscapeDataString($symbol)
               $history = Invoke-RestMethod -Uri "http://127.0.0.1:$port/api/history?symbol=$encoded&limit=120" -TimeoutSec 5
               if ($history.bars.Count -lt 100) { throw "Insufficient packaged history for ${symbol}: $($history.bars.Count) bars" }
             }
-            Write-Host "Functional packaged dashboard smoke test passed for all five historical assets."
+            Write-Host "Functional packaged dashboard smoke test passed for the expanded historical asset set."
           } finally {
             Stop-Process -Id $primary.Id -Force -ErrorAction SilentlyContinue
           }
@@ -173,7 +182,7 @@ jobs:
           Copy-Item .\SETUP_WINDOWS.md .\release\SETUP_WINDOWS.md
           Copy-Item .\README.md .\release\README.md
           @"
-          Sakura Signal Terminal 0.9.31
+          Sakura Signal Terminal 0.9.39
           
           Launch SakuraSignalTerminal.exe.
           The executable is read-only: it exposes no order endpoints.

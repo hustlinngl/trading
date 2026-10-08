@@ -11,7 +11,16 @@ class MarketSpec:
     symbol:str; source:str; asset_class:str; start:str; end:str; timeframe:str="1d"; market:str="spot"; enabled:bool=True; priority:int=50; notes:str=""
     def to_dict(self): return asdict(self)
 
-DEFAULT_CRYPTO_CORE=("BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT","ADA/USDT","DOGE/USDT","AVAX/USDT","LINK/USDT","DOT/USDT","LTC/USDT","BCH/USDT","ATOM/USDT","UNI/USDT","ETC/USDT")
+DEFAULT_CRYPTO_CORE=(
+    "BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT",
+    "ADA/USDT","DOGE/USDT","AVAX/USDT","LINK/USDT","DOT/USDT",
+    "LTC/USDT","BCH/USDT","ATOM/USDT","UNI/USDT","ETC/USDT",
+    "NEAR/USDT","APT/USDT","ARB/USDT","OP/USDT","FIL/USDT",
+    "INJ/USDT","SUI/USDT","SEI/USDT","TIA/USDT","AAVE/USDT",
+    "MKR/USDT","CRV/USDT","ALGO/USDT","ICP/USDT","XLM/USDT",
+    "HBAR/USDT","TRX/USDT","EOS/USDT","XTZ/USDT","VET/USDT",
+    "SAND/USDT","MANA/USDT","GRT/USDT","RUNE/USDT","THETA/USDT",
+)
 DEFAULT_MACRO_SERIES=("DFF","DGS2","DGS10","DTWEXBGS","VIXCLS","BAMLH0A0HYM2","T10Y2Y")
 
 def build_seed_universe(start:str,end:str,crypto_symbols:Iterable[str]=DEFAULT_CRYPTO_CORE)->list[MarketSpec]:

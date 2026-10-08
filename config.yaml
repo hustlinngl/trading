@@ -6,7 +6,7 @@ data:
   exchange: binance
   symbol: BTC/USDT
   timeframe: 15m
-  lookback_bars: 8000
+  lookback_bars: 30000
   cache_dir: data
 model:
   horizon_bars: 8
@@ -55,7 +55,7 @@ execution:
   paper_only: true
   sandbox: true
   poll_seconds: 60
-  live_lookback_bars: 600
+  live_lookback_bars: 1200
   # 0 = unlimited model-backed active markets discovered from the exchange.
   live_max_symbols: 0
   live_market_types: [spot, swap, future, margin, option]
@@ -64,7 +64,7 @@ execution:
   live_portfolio_correlation_bars: 96
   live_max_pairwise_return_correlation: 0.80
   live_min_correlation_observations: 48
-  live_symbols: [BTC/USDT, ETH/USDT, BNB/USDT, SOL/USDT, XRP/USDT]
+  live_symbols: [BTC/USDT, ETH/USDT, BNB/USDT, SOL/USDT, XRP/USDT, ADA/USDT, DOGE/USDT, AVAX/USDT, LINK/USDT, DOT/USDT, LTC/USDT, BCH/USDT, ATOM/USDT, UNI/USDT, ETC/USDT]
 growth:
   validation_purge_bars: 12
   regime_weight: 0.08
@@ -89,11 +89,11 @@ growth:
 real_data:
   broad_timeframe: 1d
   research_timeframe: 15m
-  max_parallel_downloads: 6
-  broad_crypto_symbol_cap: 250
-  intraday_research_top_n: 10
+  max_parallel_downloads: 10
+  broad_crypto_symbol_cap: 500
+  intraday_research_top_n: 30
   final_holdout_frac: 0.15
-  historical_sources: [binance]
+  historical_sources: [binance, fred, sec, cftc, treasury]
   universe_manifest: data/real_universe/manifest.json
 
   master_audit_folds: 18
