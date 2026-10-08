@@ -303,6 +303,7 @@ def test_train_all_ignores_stale_registry_path_when_historical_asset_exists(monk
     from types import SimpleNamespace
     import pandas as pd
     import ai_trading_lab.main as main_module
+    import ai_trading_lab.dataset as dataset_module
 
     settings = SimpleNamespace(symbol="BTC/USDT", timeframe="15m")
     monkeypatch.setattr(main_module, "load_settings", lambda _path: settings)
@@ -313,7 +314,7 @@ def test_train_all_ignores_stale_registry_path_when_historical_asset_exists(monk
         lambda df, ss: (tmp_path / "models" / "assets" / "BTC_USDT", None),
     )
     monkeypatch.setattr(
-        main_module,
+        dataset_module,
         "imported_registry",
         lambda _data_dir: {
             "BTC/USDT": {"path": str(tmp_path / "missing" / "BTC.csv")}
