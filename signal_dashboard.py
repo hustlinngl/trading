@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
-"""Thin launcher for the read-only Adaptive AI Signal Terminal."""
+"""Import/executable shim for the read-only Adaptive AI Signal Terminal."""
 
 from __future__ import annotations
 
-from pathlib import Path
 import sys
 
-ROOT = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
-SRC = ROOT / "src"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
-
-from ai_trading_lab.dashboard_terminal import main
-
+from ai_trading_lab import dashboard_terminal as _impl
 
 if __name__ == "__main__":
-    main()
+    _impl.main()
+else:
+    # Preserve legacy imports and monkeypatch semantics: importing this module exposes
+    # the real implementation object used by the dashboard and its tests.
+    sys.modules[__name__] = _impl
