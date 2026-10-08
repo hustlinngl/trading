@@ -64,7 +64,7 @@ jobs:
           END_DATE=${END_DATE:-$(date -u +%F)}
           TRIALS=${TRIALS:-60}
           python run_intensive_real_research.py \
-            --symbols BTC/USDT,ETH/USDT,SOL/USDT \
+            --symbols BTC/USDT,ETH/USDT,BNB/USDT,SOL/USDT,XRP/USDT,ADA/USDT,DOGE/USDT,LINK/USDT \
             --timeframe 15m \
             --start "$START_DATE" \
             --end "$END_DATE" \
