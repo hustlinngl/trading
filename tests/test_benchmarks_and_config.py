@@ -68,3 +68,4 @@ def test_release_versions_are_aligned():
     match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
     assert match is not None
     assert __version__ == version_file == match.group(1)
+    assert __version__ == "0.9.39"
