@@ -93,9 +93,12 @@ jobs:
           expected = {"BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT","ADA/USDT","DOGE/USDT","AVAX/USDT","LINK/USDT","DOT/USDT","LTC/USDT","BCH/USDT","ATOM/USDT","UNI/USDT","ETC/USDT"}
           trained = {str(row.get("symbol")) for row in report if row.get("status") == "trained"}
           missing = sorted(expected - trained)
+          not_ready = sorted(str(row.get("symbol")) for row in report if row.get("status") == "trained" and not bool(row.get("production_ready")))
           if missing:
               raise RuntimeError(f"Bundled model training did not produce all expected assets: {missing}")
-          print("bundled-model-assets-ok", len(trained))
+          if not_ready:
+              raise RuntimeError(f"Bundled assets failed deployment-readiness gates: {not_ready}")
+          print("bundled-production-assets-ok", len(trained))
           PY
 
       - name: Verify dashboard imports
