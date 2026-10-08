@@ -521,23 +521,33 @@ def main():
     if args.command == 'download':
         ex = exchange_client(getattr(s, 'exchange', 'binance'), sandbox=False)
         df=fetch_ohlcv(ex,s.symbol,s.timeframe,s.lookback_bars); cache_ohlcv(df,cache_path); print(f'saved {len(df)} bars -> {cache_path}'); return
-    if args.data_path:
-        from .dataset import read_market_file
-        df = read_market_file(args.data_path)
-    elif cache_path.exists():
-        df=load_cached(cache_path, timeframe=s.timeframe)
-    else:
-        # Training commands may run in restricted/offline CI where Binance's REST API
-        # is unavailable even though bundled historical data has already been staged.
-        bundled_path = Path('data/historical') / (
-            f"{s.symbol.replace('/','_').replace(':','_')}_{s.timeframe}.csv"
-        )
-        if bundled_path.exists():
+
+    # Load a single command dataset lazily. Multi-asset commands below operate only
+    # on their registered/local files and must not touch the exchange just because the
+    # default symbol has no cache; this is critical for reproducible/offline training.
+    needs_single_dataset = {
+        'train', 'train-complete', 'test', 'test-window',
+        'train-window', 'research', 'discover', 'optimize',
+        'master-tune', 'auto-update',
+    }
+    df = None
+    if args.command in needs_single_dataset:
+        if args.data_path:
             from .dataset import read_market_file
-            df = read_market_file(bundled_path)
+            df = read_market_file(args.data_path)
+        elif cache_path.exists():
+            df = load_cached(cache_path, timeframe=s.timeframe)
         else:
-            ex = exchange_client(getattr(s, 'exchange', 'binance'), sandbox=False)
-            df=fetch_ohlcv(ex,s.symbol,s.timeframe,s.lookback_bars); cache_ohlcv(df,cache_path)
+            # Prefer deterministic bundled history before attempting a live exchange.
+            bundled_path = Path('data/historical') / (
+                f"{s.symbol.replace('/','_').replace(':','_')}_{s.timeframe}.csv"
+            )
+            if bundled_path.exists():
+                from .dataset import read_market_file
+                df = read_market_file(bundled_path)
+            else:
+                ex = exchange_client(getattr(s, 'exchange', 'binance'), sandbox=False)
+                df=fetch_ohlcv(ex,s.symbol,s.timeframe,s.lookback_bars); cache_ohlcv(df,cache_path)
     if args.command == 'train':
         validate_research_data(df, s)
         asset_dir, art = train_base_asset(df, s)
