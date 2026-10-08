@@ -565,17 +565,36 @@ def main():
         )
         print(json.dumps(reports, indent=2, default=str)); return
     if args.command == 'train-complete-all':
-        from .dataset import imported_registry
+        from .dataset import imported_registry, infer_symbol
         reports = []
+        sources = {}
         for sym, meta in imported_registry(args.data_dir).items():
+            sources[str(sym)] = ('imported', meta.get('path'))
+        historical_root = Path('data/historical')
+        if historical_root.exists():
+            for path in sorted(historical_root.iterdir()):
+                if path.suffix.lower() not in {'.csv', '.parquet', '.pq', '.json'}:
+                    continue
+                try:
+                    sources.setdefault(str(infer_symbol(path)), ('historical', str(path)))
+                except Exception:
+                    continue
+        for sym, (source, path) in sources.items():
             try:
                 ss = load_settings(args.config); ss.symbol = sym
-                data = read_asset_dataframe(meta)
+                data = read_asset_dataframe({'path': path})
                 validate_research_data(data, ss)
-                reports.append(train_complete_asset(data, ss, holdout_frac=args.holdout_frac))
+                out = train_complete_asset(data, ss, holdout_frac=args.holdout_frac)
+                out['source'] = source
+                reports.append(out)
             except Exception as exc:
-                reports.append({'symbol': sym, 'status': 'error', 'error': str(exc)})
-        Path('logs/train_complete_all_report.json').write_text(json.dumps(reports, indent=2, default=str), encoding='utf-8')
+                reports.append({
+                    'symbol': sym, 'source': source, 'status': 'error',
+                    'error': f'{type(exc).__name__}: {exc}',
+                })
+        Path('logs/train_complete_all_report.json').write_text(
+            json.dumps(reports, indent=2, default=str), encoding='utf-8'
+        )
         print(json.dumps(reports, indent=2, default=str)); return
     if args.command == 'test':
         validate_research_data(df, s)
