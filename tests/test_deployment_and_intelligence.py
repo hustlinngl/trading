@@ -463,3 +463,61 @@ def test_bundle_compatibility_recomputes_deployment_evidence_instead_of_trusting
     ok, reason = bundle_compatibility(settings, bundle, "BTC/USDT")
     assert not ok
     assert reason == "deployment_manifest_evidence_mismatch"
+
+
+def test_base_holdout_report_records_timeframe_provenance(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    import numpy as np
+    import pandas as pd
+    import ai_trading_lab.main as main_module
+    from ai_trading_lab import features as features_module
+
+    settings = load_settings("config.yaml")
+    settings.symbol = "BTC/USDT"
+    n = 5000
+    close = 100.0 + np.arange(n, dtype=float) * 0.01
+    frame = pd.DataFrame(
+        {
+            "open": close,
+            "high": close + 0.5,
+            "low": close - 0.5,
+            "close": close,
+            "volume": np.full(n, 1000.0),
+        },
+        index=pd.date_range("2025-01-01", periods=n, freq="15min", tz="UTC"),
+    )
+
+    class FakeEngine:
+        def __init__(self, _settings):
+            pass
+
+        def fit(self, _frame):
+            return None
+
+    monkeypatch.setattr(main_module, "AdaptiveEngine", FakeEngine)
+    monkeypatch.setattr(
+        features_module,
+        "make_oos_features",
+        lambda _history, future, *args, **kwargs: future.assign(atr_14=1.0),
+    )
+    monkeypatch.setattr(
+        main_module,
+        "make_actions",
+        lambda _engine, features, _settings: pd.Series("FLAT", index=features.index),
+    )
+    monkeypatch.setattr(
+        main_module,
+        "run_configured_backtest",
+        lambda *args, **kwargs: SimpleNamespace(
+            stats={"trades": 0, "profit_factor": 0.0, "max_drawdown": 0.0, "total_return": 0.0}
+        ),
+    )
+    monkeypatch.setattr(main_module, "refresh_deployment_manifest", lambda _settings: {"ready": False})
+    monkeypatch.chdir(tmp_path)
+
+    report = main_module.test_base_holdout(frame, settings, holdout_frac=0.15)
+
+    assert report["timeframe"] == settings.timeframe
+    assert report["action_diagnostics"]["actions_by_side"] == {"FLAT": report["holdout_rows"]}
+    persisted = asset_bundle_dir(tmp_path, settings.symbol) / "base_holdout_report.json"
+    assert __import__("json").loads(persisted.read_text(encoding="utf-8"))["timeframe"] == settings.timeframe
