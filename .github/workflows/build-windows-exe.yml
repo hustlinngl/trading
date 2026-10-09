@@ -119,6 +119,19 @@ jobs:
           print("bundled-historical-assets-ok", len(trained), "production-ready", len(ready), "not-ready", len(not_ready))
           PY
 
+      - name: Upload model readiness diagnostics when packaging is blocked
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: readiness-diagnostics-${{ github.run_number }}
+          path: |
+            logs/train_complete_all_report.json
+            logs/test_report.json
+            models/assets/**/base_holdout_report.json
+            models/assets/**/trade_window_training_report.json
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Verify dashboard imports
         shell: bash
         run: |
