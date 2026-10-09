@@ -44,9 +44,22 @@ def test_autonomous_cycle_offline_never_constructs_exchange(monkeypatch, tmp_pat
     monkeypatch.setenv("AUTONOMOUS_OFFLINE", "true")
     monkeypatch.setattr(mod, "exchange_client", fail_exchange)
     monkeypatch.setattr(mod, "CognitionEngine", FakeCognition)
-    monkeypatch.setattr(mod, "auto_update", lambda *args, **kwargs: {"skipped": True})
+    auto_update_calls = []
+
+    def forbidden_auto_update(*args, **kwargs):
+        auto_update_calls.append((args, kwargs))
+        raise AssertionError("offline synthetic candles must never enter model promotion")
+
+    monkeypatch.setattr(mod, "auto_update", forbidden_auto_update)
     result = autonomous_cycle(settings, "offline smoke test", tmp_path)
 
+    assert result["data_source"] == "synthetic_offline"
+    assert result["promotion"] == {
+        "promoted": False,
+        "skipped": True,
+        "skip_reason": "offline_synthetic_data_not_eligible_for_promotion",
+    }
+    assert auto_update_calls == []
     assert result["growth"]["market_state"] == {
         "mode": "offline",
         "exchange_access": False,

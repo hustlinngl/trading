@@ -132,9 +132,25 @@ def autonomous_cycle(settings: Settings, query: str, root: str | Path = ".") -> 
     except Exception as exc:
         growth["market_state_error"] = str(exc)
 
-    promotion = auto_update(df, settings, model_dir=asset_bundle_dir(root, settings.symbol))
+    if offline:
+        # Synthetic candles are suitable for exercising research code, never for
+        # creating or promoting a production candidate—even if a random score passes.
+        promotion = {
+            "promoted": False,
+            "skipped": True,
+            "skip_reason": "offline_synthetic_data_not_eligible_for_promotion",
+        }
+    else:
+        promotion = auto_update(df, settings, model_dir=asset_bundle_dir(root, settings.symbol))
     deep = cognition.run_evolution(df, research.get("hypotheses", [])) if getattr(settings, "deep_evolution_enabled", True) else {}
-    result = {"data_quality": quality.to_dict(), "research": research, "growth": growth, "deep_evolution": deep, "promotion": promotion}
+    result = {
+        "data_source": "synthetic_offline" if offline else "exchange",
+        "data_quality": quality.to_dict(),
+        "research": research,
+        "growth": growth,
+        "deep_evolution": deep,
+        "promotion": promotion,
+    }
     (root / "logs").mkdir(parents=True, exist_ok=True)
     (root / "logs" / "autonomous_status.json").write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
     return result
