@@ -59,6 +59,24 @@ def refresh_market_dataset(settings: Settings, root: str | Path = ".", exchange=
     return fetch_ohlcv_incremental(ex, settings.symbol, settings.timeframe, cache, settings.lookback_bars)
 
 
+def _macro_values_from_growth(growth: dict) -> dict[str, float]:
+    """Read macro observations from the external-intelligence result envelope."""
+    external = growth.get("external", {}) or {}
+    macro = growth.get("macro", {}) or external.get("macro", {}) or {}
+    series = macro.get("series", {}) or {}
+    values: dict[str, float] = {}
+    for name, observation in series.items():
+        if not isinstance(observation, dict) or observation.get("last") is None:
+            continue
+        try:
+            value = float(observation["last"])
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if np.isfinite(value):
+            values[str(name)] = value
+    return values
+
+
 def autonomous_cycle(settings: Settings, query: str, root: str | Path = ".") -> dict:
     root = Path(root)
     offline = str(os.getenv("AUTONOMOUS_OFFLINE", "")).strip().lower() in {"1", "true", "yes", "on"}
@@ -88,7 +106,7 @@ def autonomous_cycle(settings: Settings, query: str, root: str | Path = ".") -> 
     growth = cognition.run_growth(df, query, research.get("strategy_candidates", []))
 
     try:
-        macro_vals = {k: float(v["last"]) for k, v in growth.get("macro", {}).get("series", {}).items() if isinstance(v, dict) and v.get("last") is not None}
+        macro_vals = _macro_values_from_growth(growth)
         ext_health = {}
         provider_health = growth.get("external", {}).get("provider_health", {}) or {}
         for provider, stats in provider_health.items():
