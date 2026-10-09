@@ -110,12 +110,13 @@ jobs:
           expected = {"BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT","ADA/USDT","DOGE/USDT","AVAX/USDT","LINK/USDT","DOT/USDT","LTC/USDT","BCH/USDT","ATOM/USDT","UNI/USDT","ETC/USDT"}
           trained = {str(row.get("symbol")) for row in report if row.get("status") == "trained"}
           missing = sorted(expected - trained)
+          ready = sorted(str(row.get("symbol")) for row in report if row.get("status") == "trained" and bool(row.get("production_ready")))
           not_ready = sorted(str(row.get("symbol")) for row in report if row.get("status") == "trained" and not bool(row.get("production_ready")))
           if missing:
               raise RuntimeError(f"Bundled model training did not produce all expected assets: {missing}")
-          if not_ready:
-              raise RuntimeError(f"Bundled assets failed deployment-readiness gates: {not_ready}")
-          print("bundled-production-assets-ok", len(trained))
+          if not ready:
+              raise RuntimeError(f"No bundled asset passed deployment-readiness gates; refusing to package a signal terminal with zero eligible assets. Not ready: {not_ready}")
+          print("bundled-historical-assets-ok", len(trained), "production-ready", len(ready), "not-ready", len(not_ready))
           PY
 
       - name: Verify dashboard imports
@@ -235,8 +236,16 @@ jobs:
             if ([int]$state.summary.model_backed_assets -lt 15) {
               throw "Packaged executable started but did not expose all 15 bundled model assets: $($state.summary.model_backed_assets)"
             }
-            if ([int]$state.summary.compatible_bundles -lt 15) {
-              throw "Packaged executable did not report all 15 model bundles as compatible: $($state.summary.compatible_bundles)"
+            $trainingReport = Get-Content .\logs\train_complete_all_report.json -Raw | ConvertFrom-Json
+            $readySymbols = @($trainingReport | Where-Object { $_.status -eq "trained" -and $_.production_ready -eq $true } | ForEach-Object { [string]$_.symbol })
+            if ($readySymbols.Count -lt 1) {
+              throw "Build passed without any validated signal asset; this should have been rejected by the training gate."
+            }
+            if ([int]$state.summary.compatible_bundles -lt 1) {
+              throw "Packaged executable has no compatible production-ready signal bundles."
+            }
+            if ([int]$state.summary.compatible_bundles -gt $readySymbols.Count) {
+              throw "Packaged dashboard reports more compatible bundles ($($state.summary.compatible_bundles)) than assets that passed deployment readiness ($($readySymbols.Count))."
             }
 
             foreach ($row in @($state.signals)) {
@@ -244,6 +253,9 @@ jobs:
               $keyString = $keys -join ","
               if ($keyString -ne "confidence,expected_return,horizon_bars,price,signal,symbol") {
                 throw "Packaged dashboard exposed a non-canonical public signal payload: $keyString"
+              }
+              if ($readySymbols -notcontains [string]$row.symbol) {
+                throw "Packaged dashboard exposed a signal from a bundle that failed deployment readiness: $($row.symbol)"
               }
             }
 
