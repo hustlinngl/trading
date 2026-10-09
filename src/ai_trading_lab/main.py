@@ -149,6 +149,7 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     result = run_configured_backtest(bt, actions, settings)
     report = {
         "symbol": settings.symbol,
+        "timeframe": str(settings.timeframe),
         "rows": len(df),
         "train_rows": len(train_df),
         "holdout_rows": len(test_df),
