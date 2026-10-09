@@ -54,6 +54,7 @@ class SignalModel:
         self.weights_cls = None
         self.weights_reg = None
         self.calibrator = None
+        self.calibrator_fallback = None
         self.calibration_oos_ = None
         self.fit_rows_ = 0
         self.conformal_abs_error_ = 0.0
@@ -114,12 +115,22 @@ class SignalModel:
             self.weights_reg = 0.5 * uniform + 0.5 * learned_reg
             self.weights = uniform
             raw_p = probs_cal @ self.weights_cls
+            calibration_frame = pd.DataFrame({'p_up_raw': raw_p}, index=Xcal.index)
+            self.calibrator_fallback = None
             if ycal.nunique() < 2:
                 self.calibrator = None
             elif len(Xcal) < 160 or np.unique(raw_p).size < 12:
-                self.calibrator = LogisticRegression(C=1.0, solver='lbfgs', random_state=self.random_state).fit(pd.DataFrame({'p_up_raw': raw_p}, index=Xcal.index), ycal)
+                self.calibrator = LogisticRegression(C=1.0, solver='lbfgs', random_state=self.random_state).fit(calibration_frame, ycal)
             else:
+                # Isotonic calibration is reliable only within the observed score
+                # range. Full-data refitting can move deployment scores outside
+                # that range; endpoint clipping would then turn extrapolated scores
+                # into constant probabilities. Keep a Platt model, trained on the
+                # same strictly OOS calibration scores, for extrapolation only.
                 self.calibrator = IsotonicRegression(out_of_bounds='clip').fit(raw_p, ycal)
+                self.calibrator_fallback = LogisticRegression(
+                    C=1.0, solver='lbfgs', random_state=self.random_state
+                ).fit(calibration_frame, ycal)
             raw_er = rets_cal @ self.weights_reg
             residuals = np.abs(ycal_r.to_numpy(float) - raw_er)
             scale_col = 'atr_pct' if 'atr_pct' in Xcal.columns else ('vol_24' if 'vol_24' in Xcal.columns else None)
@@ -149,7 +160,7 @@ class SignalModel:
             for clf in self.clfs: clf.fit(Xfit, yc)
             for reg in self.regs: reg.fit(Xfit, yr)
             self.fit_rows_ = int(len(Xfit))
-            self.calibrator = None; self.calibration_oos_ = None
+            self.calibrator = None; self.calibrator_fallback = None; self.calibration_oos_ = None
             self.weights_cls = np.ones(len(self.clfs), dtype=float) / len(self.clfs)
             self.weights_reg = self.weights_cls.copy()
             self.conformal_abs_error_ = 0.0; self.conformal_scaled_error_ = 0.0
@@ -175,12 +186,29 @@ class SignalModel:
         w_reg = self.weights_reg if self.weights_reg is not None else np.ones(rets.shape[1]) / rets.shape[1]
         return pd.DataFrame({'p_up_raw': probs @ w_cls, 'expected_return': rets @ w_reg}, index=X.index)
 
+    def _calibrated_probabilities(self, raw_p) -> np.ndarray:
+        """Calibrate raw probabilities, avoiding isotonic endpoint clipping off-support."""
+        values = np.asarray(raw_p, dtype=float).reshape(-1)
+        if self.calibrator is None:
+            return np.clip(values, 0.0, 1.0)
+        if isinstance(self.calibrator, LogisticRegression):
+            frame = pd.DataFrame({"p_up_raw": values})
+            return np.clip(self.calibrator.predict_proba(frame)[:, 1], 0.0, 1.0)
+
+        calibrated = np.asarray(self.calibrator.predict(values), dtype=float)
+        fallback = getattr(self, "calibrator_fallback", None)
+        thresholds = getattr(self.calibrator, "X_thresholds_", None)
+        if fallback is not None and thresholds is not None and len(thresholds):
+            outside = (values < float(thresholds[0])) | (values > float(thresholds[-1]))
+            if outside.any():
+                frame = pd.DataFrame({"p_up_raw": values[outside]})
+                calibrated[outside] = fallback.predict_proba(frame)[:, 1]
+        return np.clip(calibrated, 0.0, 1.0)
+
     def predict(self, X: pd.DataFrame) -> pd.DataFrame:
         if not self.ready: raise RuntimeError('Model not fitted')
         Xn = self._clean(X); raw = self._predict_raw(Xn)
-        if self.calibrator is None: raw['p_up'] = raw['p_up_raw']
-        elif isinstance(self.calibrator, LogisticRegression): raw['p_up'] = self.calibrator.predict_proba(raw[['p_up_raw']])[:, 1]
-        else: raw['p_up'] = self.calibrator.predict(raw['p_up_raw'])
+        raw['p_up'] = self._calibrated_probabilities(raw['p_up_raw'].to_numpy(float))
         pmat = np.column_stack([m.predict_proba(Xn)[:, 1] for m in self.clfs])
         rmat = np.column_stack([m.predict(Xn) for m in self.regs])
         raw['model_disagreement'] = pmat.std(axis=1)
