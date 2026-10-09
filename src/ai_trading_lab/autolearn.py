@@ -34,6 +34,30 @@ def _final_holdout_eval(df,settings,engine=None,run_id=None):
     checks={"minimum_trades":int(stats.get("trades",0))>=int(getattr(settings,"base_min_holdout_trades",20)),"positive_return":float(stats.get("total_return",0))>0 if bool(getattr(settings,"base_require_positive_holdout_return",True)) else True,"profit_factor":float(stats.get("profit_factor",0))>=float(getattr(settings,"base_min_holdout_profit_factor",1.0)),"drawdown":float(stats.get("max_drawdown",-1))>=float(getattr(settings,"base_max_holdout_drawdown",-0.25)),"utility":float(utility)>=float(getattr(settings,"base_min_holdout_utility",0))}
     return {"passed":bool(all(checks.values())) and bool(holdout_governance['pristine']),"checks":checks,"stats":stats,"utility":float(utility),"holdout_rows":len(holdout),"holdout_governance":holdout_governance,"promotion_allowed_from_holdout":bool(holdout_governance['pristine'])}
 
+def _final_holdout_report_payload(df, settings, holdout, model_semantics, deployment_semantics):
+    """Persist exact validation provenance for an auto-update candidate."""
+    holdout_rows = max(0, min(int(holdout.get("holdout_rows", 0)), len(df)))
+    train_rows = len(df) - holdout_rows
+    train_df = df.iloc[:train_rows]
+    holdout_df = df.iloc[train_rows:]
+    return {
+        "symbol": str(settings.symbol),
+        "timeframe": str(settings.timeframe),
+        "rows": int(len(df)),
+        "train_rows": int(train_rows),
+        "data_fingerprint": strong_dataset_fingerprint(df),
+        "holdout_rows": int(holdout_rows),
+        "holdout": holdout.get("stats", {}),
+        "utility": float(holdout.get("utility", -np.inf)),
+        "model_semantics_fingerprint": model_semantics,
+        "deployment_semantics_fingerprint": deployment_semantics,
+        "validation_train_data_fingerprint": strong_dataset_fingerprint(train_df),
+        "validation_holdout_data_fingerprint": strong_dataset_fingerprint(holdout_df),
+        "validation_holdout_start": str(holdout_df.index[0]) if holdout_rows else "",
+        "validation_holdout_end": str(holdout_df.index[-1]) if holdout_rows else "",
+        "validation_holdout_frac": float(holdout_rows / max(1, len(df))),
+    }
+
 def auto_update(df,settings,model_dir="models"):
     mdir=Path(model_dir)
     mdir.mkdir(parents=True,exist_ok=True)
@@ -146,22 +170,11 @@ def auto_update(df,settings,model_dir="models"):
             "trained_at":pd.Timestamp.now(tz="UTC").isoformat(),
             "promotion_source":"auto_update",
         },indent=2,default=str),encoding="utf-8")
-        (mdir/"base_holdout_report.json").write_text(json.dumps({
-            "symbol":str(settings.symbol),
-            "rows":int(len(df)),
-            "train_rows":int(len(df)-int(holdout.get("holdout_rows",0))),
-            "data_fingerprint":fp,
-            "holdout_rows":int(holdout.get("holdout_rows",0)),
-            "holdout":holdout.get("stats",{}),
-            "utility":float(holdout.get("utility",-np.inf)),
-            "model_semantics_fingerprint":model_semantics,
-            "deployment_semantics_fingerprint":deployment_semantics,
-            "validation_train_data_fingerprint":strong_dataset_fingerprint(df.iloc[:len(df)-int(holdout.get("holdout_rows",0))]),
-            "validation_holdout_data_fingerprint":strong_dataset_fingerprint(df.iloc[len(df)-int(holdout.get("holdout_rows",0)):]),
-            "validation_holdout_start":str(df.index[-int(holdout.get("holdout_rows",0))]),
-            "validation_holdout_end":str(df.index[-1]),
-            "validation_holdout_frac":float(getattr(settings,"final_holdout_frac",0.15)),
-        },indent=2,default=str),encoding="utf-8")
+        (mdir/"base_holdout_report.json").write_text(json.dumps(
+            _final_holdout_report_payload(df, settings, holdout, model_semantics, deployment_semantics),
+            indent=2,
+            default=str,
+        ), encoding="utf-8")
         try:
             from .trade_window import train_trade_window_backbone
             duration_path=mdir/"trade_window_specialist.joblib"
