@@ -20,7 +20,7 @@ def test_paper_rejects_derivative_when_funding_data_is_missing(tmp_path, monkeyp
             "close": [100.5, 101.5],
             "volume": [1000.0, 1000.0],
         },
-        index=pd.date_range("2026-10-08T15:00:00Z", periods=2, freq="15min"),
+        index=pd.date_range(end=pd.Timestamp.now(tz="UTC").floor("15min"), periods=2, freq="15min"),
     )
 
     class Quality:
