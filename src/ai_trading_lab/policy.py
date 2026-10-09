@@ -62,8 +62,17 @@ def decide_actions(pred, regime, analog, meta_p, settings, *, regime_persistence
             "meta_success":float(meta_threshold),
             "score":float(decision_threshold),
         },
+        "direction_return_sign_agreement":{
+            "n":int(len(p_up)),
+            "matches":int(np.sum((p_up>=0.5)==(er>=0.0))),
+            "rate":float(np.mean((p_up>=0.5)==(er>=0.0))) if len(p_up) else 0.0,
+        },
         "distributions":{
             "directional_probability":summarize(p_dir),
+            "raw_expected_return":summarize(er),
+            "directional_expected_return":summarize(er_dir),
+            "expected_return_lcb":summarize(er_lcb),
+            "expected_return_ucb":summarize(er_ucb),
             "robust_expected_return":summarize(er_robust),
             "meta_success":summarize(meta_p),
             "score":summarize(score),
