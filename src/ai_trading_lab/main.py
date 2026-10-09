@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .config import load_settings
 from .data import cache_ohlcv, exchange_client, fetch_ohlcv, load_cached
-from .evaluation import run_configured_backtest
+from .evaluation import directional_validation_diagnostics, run_configured_backtest
 from .policy import make_actions
 from .engine import AdaptiveEngine
 from .research import walk_forward, strategy_discovery
@@ -132,6 +132,9 @@ def read_asset_dataframe(meta: dict):
 
 
 def test_base_holdout(df, settings, holdout_frac: float) -> dict:
+    import pandas as pd
+    from .labels import triple_barrier_labels
+
     split = int(len(df) * (1.0 - holdout_frac))
     if split < max(500, settings.min_train_rows) or len(df) - split < 100:
         raise ValueError("Not enough rows for requested train/holdout split")
@@ -144,6 +147,20 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
         external_feature_lag_bars=getattr(settings, "external_feature_lag_bars", 1),
     )
     actions = make_actions(eng, feat, settings)
+    # Evaluate direction against untouched, realized next-open outcomes. This
+    # is intentionally separate from the policy's predicted-vs-predicted checks.
+    holdout_predictions = eng.model.predict(feat)
+    labelled_market = pd.concat([train_df, test_df])
+    realized_returns = triple_barrier_labels(
+        labelled_market,
+        settings.horizon_bars,
+        settings.pt_atr,
+        settings.sl_atr,
+    )["tb_return"].reindex(test_df.index)
+    realized_directional_validation = directional_validation_diagnostics(
+        holdout_predictions["p_up"].reindex(test_df.index).to_numpy(),
+        realized_returns.to_numpy(),
+    )
     action_diagnostics = {
         "actions_by_side": {
             str(side): int(count)
@@ -170,6 +187,7 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
         "validation_holdout_end": str(test_df.index.max()),
         "validation_holdout_frac": float(holdout_frac),
         "action_diagnostics": action_diagnostics,
+        "realized_directional_validation": realized_directional_validation,
         "model_semantics_fingerprint": model_semantics_fingerprint(settings),
         "deployment_semantics_fingerprint": deployment_semantics_fingerprint(settings),
         "holdout": result.stats,

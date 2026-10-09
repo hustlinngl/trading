@@ -487,9 +487,13 @@ def test_base_holdout_report_records_timeframe_provenance(monkeypatch, tmp_path)
         index=pd.date_range("2025-01-01", periods=n, freq="15min", tz="UTC"),
     )
 
+    class FakeModel:
+        def predict(self, features):
+            return pd.DataFrame({"p_up": np.full(len(features), 0.6)}, index=features.index)
+
     class FakeEngine:
         def __init__(self, _settings):
-            pass
+            self.model = FakeModel()
 
         def fit(self, _frame):
             return None
@@ -519,6 +523,8 @@ def test_base_holdout_report_records_timeframe_provenance(monkeypatch, tmp_path)
 
     assert report["timeframe"] == settings.timeframe
     assert report["action_diagnostics"]["actions_by_side"] == {"FLAT": report["holdout_rows"]}
+    assert report["realized_directional_validation"]["observations"] > 0
+    assert "directional_accuracy" in report["realized_directional_validation"]
     persisted = asset_bundle_dir(tmp_path, settings.symbol) / "base_holdout_report.json"
     assert __import__("json").loads(persisted.read_text(encoding="utf-8"))["timeframe"] == settings.timeframe
 
