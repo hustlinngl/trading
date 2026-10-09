@@ -12,6 +12,8 @@ def model_semantics_fingerprint(settings) -> str:
     import json
 
     fields = {
+        # Bump when the meaning of training labels changes, even if settings stay the same.
+        "label_target_semantics": "direction_from_simulated_realized_return_v1",
         "timeframe": str(getattr(settings, "timeframe", "")),
         "horizon_bars": int(getattr(settings, "horizon_bars", 8)),
         "pt_atr": float(getattr(settings, "pt_atr", 1.6)),

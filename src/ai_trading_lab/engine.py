@@ -27,6 +27,12 @@ class EngineArtifacts:
     predictions: pd.DataFrame
 
 
+def directional_target_from_returns(target_ret: pd.Series) -> pd.Series:
+    """Create the binary direction target aligned with simulated realized returns."""
+    returns = pd.to_numeric(target_ret, errors="coerce").replace([np.inf, -np.inf], np.nan)
+    return returns.gt(0.0).astype(float).where(returns.notna())
+
+
 def _pre_calibration_core_mask(index, calibration_start, purge_bars):
     """Match meta-learning's training boundary to SignalModel's purged calibration split."""
     if not isinstance(index, pd.DatetimeIndex):
@@ -69,9 +75,12 @@ class AdaptiveEngine:
         validate_execution_alignment(self.settings)
         features,_,_raw_future_ret=make_features(df,self.settings.horizon_bars,external_feature_lag_bars=getattr(self.settings,'external_feature_lag_bars',1))
         tb=triple_barrier_labels(df,self.settings.horizon_bars,self.settings.pt_atr,self.settings.sl_atr)
-        tb_label=tb['tb_label']
-        y=tb_label.gt(0).astype(float).where(tb_label.notna())
         target_ret=tb['tb_return']
+        # p_up is consumed as a directional probability by decide_actions. Train it
+        # against the sign of the simulated, executable return rather than
+        # "take-profit barrier hit vs stop/timeout", which conflates neutral
+        # outcomes with bearish ones.
+        y=directional_target_from_returns(target_ret)
         cal_n=max(48,int(max(1,y.notna().sum())*0.15)); valid_idx=y.notna(); valid_positions=np.flatnonzero(valid_idx.to_numpy()); selection_mask=pd.Series(False,index=features.index)
         if len(valid_positions)>cal_n+100: selection_mask.iloc[valid_positions[:-cal_n]]=True
         else: selection_mask.loc[valid_idx.index]=valid_idx
