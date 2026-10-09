@@ -147,7 +147,7 @@ class CognitionEngine:
         fp=strong_dataset_fingerprint(df); cached=self._cache("research",fp,query)
         if cached is not None: return {**cached,"skipped":True,"skip_reason":"dataset_unchanged"}
         hs=self.discover_hypotheses(query); fc=self.evaluate_feature_families(df); sc=self.evolve_strategies(df)
-        payload={"timestamp":utcnow(),"data_fingerprint":fp,"hypotheses":[asdict(h) for h in hs],"feature_candidates":[asdict(x) for x in fc],"strategy_candidates":sc[:20]}
+        payload={"timestamp":utcnow(),"data_fingerprint":fp,"hypotheses":[asdict(h) for h in hs],"feature_candidates":[x if isinstance(x,dict) else asdict(x) for x in fc],"strategy_candidates":sc[:20]}
         self._save("research",fp,payload,query); (self.root/"logs"/"autonomous_cycle.json").write_text(json.dumps(payload,indent=2,default=str),encoding="utf-8"); return payload
 
     def run_growth(self,df,query,strategy_candidates=None):
