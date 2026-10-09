@@ -144,6 +144,13 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
         external_feature_lag_bars=getattr(settings, "external_feature_lag_bars", 1),
     )
     actions = make_actions(eng, feat, settings)
+    action_diagnostics = {
+        "actions_by_side": {
+            str(side): int(count)
+            for side, count in actions.astype(str).value_counts(dropna=False).items()
+        },
+        "policy_gates": actions.attrs.get("diagnostics", {}),
+    }
     bt = test_df.copy()
     bt["atr_14"] = feat["atr_14"].reindex(test_df.index).ffill()
     result = run_configured_backtest(bt, actions, settings)
@@ -162,6 +169,7 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
         "validation_holdout_start": str(test_df.index.min()),
         "validation_holdout_end": str(test_df.index.max()),
         "validation_holdout_frac": float(holdout_frac),
+        "action_diagnostics": action_diagnostics,
         "model_semantics_fingerprint": model_semantics_fingerprint(settings),
         "deployment_semantics_fingerprint": deployment_semantics_fingerprint(settings),
         "holdout": result.stats,
