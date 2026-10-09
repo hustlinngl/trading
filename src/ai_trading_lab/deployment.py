@@ -5,6 +5,9 @@ import json
 from datetime import datetime, timezone
 from .objectives import robust_performance_utility
 
+# Increment this when calibration behavior changes; old bundles must be retrained.
+PROBABILITY_CALIBRATION_SEMANTICS = "isotonic_oos_platt_extrapolation_v1"
+
 
 
 def model_semantics_fingerprint(settings) -> str:
@@ -14,6 +17,7 @@ def model_semantics_fingerprint(settings) -> str:
     fields = {
         # Bump when the meaning of training labels changes, even if settings stay the same.
         "label_target_semantics": "direction_from_simulated_realized_return_v1",
+        "probability_calibration_semantics": PROBABILITY_CALIBRATION_SEMANTICS,
         "timeframe": str(getattr(settings, "timeframe", "")),
         "horizon_bars": int(getattr(settings, "horizon_bars", 8)),
         "pt_atr": float(getattr(settings, "pt_atr", 1.6)),

@@ -521,3 +521,37 @@ def test_base_holdout_report_records_timeframe_provenance(monkeypatch, tmp_path)
     assert report["action_diagnostics"]["actions_by_side"] == {"FLAT": report["holdout_rows"]}
     persisted = asset_bundle_dir(tmp_path, settings.symbol) / "base_holdout_report.json"
     assert __import__("json").loads(persisted.read_text(encoding="utf-8"))["timeframe"] == settings.timeframe
+
+
+def test_bundle_compatibility_rejects_old_probability_calibration_semantics(tmp_path, monkeypatch):
+    import json
+    import ai_trading_lab.deployment as deployment
+
+    settings = load_settings("config.yaml")
+    settings.symbol = "BTC/USDT"
+    bundle = asset_bundle_dir(tmp_path, settings.symbol)
+    bundle.mkdir(parents=True)
+
+    current_version = deployment.PROBABILITY_CALIBRATION_SEMANTICS
+    monkeypatch.setattr(
+        deployment,
+        "PROBABILITY_CALIBRATION_SEMANTICS",
+        "legacy_isotonic_endpoint_clip_v0",
+    )
+    stale_fingerprint = deployment.model_semantics_fingerprint(settings)
+    monkeypatch.setattr(
+        deployment, "PROBABILITY_CALIBRATION_SEMANTICS", current_version
+    )
+    (bundle / "base_training_meta.json").write_text(
+        json.dumps({
+            "symbol": settings.symbol,
+            "timeframe": settings.timeframe,
+            "model_semantics_fingerprint": stale_fingerprint,
+        }),
+        encoding="utf-8",
+    )
+
+    ok, reason = bundle_compatibility(settings, bundle, settings.symbol)
+
+    assert not ok
+    assert reason == "model_semantics_mismatch"
