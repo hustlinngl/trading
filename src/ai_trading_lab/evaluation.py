@@ -1,11 +1,66 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from .backtest import run_backtest
 from .risk import RiskEngine
 from .execution_semantics import validate_execution_alignment
 from .data import timeframe_offset
+
+
+def directional_validation_diagnostics(probabilities, realized_returns) -> dict:
+    """Measure OOS directional predictions against realized executable returns.
+
+    Returns are the same next-open/triple-barrier targets used to train p_up.
+    Non-finite observations are excluded; this report is diagnostic only and
+    never relaxes deployment-readiness gates.
+    """
+    p_up = pd.to_numeric(pd.Series(probabilities), errors="coerce").to_numpy(dtype=float)
+    returns = pd.to_numeric(pd.Series(realized_returns), errors="coerce").to_numpy(dtype=float)
+    if p_up.size != returns.size:
+        raise ValueError("directional_validation_length_mismatch")
+
+    valid = np.isfinite(p_up) & np.isfinite(returns) & (p_up >= 0.0) & (p_up <= 1.0)
+    p_up = p_up[valid]
+    returns = returns[valid]
+    if not len(p_up):
+        return {"observations": 0, "reason": "no_finite_oos_observations"}
+
+    actual_up = returns > 0.0
+    predicted_up = p_up >= 0.5
+    tp = int(np.sum(predicted_up & actual_up))
+    fp = int(np.sum(predicted_up & ~actual_up))
+    tn = int(np.sum(~predicted_up & ~actual_up))
+    fn = int(np.sum(~predicted_up & actual_up))
+    positive_support = tp + fn
+    negative_support = tn + fp
+    accuracy = (tp + tn) / len(p_up)
+    balanced_accuracy = (
+        0.5 * (tp / positive_support + tn / negative_support)
+        if positive_support and negative_support
+        else None
+    )
+    long_support = tp + fp
+    short_support = tn + fn
+    actual_positive_rate = float(np.mean(actual_up))
+    return {
+        "observations": int(len(p_up)),
+        "directional_accuracy": float(accuracy),
+        "balanced_directional_accuracy": (
+            float(balanced_accuracy) if balanced_accuracy is not None else None
+        ),
+        "majority_class_baseline_accuracy": float(max(actual_positive_rate, 1.0 - actual_positive_rate)),
+        "probability_brier_score": float(np.mean((p_up - actual_up.astype(float)) ** 2)),
+        "long_precision": float(tp / long_support) if long_support else None,
+        "short_precision": float(tn / short_support) if short_support else None,
+        "actual_positive_return_rate": actual_positive_rate,
+        "predicted_up_rate": float(np.mean(predicted_up)),
+        "true_positive": tp,
+        "false_positive": fp,
+        "true_negative": tn,
+        "false_negative": fn,
+    }
 
 
 def make_risk(settings, *, stop_atr_mult=None, take_profit_rr=None, cost_multiplier: float = 1.0, max_holding_bars=None):
