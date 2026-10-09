@@ -28,7 +28,49 @@ def decide_actions(pred, regime, analog, meta_p, settings, *, regime_persistence
     score=weights[0]*((p_dir-0.5)*2)+weights[1]*np.tanh(er_robust*50)+weights[2]*np.tanh(mem_dir*50)+weights[3]*((meta_p-0.5)*2)+weights[4]*regime_vec*direction+(agreement-0.5)*0.20-np.minimum(0.35,np.maximum(0.0,model_disagreement*uncertainty_penalty_mult))
     ok=(score>=decision_threshold)&(p_dir>=probability_threshold)&(er_robust>=effective_min_expected_return)&(meta_p>=meta_threshold)
     action=np.full(len(pred),'FLAT',dtype=object); action[ok&(direction>0)]='LONG'; action[ok&(direction<0)]='SHORT'
-    score_series=pd.Series(score,index=pred.index,name='score'); score_series.attrs['effective_min_expected_return']=float(np.max(effective_min_expected_return)) if len(effective_min_expected_return) else 0.0; score_series.attrs['economic_hurdle_bps']=float(np.max(hurdle_bps)) if len(hurdle_bps) else 0.0
+    score_series=pd.Series(score,index=pred.index,name='score')
+    score_series.attrs['effective_min_expected_return']=float(np.max(effective_min_expected_return)) if len(effective_min_expected_return) else 0.0
+    score_series.attrs['economic_hurdle_bps']=float(np.max(hurdle_bps)) if len(hurdle_bps) else 0.0
+
+    def summarize(values):
+        arr=np.asarray(values,dtype=float)
+        arr=arr[np.isfinite(arr)]
+        if not len(arr):
+            return {"n":0}
+        return {
+            "n":int(len(arr)),
+            "min":float(np.min(arr)),
+            "p50":float(np.quantile(arr,0.50)),
+            "p90":float(np.quantile(arr,0.90)),
+            "p99":float(np.quantile(arr,0.99)),
+            "max":float(np.max(arr)),
+        }
+
+    # Keep diagnostics attached to the internal Series so holdout evaluation can
+    # distinguish an overly selective policy from a backtest/execution defect.
+    score_series.attrs["diagnostics"]={
+        "rows":int(len(pred)),
+        "pass_probability":int(np.sum(p_dir>=probability_threshold)),
+        "pass_robust_return":int(np.sum(er_robust>=effective_min_expected_return)),
+        "pass_meta":int(np.sum(meta_p>=meta_threshold)),
+        "pass_score":int(np.sum(score>=decision_threshold)),
+        "pass_all_policy_gates":int(np.sum(ok)),
+        "thresholds":{
+            "directional_probability":float(probability_threshold),
+            "minimum_robust_return_min":float(np.min(effective_min_expected_return)) if len(effective_min_expected_return) else 0.0,
+            "minimum_robust_return_max":float(np.max(effective_min_expected_return)) if len(effective_min_expected_return) else 0.0,
+            "meta_success":float(meta_threshold),
+            "score":float(decision_threshold),
+        },
+        "distributions":{
+            "directional_probability":summarize(p_dir),
+            "robust_expected_return":summarize(er_robust),
+            "meta_success":summarize(meta_p),
+            "score":summarize(score),
+            "model_disagreement":summarize(model_disagreement),
+            "analog_agreement":summarize(agreement),
+        },
+    }
     return pd.Series(action,index=pred.index,name='action'),score_series
 
 def live_signal_gate(row, settings):
@@ -111,5 +153,5 @@ def make_actions(engine,features,settings,probability_threshold=None,min_expecte
     pred=engine.model.predict(features); regime=engine.regimes.transform(features); regime_persistence=engine.regimes.persistence(features); regime_probs=engine.regimes.semantic_probabilities(features); analog=engine.memory.query_many(features)
     meta_x=MetaPolicy.frame(pred,features,regime,analog,regime_persistence=regime_persistence,regime_probs=regime_probs); meta_p=engine.meta.predict_proba(meta_x)
     overrides={k:v for k,v in {'probability_threshold':probability_threshold,'min_expected_return':min_expected_return,'decision_threshold':decision_threshold,'meta_threshold':meta_threshold}.items() if v is not None}
-    actions,scores=decide_actions(pred,regime,analog,meta_p,settings,regime_persistence=regime_persistence,regime_probs=regime_probs,**overrides); actions.attrs['score']=scores
+    actions,scores=decide_actions(pred,regime,analog,meta_p,settings,regime_persistence=regime_persistence,regime_probs=regime_probs,**overrides); actions.attrs['score']=scores; actions.attrs['diagnostics']=scores.attrs.get('diagnostics',{})
     return actions
