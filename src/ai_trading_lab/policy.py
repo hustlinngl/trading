@@ -62,7 +62,9 @@ def decide_actions(pred, regime, analog, meta_p, settings, *, regime_persistence
             "meta_success":float(meta_threshold),
             "score":float(decision_threshold),
         },
-        "direction_return_sign_agreement":{
+        # This compares two model outputs, not model predictions to realized
+        # market outcomes. Holdout outcome metrics live in evaluation.py.
+        "model_direction_return_sign_agreement":{
             "n":int(len(p_up)),
             "matches":int(np.sum((p_up>=0.5)==(er>=0.0))),
             "rate":float(np.mean((p_up>=0.5)==(er>=0.0))) if len(p_up) else 0.0,
