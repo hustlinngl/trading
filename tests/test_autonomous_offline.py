@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from ai_trading_lab.autonomous import _offline_synthetic_data, autonomous_cycle
+from ai_trading_lab.autonomous import _macro_values_from_growth, _offline_synthetic_data, autonomous_cycle
 from ai_trading_lab.config import load_settings
 from ai_trading_lab.data_quality import audit_market_data
 
@@ -79,3 +79,24 @@ def test_cognition_research_serializes_dict_feature_candidates(monkeypatch, tmp_
         (tmp_path / "data" / "cognition_state.json").read_text(encoding="utf-8")
     )
     assert persisted["research"]["payload"]["feature_candidates"] == candidates
+
+
+def test_autonomous_macro_values_follow_growth_external_envelope():
+    growth = {
+        "external": {
+            "macro": {
+                "series": {
+                    "DFF": {"last": 4.5},
+                    "CPIAUCSL": {"last": "3.1"},
+                    "BROKEN": {"last": "not-a-number"},
+                    "MISSING": {},
+                }
+            }
+        },
+        "macro": {},
+    }
+
+    assert _macro_values_from_growth(growth) == {
+        "DFF": 4.5,
+        "CPIAUCSL": 3.1,
+    }
