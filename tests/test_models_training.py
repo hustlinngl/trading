@@ -54,3 +54,27 @@ def test_signal_model_refits_production_learners_on_all_rows_after_oos_calibrati
     assert reg_fit_lengths[-1] == n
     assert clf_fit_lengths.count(n) == len(model.clfs)
     assert reg_fit_lengths.count(n) == len(model.regs)
+
+
+def test_isotonic_calibration_uses_platt_fallback_outside_oos_score_range():
+    from sklearn.isotonic import IsotonicRegression
+    from sklearn.linear_model import LogisticRegression
+
+    raw = np.linspace(0.2, 0.8, 120)
+    target = (raw >= 0.5).astype(int)
+    model = SignalModel()
+    model.calibrator = IsotonicRegression(out_of_bounds="clip").fit(raw, target)
+    model.calibrator_fallback = LogisticRegression(C=1.0, solver="lbfgs").fit(
+        pd.DataFrame({"p_up_raw": raw}), target
+    )
+
+    probes = np.asarray([0.05, 0.10, 0.90, 0.95])
+    calibrated = model._calibrated_probabilities(probes)
+    expected = model.calibrator_fallback.predict_proba(
+        pd.DataFrame({"p_up_raw": probes})
+    )[:, 1]
+
+    assert np.all(np.isfinite(calibrated))
+    assert np.all((calibrated > 0.0) & (calibrated < 1.0))
+    assert np.all(np.diff(calibrated) > 0.0)
+    assert np.allclose(calibrated, expected)
