@@ -90,6 +90,14 @@ def compile_direct_signal(
     if not isfinite(expected_return):
         raise SignalContractError("invalid_expected_return")
 
+    # The internal regressor predicts a LONG-side return. A public SHORT
+    # result must report the return in the predicted direction instead.
+    if signal == "LONG" and p_up < 0.5:
+        raise SignalContractError("action_probability_mismatch")
+    if signal == "SHORT" and p_up >= 0.5:
+        raise SignalContractError("action_probability_mismatch")
+    directional_expected_return = expected_return if p_up >= 0.5 else -expected_return
+
     confidence = 0.0
     if signal == "LONG":
         confidence = p_up
@@ -100,7 +108,7 @@ def compile_direct_signal(
         symbol=str(symbol),
         signal=signal,
         confidence=confidence,
-        expected_return=expected_return,
+        expected_return=directional_expected_return,
         price=float(price),
         horizon_bars=int(horizon_bars),
     )
