@@ -450,9 +450,25 @@ def _write_history(path: Path, rows):
     tmp.replace(path)
 
 
-def _resolve_result(df, signal, timeframe, pt_atr, sl_atr, fee_bps, slippage_bps, max_bars):
+def _resolve_result(
+    df, signal, timeframe, pt_atr, sl_atr, fee_bps, slippage_bps, max_bars,
+    impact_bps_per_sqrt=0.0, max_participation_pct=0.10,
+    short_borrow_bps_per_bar=0.0,
+):
     """Resolve a published signal with the same entry, barrier and time-stop semantics as training."""
-    stamp = pd.Timestamp(signal.get("data_timestamp", ""))
+    # New history records store an explicit data_timestamp. Older records only
+    # have timestamp, which LiveAssessment sets from the last OHLCV candle index.
+    stamp_value = signal.get("data_timestamp")
+    if stamp_value is None or not str(stamp_value).strip():
+        stamp_value = signal.get("timestamp")
+    if stamp_value is None or not str(stamp_value).strip():
+        return None
+    try:
+        stamp = pd.Timestamp(stamp_value)
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(stamp):
+        return None
     stamp = (
         stamp.tz_localize("UTC")
         if stamp.tzinfo is None
@@ -490,9 +506,32 @@ def _resolve_result(df, signal, timeframe, pt_atr, sl_atr, fee_bps, slippage_bps
     if not np.isfinite(upper) or not np.isfinite(lower) or lower <= 0 or upper <= lower:
         return None
 
-    cost = 2 * (float(fee_bps) + float(slippage_bps)) / 10000.0
+    cost_parameters = np.asarray(
+        [
+            fee_bps,
+            slippage_bps,
+            impact_bps_per_sqrt,
+            max_participation_pct,
+            short_borrow_bps_per_bar,
+        ],
+        dtype=float,
+    )
+    if not np.isfinite(cost_parameters).all() or np.any(cost_parameters < 0.0):
+        return None
+    participation = float(np.clip(float(max_participation_pct), 0.0, 1.0))
+    fee_bps = float(fee_bps)
+    slippage_bps = float(slippage_bps)
+    impact_bps_per_sqrt = float(impact_bps_per_sqrt)
+    short_borrow_bps_per_bar = float(short_borrow_bps_per_bar)
+    round_trip_cost_bps = 2.0 * (
+        fee_bps + slippage_bps + impact_bps_per_sqrt * np.sqrt(participation)
+    )
     min_bars = max(1, int(signal.get("_min_bars", 1) or 1))
     interval_minutes = timeframe_minutes(timeframe)
+
+    def cost_bps_for(held: int) -> float:
+        borrow = short_borrow_bps_per_bar * max(0, int(held)) if side == "SHORT" else 0.0
+        return float(round_trip_cost_bps + borrow)
 
     def result_for(barrier: str, fill_price: float, held: int) -> dict:
         early = held < min_bars
@@ -507,9 +546,11 @@ def _resolve_result(df, signal, timeframe, pt_atr, sl_atr, fee_bps, slippage_bps
             if side == "LONG"
             else entry / fill_price - 1.0
         )
+        estimated_cost_bps = cost_bps_for(held)
         return {
             "outcome": outcome,
-            "realized_return": float(gross - cost),
+            "realized_return": float(gross - estimated_cost_bps / 10000.0),
+            "estimated_cost_bps": estimated_cost_bps,
             "holding_hours": float(held * interval_minutes / 60.0),
         }
 
@@ -536,9 +577,11 @@ def _resolve_result(df, signal, timeframe, pt_atr, sl_atr, fee_bps, slippage_bps
         hit_down = low <= lower
         if hit_up and hit_down:
             # OHLC cannot establish which barrier was first; do not invent a win/loss.
+            # Without intrabar ordering the exit fill and net return are unknown.
             return {
                 "outcome": "AMBIGUOUS",
-                "realized_return": 0.0,
+                "realized_return": None,
+                "estimated_cost_bps": cost_bps_for(held),
                 "holding_hours": float(held * interval_minutes / 60.0),
             }
         if hit_up:
@@ -559,9 +602,11 @@ def _resolve_result(df, signal, timeframe, pt_atr, sl_atr, fee_bps, slippage_bps
         if side == "LONG"
         else entry / exit_price - 1.0
     )
+    estimated_cost_bps = cost_bps_for(horizon)
     return {
         "outcome": "TIMEOUT",
-        "realized_return": float(gross - cost),
+        "realized_return": float(gross - estimated_cost_bps / 10000.0),
+        "estimated_cost_bps": estimated_cost_bps,
         "holding_hours": float(horizon * interval_minutes / 60.0),
     }
 
@@ -624,12 +669,16 @@ def update_live_signal_outcomes(
                         / timeframe_minutes(settings.timeframe)
                     )
                 ),
+                impact_bps_per_sqrt=float(getattr(settings, "impact_bps_per_sqrt", 1.5)),
+                max_participation_pct=float(getattr(settings, "max_participation_pct", 0.10)),
+                short_borrow_bps_per_bar=float(getattr(settings, "short_borrow_bps_per_bar", 0.0)),
             )
             if resolved:
                 rec.update(resolved)
                 rec.pop("_min_bars", None)
                 rec["resolved_at"] = pd.Timestamp.now(tz="UTC").isoformat()
-                stamp = pd.Timestamp(rec["data_timestamp"])
+                stamp_value = rec.get("data_timestamp") or rec.get("timestamp")
+                stamp = pd.Timestamp(stamp_value)
                 stamp = (
                     stamp.tz_localize("UTC")
                     if stamp.tzinfo is None

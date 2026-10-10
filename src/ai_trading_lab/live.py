@@ -539,6 +539,10 @@ def append_live_signal_history(results,root="."):
             key=(str(r.symbol),str(r.timestamp))
             if key in seen:
                 continue
-            fh.write(json.dumps(r.to_internal_dict(),default=str)+"\n")
+            record = r.to_internal_dict()
+            # Keep the decision candle timestamp explicit for the outcome resolver.
+            # Older journals use this same data timestamp in the top-level "timestamp".
+            record["data_timestamp"] = str(r.timestamp)
+            fh.write(json.dumps(record,default=str)+"\n")
             seen.add(key); added+=1
     return {"path":str(p),"added":int(added),"duplicates_skipped":int(len(results)-added)}

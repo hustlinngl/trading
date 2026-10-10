@@ -46,6 +46,14 @@ def test_dashboard_responsive_ui_and_chart_edge_case():
     assert 'fetch("/api/state?force="+(force?"1":"0")' in html
 
 
+def test_dashboard_labels_ohlc_outcome_return_as_estimated_not_realized():
+    import signal_dashboard as terminal_mod
+
+    html = terminal_mod.HTML
+    assert "<th>Netto stimato</th>" in html
+    assert "<th>Realizzato</th>" not in html
+
+
 def test_dashboard_js_dom_references_resolve():
     import re
     import signal_dashboard as terminal_mod
@@ -312,6 +320,32 @@ def test_bootstrap_command_is_available():
     assert "bootstrap-live-data" in source
     assert "--all-symbols" in source
     assert "--market-types" in source
+
+
+
+def test_signal_history_persists_explicit_market_data_timestamp(tmp_path):
+    from ai_trading_lab.live import append_live_signal_history
+
+    assessment = LiveAssessment(
+        "BTC/USDT",
+        "2026-10-07T12:15:00+00:00",
+        "SIGNAL",
+        "LONG",
+        0.91,
+        0.006,
+        100000.0,
+        [],
+        "data-fp",
+        {"data_age_minutes": 1.0},
+    )
+
+    result = append_live_signal_history([assessment], str(tmp_path))
+    path = tmp_path / "logs" / "live_signal_history.jsonl"
+    record = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
+
+    assert result["added"] == 1
+    assert record["timestamp"] == assessment.timestamp
+    assert record["data_timestamp"] == assessment.timestamp
 
 
 def test_signal_terminal_reuses_exchange_for_outcome_tracking(tmp_path, monkeypatch):
