@@ -211,3 +211,20 @@ def test_live_inference_rejects_non_finite_feature_fraction_before_imputation():
         assert "required_b" in str(exc)
     else:
         raise AssertionError("A non-finite newest-bar feature must fail closed")
+
+
+def test_intensive_research_workflow_restores_and_persists_governance_ledger():
+    from pathlib import Path
+
+    workflow = (
+        Path(__file__).resolve().parents[1]
+        / ".github"
+        / "workflows"
+        / "intensive-real-research.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "contents: write" in workflow
+    assert "Restore persistent research ledger" in workflow
+    assert "Persist research ledger across runs" in workflow
+    assert "refs/heads/research-ledger" in workflow
+    assert "if: always()" in workflow
