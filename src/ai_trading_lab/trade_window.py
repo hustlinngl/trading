@@ -179,6 +179,9 @@ def _not_ready_report(reason, *, save_path=None, **details):
 
 
 def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None):
+    df = df.sort_index().copy()
+    if df.index.has_duplicates:
+        return _not_ready_report("duplicate_timestamps", save_path=save_path)
     base_minutes = float(
         getattr(settings, "base_bar_minutes", timeframe_minutes(getattr(settings, "timeframe", "15m")))
     )
@@ -445,7 +448,18 @@ def assess_trade_window(df, settings, model_path=None, symbol=None):
             out["trade_window_reason"] = "deployment_semantics_mismatch"
             return out
         if not bool(report.get("production_ready", False)):
-            out["trade_window_reason"] = "not_production_ready"
+            out.update(
+                {
+                    "trade_window_available": True,
+                    "trade_window_reason": "not_production_ready",
+                    "trade_window_report_precision": float(report.get("holdout_precision", 0.0) or 0.0),
+                }
+            )
+            return out
+
+        df = df.sort_index().copy()
+        if df.index.has_duplicates:
+            out["trade_window_reason"] = "duplicate_timestamps"
             return out
 
         base_minutes = float(
