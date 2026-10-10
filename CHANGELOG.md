@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.45
+- Corrected the 3–24h specialist holdout economics to use the actual first executable barrier/gap exit or time-stop return instead of always pricing a candidate at the later full-horizon open.
+- Record exit location, holding duration and execution type in the specialist label path; ambiguous OHLC collision PnL remains unknown and is excluded from economic readiness.
+- Apply short-borrow cost to the realized holding duration and expose ambiguous/unresolved candidate exclusions in the readiness report.
+- Bump specialist deployment semantics to invalidate bundles whose readiness was certified using the mismatched full-horizon PnL calculation.
+
 ## 0.9.44
 - Aligned base classifier, return regressor, analog memory and meta-policy targets with the executable ATR barrier/time-stop returns used by backtesting, instead of raw next-open-to-next-open returns.
 - Aligned untouched holdout directional diagnostics with the exact executable target, including opening gaps, early barriers and ambiguous OHLC exclusions.

@@ -18,7 +18,7 @@ def model_semantics_fingerprint(settings) -> str:
         # Bump when target, calibration, or meta train/serve semantics change.
         # Existing bundles must be retrained rather than silently reused.
         "label_target_semantics": "direction_from_execution_aligned_triple_barrier_return_v4",
-        "trade_window_target_semantics": "three_class_gap_first_barrier_event_after_entry_elapsed_min_duration_v4_prior_corrected_probabilities",
+        "trade_window_target_semantics": "three_class_gap_first_barrier_event_after_entry_elapsed_min_duration_v5_prior_corrected_execution_aligned_holdout_pnl",
         "trade_window_feature_imputation_semantics": "training_median_fill_v1",
         "probability_calibration_semantics": PROBABILITY_CALIBRATION_SEMANTICS,
         "meta_policy_semantics": "raw_oos_probability_and_unadjusted_return_bounds_v2",

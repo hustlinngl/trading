@@ -48,6 +48,8 @@ The repository `.gitignore` excludes these paths. Do not place secrets or person
 
 `models/assets/<SYMBOL>/` is the authoritative per-symbol location. Do not let the BTC/global champion bundle substitute for an ETH or other symbol model. A successful training call is not equivalent to `production_ready=true`; deployment manifests must match the data fingerprint, model/runtime semantics, held-out evidence and model artifact hashes.
 
+The specialist's holdout economics use the same executable exit path as its labels: first barrier, opening-gap fill, or time-stop open. Ambiguous OHLC barrier collisions have no return and are excluded from economic readiness.
+
 ## Development loop
 
 Use Python 3.11+ in a clean virtual environment:

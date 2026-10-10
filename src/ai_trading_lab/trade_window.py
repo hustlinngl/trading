@@ -27,13 +27,13 @@ def _atr(df, period=14):
 
 
 def _barrier_labels(df, horizon_bars=96, min_bars=12, pt_atr=1.25, sl_atr=0.90):
-    """Label the first executable barrier event, retaining no-event outcomes.
+    """Return event labels and the matching executable long-side price path.
 
-    A label is +1/-1 only when that barrier is first reached after the configured
-    minimum holding period. No qualifying event (including an ambiguous OHLC
-    collision) is class 0. Rows without enough past/future data remain NaN and are
-    excluded. Opening gaps are evaluated before the candle's intrabar high/low.
-    The time-stop candle's high/low is not inspected: liquidation occurs at its open.
+    Direction is +1/-1 only for a first barrier event after the configured
+    minimum duration; earlier exits and time-stops are class 0. Gross return,
+    exit_position and holding_bars describe the actual executable path whether
+    or not that exit qualifies as a 3–24h event. OHLC collisions with unknown
+    intrabar order remain non-executable and have no fabricated return.
     """
     horizon = int(horizon_bars)
     minimum = int(min_bars)
@@ -52,6 +52,10 @@ def _barrier_labels(df, horizon_bars=96, min_bars=12, pt_atr=1.25, sl_atr=0.90):
     lows = pd.to_numeric(x["low"], errors="coerce").to_numpy(float)
     atr = _atr(x).to_numpy(float)
     directions = np.full(len(x), np.nan, dtype=float)
+    gross_returns = np.full(len(x), np.nan, dtype=float)
+    exit_positions = np.full(len(x), np.nan, dtype=float)
+    holding_bars = np.full(len(x), np.nan, dtype=float)
+    execution_status = np.full(len(x), "unresolved", dtype=object)
 
     # The time-stop exits at open[i + horizon + 1]. Inspect only the horizon
     # holding candles: i+1 through i+horizon, not the exit candle itself.
@@ -60,55 +64,99 @@ def _barrier_labels(df, horizon_bars=96, min_bars=12, pt_atr=1.25, sl_atr=0.90):
         entry_i = i + 1
         exit_open_i = entry_i + horizon
         entry = opens[entry_i]
-        if not np.isfinite(atr_i) or atr_i <= 0 or not np.isfinite(entry) or entry <= 0:
-            continue
-        if not np.isfinite(opens[exit_open_i]) or opens[exit_open_i] <= 0:
+        time_stop_price = opens[exit_open_i]
+        if (
+            not np.isfinite(atr_i) or atr_i <= 0
+            or not np.isfinite(entry) or entry <= 0
+            or not np.isfinite(time_stop_price) or time_stop_price <= 0
+        ):
             continue
 
         upper = entry + pt * atr_i
         lower = entry - sl * atr_i
         outcome = 0.0
+        realized = time_stop_price / entry - 1.0
+        realized_exit_position = float(exit_open_i)
+        realized_holding_bars = float(horizon)
+        realized_status = "time_stop"
 
         for j in range(entry_i, exit_open_i):
             bar_open = opens[j]
             if not np.isfinite(bar_open) or bar_open <= 0:
                 outcome = np.nan
+                realized = np.nan
+                realized_exit_position = np.nan
+                realized_holding_bars = np.nan
+                realized_status = "invalid_ohlc"
                 break
 
-            # Elapsed holding bars are measured from the executable entry open,
-            # not the preceding decision candle.
+            # Elapsed intervals are measured from the executable entry open.
             held = j - entry_i
-            # The opening print is the earliest executable event in this candle.
+            # Opening gaps execute at their own price before the intrabar path.
             if bar_open >= upper:
                 outcome = 1.0 if held >= minimum else 0.0
+                realized = bar_open / entry - 1.0
+                realized_exit_position = float(j)
+                realized_holding_bars = float(max(1, held + 1))
+                realized_status = "opening_gap_take_profit"
                 break
             if bar_open <= lower:
                 outcome = -1.0 if held >= minimum else 0.0
+                realized = bar_open / entry - 1.0
+                realized_exit_position = float(j)
+                realized_holding_bars = float(max(1, held + 1))
+                realized_status = "opening_gap_stop_loss"
                 break
 
             if not np.isfinite(highs[j]) or not np.isfinite(lows[j]):
                 outcome = np.nan
+                realized = np.nan
+                realized_exit_position = np.nan
+                realized_holding_bars = np.nan
+                realized_status = "invalid_ohlc"
                 break
             hit_up = highs[j] >= upper
             hit_down = lows[j] <= lower
             if hit_up and hit_down:
-                # Intrabar order is unknowable from OHLC; do not invent a side.
+                # Class 0 marks no qualifying event; economics stay unknown.
                 outcome = 0.0
+                realized = np.nan
+                realized_exit_position = float(j)
+                realized_holding_bars = float(max(1, held + 1))
+                realized_status = "ambiguous_intrabar"
                 break
             if hit_up:
                 outcome = 1.0 if held >= minimum else 0.0
+                realized = upper / entry - 1.0
+                realized_exit_position = float(j)
+                realized_holding_bars = float(max(1, held + 1))
+                realized_status = "take_profit"
                 break
             if hit_down:
                 outcome = -1.0 if held >= minimum else 0.0
+                realized = lower / entry - 1.0
+                realized_exit_position = float(j)
+                realized_holding_bars = float(max(1, held + 1))
+                realized_status = "stop_loss"
                 break
 
         directions[i] = outcome
+        gross_returns[i] = realized
+        exit_positions[i] = realized_exit_position
+        holding_bars[i] = realized_holding_bars
+        execution_status[i] = realized_status
 
     return pd.DataFrame(
-        {"direction": directions, "margin": np.abs(directions)},
+        {
+            "direction": directions,
+            "margin": np.abs(directions),
+            "gross_return": gross_returns,
+            "exit_position": exit_positions,
+            "holding_bars": holding_bars,
+            "execution_status": execution_status,
+        },
         index=x.index,
     )
-
 
 def _fill_feature_frame(frame, feature_columns, fill_values):
     numeric = frame.reindex(columns=feature_columns).replace([np.inf, -np.inf], np.nan)
@@ -360,17 +408,45 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
     unexecutable_short_candidates = 0
 
     open_prices = pd.to_numeric(df["open"], errors="coerce").to_numpy(float)
+    ambiguous_candidate_exclusions = 0
+    unresolved_candidate_exclusions = 0
     for local_i, candidate in enumerate(candidates):
         if not bool(candidate):
             continue
         pos = int(positions[local_i])
         entry_pos = pos + 1
-        exit_pos = pos + max_bars + 1
-        if pos < 0 or entry_pos >= len(df) or exit_pos >= len(df) or pos <= last_exit_pos:
+        label_row = labels.loc[holdout_x.index[local_i]]
+        execution_status = str(label_row.get("execution_status", "missing_execution_path"))
+        try:
+            gross_market_return = float(label_row.get("gross_return", np.nan))
+            exit_pos_float = float(label_row.get("exit_position", np.nan))
+            held_bars = float(label_row.get("holding_bars", np.nan))
+        except (TypeError, ValueError, OverflowError):
+            gross_market_return = float("nan")
+            exit_pos_float = float("nan")
+            held_bars = float("nan")
+        if execution_status == "ambiguous_intrabar":
+            ambiguous_candidate_exclusions += 1
+            continue
+        if (
+            not np.isfinite(gross_market_return)
+            or not np.isfinite(exit_pos_float)
+            or not np.isfinite(held_bars)
+        ):
+            unresolved_candidate_exclusions += 1
+            continue
+        exit_pos = int(exit_pos_float)
+        if (
+            pos < 0
+            or entry_pos >= len(df)
+            or exit_pos >= len(df)
+            or exit_pos < entry_pos
+            or pos <= last_exit_pos
+        ):
             continue
         entry = float(open_prices[entry_pos])
-        exit_price = float(open_prices[exit_pos])
-        if not np.isfinite(entry) or entry <= 0 or not np.isfinite(exit_price) or exit_price <= 0:
+        if not np.isfinite(entry) or entry <= 0:
+            unresolved_candidate_exclusions += 1
             continue
         side = int(pred_direction[local_i])
         if side < 0 and require_short_borrow_cost and borrow_bps_per_bar <= 0.0:
@@ -378,16 +454,26 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
             # count it as evidence that the deployable strategy is profitable.
             unexecutable_short_candidates += 1
             continue
-        cost_bps = raw_cost_bps + (borrow_bps_per_bar * max_bars if side < 0 else 0.0)
-        gross = float(side) * (exit_price / entry - 1.0)
+        # Use the actual first barrier/gap exit or time-stop return, not a
+        # fictive full-horizon open when the position would already be liquidated.
+        cost_bps = raw_cost_bps + (
+            borrow_bps_per_bar * max(1.0, held_bars) if side < 0 else 0.0
+        )
+        gross = float(side) * gross_market_return
         net_return = gross - cost_bps / 10_000.0
         accepted.append(
             {
                 "position": pos,
+                "entry_position": entry_pos,
+                "exit_position": exit_pos,
+                "holding_bars": float(held_bars),
+                "execution_status": execution_status,
                 "truth": int(truth[local_i]),
                 "prediction": side,
                 "event_probability": float(p_event[local_i]),
                 "direction_confidence": float(p_direction[local_i]),
+                "gross_return": float(gross),
+                "estimated_cost_bps": float(cost_bps),
                 "net_return": float(net_return),
             }
         )
@@ -427,6 +513,8 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
         "holdout_signals": int(support),
         "holdout_candidates_before_nonoverlap": int(candidates.sum()),
         "holdout_unexecutable_short_candidates": int(unexecutable_short_candidates),
+        "holdout_ambiguous_candidate_exclusions": int(ambiguous_candidate_exclusions),
+        "holdout_unresolved_candidate_exclusions": int(unresolved_candidate_exclusions),
         "holdout_event_probability_mean": float(p_event.mean()) if len(p_event) else 0.0,
         "holdout_neutral_rate": float(np.mean(truth == 0)) if len(truth) else 0.0,
         "holdout_directional_confidence_mean": float(p_direction.mean()) if len(p_direction) else 0.0,

@@ -1,4 +1,4 @@
-# Adaptive AI Signal Terminal — Windows Setup (0.9.44)
+# Adaptive AI Signal Terminal — Windows Setup (0.9.45)
 
 ## Packaged EXE
 
