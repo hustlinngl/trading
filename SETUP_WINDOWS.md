@@ -35,11 +35,11 @@ For the read-only dashboard, public market data does not require exchange API ke
 
 ```powershell
 python -m ai_trading_lab.main doctor
-python -m ai_trading_lab.main bootstrap-live-data --symbols BTC/USDT,ETH/USDT,BNB/USDT,SOL/USDT,XRP/USDT --live-bars 600
+python -m ai_trading_lab.main bootstrap-live-data --live-bars 1200 --workers 4
 python signal_dashboard.py
 ```
 
-The dashboard refreshes realtime quotes through the configured public exchange adapter. The `bootstrap-live-data` command creates `data/historical/<SYMBOL>_<TIMEFRAME>.csv`; live model inference still requires a compatible trained bundle under `models/assets/<SYMBOL>/`.
+The dashboard refreshes realtime quotes through the configured public exchange adapter. The `bootstrap-live-data` command creates `data/historical/<SYMBOL>_<TIMEFRAME>.csv`; live model inference still requires a compatible trained bundle under `models/assets/<SYMBOL>/`. Running the command without `--symbols` discovers all active spot/swap/future markets for the configured exchange. It resumes from recent CSVs, writes replacements atomically, and supports bounded parallel workers; it may take substantial time on a full universe. Downloading a market's candles does not create a signal model or make that market signal-eligible.
 
 ### All symbols
 
