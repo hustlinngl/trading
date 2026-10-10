@@ -71,7 +71,17 @@ def test_combined_gate_rejects_missing_live_fields():
 
 def test_holdout_builder_persists_combined_gate_provenance(monkeypatch, tmp_path):
     settings = _settings()
-    settings.research_ledger_path = str(tmp_path / "research_ledger.json")
+    ledger_path = tmp_path / "research_ledger.json"
+    settings.research_ledger_path = str(ledger_path)
+    ledger_path.write_text(
+        json.dumps({
+            "schema_version": 2,
+            "total_trials": 123,
+            "trial_runs": [],
+            "holdout_accesses": [],
+        }),
+        encoding="utf-8",
+    )
     full = _market()
     train = full.iloc[:90].copy()
     holdout = full.iloc[90:].copy()
@@ -158,4 +168,6 @@ def test_holdout_builder_persists_combined_gate_provenance(monkeypatch, tmp_path
     assert persisted["holdout_start"] == str(holdout.index.min())
     assert persisted["statistical_evidence"]["deflated_sharpe_ratio_available"] is True
     assert persisted["statistical_evidence"]["deflated_sharpe_ratio"] is not None
+    assert persisted["statistical_evidence"]["prior_research_trial_count"] == 123
+    assert persisted["statistical_evidence"]["deflated_sharpe_trial_count"] == 126
     assert len(persisted["variant_diagnostics"]) == 3
