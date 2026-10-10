@@ -14,6 +14,6 @@ The build trains and checks the 15 configured core spot assets. A model is deplo
 
 ## Build and verify
 
-Push a release tag such as `v0.9.43` or manually dispatch the **Build Windows EXE** workflow in GitHub Actions. Verify that the run is for the intended commit, reaches `Upload Windows package`, and has a downloadable package artifact. Inspect `MODEL_READINESS.txt` before describing the package as model-ready.
+Push a release tag such as `v0.9.44` or manually dispatch the **Build Windows EXE** workflow in GitHub Actions. Verify that the run is for the intended commit, reaches `Upload Windows package`, and has a downloadable package artifact. Inspect `MODEL_READINESS.txt` before describing the package as model-ready.
 
 Target runtime: Windows x64, Python 3.11. Source launch and test instructions are in `SETUP_WINDOWS.md`.
