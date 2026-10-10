@@ -1,6 +1,8 @@
 # Changelog
 
 ## 0.9.43
+- Added an 8-second bounded realtime quote cache to reduce repeated public ticker calls while keeping signal inference on closed candles.
+- Realtime display price now prefers a valid bid/ask midpoint and retains the last trade separately; malformed/crossed books fall back safely.
 - Corrected short-signal net-return math to use simple PnL over entry notional, matching the event-driven backtester instead of overstating returns via an inverse-price formula.
 - Added short win/loss/timeout regression tests and a maintainer-facing source/data map.
 - Tightened Git exclusions for generated market data, trained bundles, runtime logs and Python tooling caches.
