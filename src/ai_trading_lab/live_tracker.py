@@ -451,6 +451,7 @@ def _write_history(path: Path, rows):
 
 
 def _resolve_result(df, signal, timeframe, pt_atr, sl_atr, fee_bps, slippage_bps, max_bars):
+    """Resolve a published signal with the same entry, barrier and time-stop semantics as training."""
     stamp = pd.Timestamp(signal.get("data_timestamp", ""))
     stamp = (
         stamp.tz_localize("UTC")
@@ -458,70 +459,110 @@ def _resolve_result(df, signal, timeframe, pt_atr, sl_atr, fee_bps, slippage_bps
         else stamp.tz_convert("UTC")
     )
     idx = df.index.searchsorted(stamp)
+    if idx >= len(df) or pd.Timestamp(df.index[idx]) != stamp:
+        return None
+
+    entry_i = idx + 1
+    horizon = int(max_bars)
+    if horizon < 1 or entry_i >= len(df):
+        return None
+    exit_open_i = entry_i + horizon
+
+    opens = pd.to_numeric(df["open"], errors="coerce").to_numpy(dtype=float)
+    highs = pd.to_numeric(df["high"], errors="coerce").to_numpy(dtype=float)
+    lows = pd.to_numeric(df["low"], errors="coerce").to_numpy(dtype=float)
+    entry = float(opens[entry_i])
+    atr = float(_atr(df).iloc[idx])
     if (
-        idx >= len(df)
-        or pd.Timestamp(df.index[idx]) != stamp
-        or idx + 1 >= len(df)
+        not np.isfinite(atr)
+        or atr <= 0
+        or not np.isfinite(entry)
+        or entry <= 0
     ):
         return None
-    entry = float(df["open"].iloc[idx + 1])
-    atr = float(_atr(df).iloc[idx])
-    if not np.isfinite(atr) or atr <= 0:
-        return None
-    side = str(signal.get("signal", ""))
+
+    side = str(signal.get("signal", "")).upper()
     if side not in {"LONG", "SHORT"}:
         return None
-    upper = entry + pt_atr * atr
-    lower = entry - sl_atr * atr
-    end_i = min(len(df) - 1, idx + 1 + max_bars)
-    cost = 2 * (fee_bps + slippage_bps) / 10000.0
-    min_bars = int(signal.get("_min_bars", 1) or 1)
-    for j in range(idx + 1, end_i + 1):
-        up = float(df["high"].iloc[j]) >= upper
-        down = float(df["low"].iloc[j]) <= lower
-        held = j - (idx + 1) + 1
-        if up and down:
+
+    upper = entry + float(pt_atr) * atr
+    lower = entry - float(sl_atr) * atr
+    if not np.isfinite(upper) or not np.isfinite(lower) or lower <= 0 or upper <= lower:
+        return None
+
+    cost = 2 * (float(fee_bps) + float(slippage_bps)) / 10000.0
+    min_bars = max(1, int(signal.get("_min_bars", 1) or 1))
+    interval_minutes = timeframe_minutes(timeframe)
+
+    def result_for(barrier: str, fill_price: float, held: int) -> dict:
+        early = held < min_bars
+        if early:
+            outcome = "EARLY"
+        elif barrier == "upper":
+            outcome = "WIN" if side == "LONG" else "LOSS"
+        else:
+            outcome = "LOSS" if side == "LONG" else "WIN"
+        gross = (
+            fill_price / entry - 1.0
+            if side == "LONG"
+            else entry / fill_price - 1.0
+        )
+        return {
+            "outcome": outcome,
+            "realized_return": float(gross - cost),
+            "holding_hours": float(held * interval_minutes / 60.0),
+        }
+
+    # Inspect only holding candles. The final time-stop candle is excluded, and
+    # the open of each observed candle takes precedence over its intrabar range.
+    # Elapsed intervals are measured from the executable entry open (held=0 there).
+    for j in range(entry_i, min(exit_open_i, len(df))):
+        bar_open = float(opens[j])
+        if not np.isfinite(bar_open) or bar_open <= 0:
+            return None
+        held = j - entry_i
+
+        if bar_open >= upper:
+            return result_for("upper", bar_open, held)
+        if bar_open <= lower:
+            return result_for("lower", bar_open, held)
+
+        high = float(highs[j])
+        low = float(lows[j])
+        if not np.isfinite(high) or not np.isfinite(low) or high < low:
+            return None
+
+        hit_up = high >= upper
+        hit_down = low <= lower
+        if hit_up and hit_down:
+            # OHLC cannot establish which barrier was first; do not invent a win/loss.
             return {
                 "outcome": "AMBIGUOUS",
                 "realized_return": 0.0,
-                "holding_hours": held * timeframe_minutes(timeframe) / 60,
+                "holding_hours": float(held * interval_minutes / 60.0),
             }
-        if side == "LONG" and up:
-            return {
-                "outcome": "WIN" if held >= min_bars else "EARLY",
-                "realized_return": upper / entry - 1 - cost,
-                "holding_hours": held * timeframe_minutes(timeframe) / 60,
-            }
-        if side == "LONG" and down:
-            return {
-                "outcome": "LOSS" if held >= min_bars else "EARLY",
-                "realized_return": lower / entry - 1 - cost,
-                "holding_hours": held * timeframe_minutes(timeframe) / 60,
-            }
-        if side == "SHORT" and down:
-            return {
-                "outcome": "WIN" if held >= min_bars else "EARLY",
-                "realized_return": entry / lower - 1 - cost,
-                "holding_hours": held * timeframe_minutes(timeframe) / 60,
-            }
-        if side == "SHORT" and up:
-            return {
-                "outcome": "LOSS" if held >= min_bars else "EARLY",
-                "realized_return": entry / upper - 1 - cost,
-                "holding_hours": held * timeframe_minutes(timeframe) / 60,
-            }
-    if end_i >= len(df) - 1:
+        if hit_up:
+            return result_for("upper", upper, held)
+        if hit_down:
+            return result_for("lower", lower, held)
+
+    # An early barrier event can be resolved without waiting for the full horizon.
+    # Otherwise, fail closed until the time-stop open is actually available.
+    if exit_open_i >= len(df):
         return None
-    exit_price = float(df["close"].iloc[end_i])
-    ret = (
-        exit_price / entry - 1
+    exit_price = float(opens[exit_open_i])
+    if not np.isfinite(exit_price) or exit_price <= 0:
+        return None
+
+    gross = (
+        exit_price / entry - 1.0
         if side == "LONG"
-        else entry / exit_price - 1
-    ) - cost
+        else entry / exit_price - 1.0
+    )
     return {
         "outcome": "TIMEOUT",
-        "realized_return": ret,
-        "holding_hours": (end_i - (idx + 1) + 1) * timeframe_minutes(timeframe) / 60,
+        "realized_return": float(gross - cost),
+        "holding_hours": float(horizon * interval_minutes / 60.0),
     }
 
 

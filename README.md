@@ -1,6 +1,6 @@
 # Adaptive AI Trading Lab
 
-Release **0.9.31** — pre-alpha read-only signal terminal built on the trained research stack.
+Release **0.9.40** — pre-alpha read-only signal terminal built on the trained research stack.
 
 This repository is a research-first adaptive trading platform for real market data, purged walk-forward validation, pristine holdouts, cost-aware event-driven backtesting, autonomous research and guarded paper/signal workflows.
 
