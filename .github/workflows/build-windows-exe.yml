@@ -43,16 +43,23 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import pandas as pd
-          from ai_trading_lab.binance_vision import download_range, merge_archives
+          from ai_trading_lab.binance_vision import (
+              download_range, merge_archives, rolling_closed_history_window,
+          )
 
-          # Broader bundled history: fifteen liquid/core assets, two full years of closed 15m candles.
+          # Use complete monthly archives for the two-year window and daily archives
+          # for the latest closed candles in the current UTC month.
           symbols = [
               "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT",
               "ADA/USDT", "DOGE/USDT", "AVAX/USDT", "LINK/USDT", "DOT/USDT",
               "LTC/USDT", "BCH/USDT", "ATOM/USDT", "UNI/USDT", "ETC/USDT",
           ]
-          start = "2024-10-01"
-          end = "2026-10-01"
+          window = rolling_closed_history_window(months=24)
+          start = window["start"]
+          monthly_end = window["monthly_end"]
+          recent_start = window["recent_start"]
+          end = window["end"]
+          print("bundled-history-window-utc", start, end, "monthly-through", monthly_end)
 
           from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -64,13 +71,26 @@ jobs:
                   symbol,
                   "15m",
                   start,
-                  end,
+                  monthly_end,
                   market="spot",
                   out_dir="data/raw/binance",
                   timeout=90,
                   verify_checksum=True,
                   exact=False,
               )
+              if recent_start <= end:
+                  archives.extend(download_range(
+                      symbol,
+                      "15m",
+                      recent_start,
+                      end,
+                      market="spot",
+                      out_dir="data/raw/binance",
+                      timeout=90,
+                      verify_checksum=True,
+                      exact=True,
+                  ))
+              archives = list(dict.fromkeys(archives))
               frame = merge_archives(archives)
               if frame.empty or len(frame) < 5000:
                   raise RuntimeError(
