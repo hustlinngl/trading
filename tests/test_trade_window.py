@@ -177,6 +177,75 @@ def test_trade_window_train_and_serve_share_training_median_imputation():
     assert prepared.to_numpy().tolist() == [[1.0, 4.0], [2.0, 4.0], [3.0, 4.0]]
 
 
+def test_trade_window_holdout_scores_actual_barrier_exit_not_time_stop_open(monkeypatch):
+    import ai_trading_lab.trade_window as trade_window
+
+    frame = _flat_market(rows=600)
+    settings = load_settings("config.yaml")
+    settings.symbol = "BTC/USDT"
+    settings.timeframe = "15m"
+    settings.trade_window_min_hours = 0.25
+    settings.trade_window_max_hours = 1.0
+    settings.trade_window_min_event_probability = 0.60
+    settings.trade_window_min_confidence = 0.80
+    settings.trade_window_target_precision = 0.80
+    settings.trade_window_min_holdout_wilson = 0.0
+    settings.trade_window_min_holdout_trades = 1
+    settings.trade_window_min_net_return = 0.0
+    settings.trade_window_require_positive_holdout_backtest = True
+    settings.fee_bps = 1.0
+    settings.slippage_bps = 1.0
+    settings.impact_bps_per_sqrt = 0.0
+    settings.require_short_borrow_cost = True
+    settings.short_borrow_bps_per_bar = 0.0
+
+    # Put a few executable up/down events in the training segment so the
+    # three-class model has valid training support.
+    for pos in range(30, 450, 20):
+        if (pos // 20) % 2:
+            frame.loc[frame.index[pos], ["open", "high", "low", "close"]] = [
+                100.0, 100.6, 99.9, 100.2
+            ]
+        else:
+            frame.loc[frame.index[pos], ["open", "high", "low", "close"]] = [
+                100.0, 100.1, 99.5, 99.8
+            ]
+
+    candidate_pos = 485
+    candidate_time = frame.index[candidate_pos]
+    # Its take-profit triggers after entry. The later time-stop open is -5%,
+    # but a real barrier-driven position has already exited at +0.25%.
+    frame.loc[frame.index[candidate_pos + 2], ["open", "high", "low", "close"]] = [
+        100.0, 100.6, 99.9, 100.2
+    ]
+    frame.loc[frame.index[candidate_pos + 5], ["open", "high", "low", "close"]] = [
+        95.0, 95.1, 94.9, 95.0
+    ]
+
+    class FakeExtraTrees:
+        def __init__(self, **kwargs):
+            self.classes_ = np.asarray([-1, 0, 1])
+
+        def fit(self, X, y):
+            assert set(np.asarray(y, dtype=int)) == {-1, 0, 1}
+            return self
+
+        def predict_proba(self, X):
+            result = np.tile([0.01, 0.98, 0.01], (len(X), 1))
+            result[X.index == candidate_time] = [0.01, 0.03, 0.96]
+            return result
+
+    monkeypatch.setattr(trade_window, "ExtraTreesClassifier", FakeExtraTrees)
+    report = train_trade_window_backbone(frame, settings, holdout_frac=0.20)
+
+    assert report["holdout_candidates_before_nonoverlap"] == 1
+    assert report["holdout_signals"] == 1
+    assert report["holdout_economic_observations"] == 1
+    assert np.isclose(report["holdout_net_return_mean"], 0.0025 - 0.0004)
+    assert report["holdout_net_return_mean"] > 0.0
+    assert report["holdout_net_return_compounded"] > 0.0
+
+
 def test_trade_window_refuses_binary_only_training_and_removes_stale_artifact(tmp_path, monkeypatch):
     import ai_trading_lab.trade_window as trade_window
 
