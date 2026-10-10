@@ -150,6 +150,8 @@ class Settings:
     conformal_level: float = 0.90
     conformal_blend: float = 0.60
     signal_only_mode: bool = True
+    live_policy_min_dsr: float = 0.80
+    live_policy_max_pbo: float = 0.20
     signal_confidence_threshold: float = 0.82
     signal_probability_threshold: float = 0.72
     signal_min_expected_return: float = 0.003
@@ -336,6 +338,8 @@ def load_settings(path: str | Path = ROOT / "config.yaml") -> Settings:
         conformal_level=float(d.get("conformal_level", 0.90)),
         conformal_blend=float(d.get("conformal_blend", 0.60)),
         signal_only_mode=_bool(d.get("signal_only_mode", True)),
+        live_policy_min_dsr=float(d.get("live_policy_min_dsr", 0.80)),
+        live_policy_max_pbo=float(d.get("live_policy_max_pbo", 0.20)),
         signal_confidence_threshold=float(d.get("signal_confidence_threshold", 0.82)),
         signal_probability_threshold=float(d.get("signal_probability_threshold", 0.72)),
         signal_min_expected_return=float(d.get("signal_min_expected_return", 0.003)),
