@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.44
+- Aligned base classifier, return regressor, analog memory and meta-policy targets with the executable ATR barrier/time-stop returns used by backtesting, instead of raw next-open-to-next-open returns.
+- Aligned untouched holdout directional diagnostics with the exact executable target, including opening gaps, early barriers and ambiguous OHLC exclusions.
+- Bumped model target semantics so previously trained bundles cannot be silently reused after the target/execution correction; all affected assets must be retrained and pass the unchanged economic/readiness gates.
+- Added regression tests for a stop-out followed by a recovery before the time-stop, ambiguous intrabar collisions, and timeout returns.
+
 ## 0.9.43
 - Made full-universe historical bootstrap bounded-parallel and resumable with per-worker exchange clients, atomic CSV replacement, freshness/order checks and a deterministic per-symbol report.
 - Added a visible Market cockpit universe freshness label (`LIVE`, `CACHED` or `LOCAL`) and used last-known market count for navigation coverage while keeping scan/eligible counts separate.
