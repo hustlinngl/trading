@@ -74,12 +74,13 @@ class AdaptiveEngine:
     def fit(self,df):
         validate_execution_alignment(self.settings)
         features,_,_raw_future_ret=make_features(df,self.settings.horizon_bars,external_feature_lag_bars=getattr(self.settings,'external_feature_lag_bars',1))
+        # Preserve triple-barrier outcomes as diagnostics, but train the base
+        # classifier/regressor against a direction-neutral market return over the
+        # same next-open-to-next-open horizon used by the time-stop. The policy
+        # later gates LONG/SHORT proposals, and the executable backtest validates
+        # their separate barrier geometry and economics.
         tb=triple_barrier_labels(df,self.settings.horizon_bars,self.settings.pt_atr,self.settings.sl_atr)
-        target_ret=tb['tb_return']
-        # p_up is consumed as a directional probability by decide_actions. Train it
-        # against the sign of the simulated, executable return rather than
-        # "take-profit barrier hit vs stop/timeout", which conflates neutral
-        # outcomes with bearish ones.
+        target_ret=pd.to_numeric(_raw_future_ret,errors='coerce').replace([np.inf,-np.inf],np.nan)
         y=directional_target_from_returns(target_ret)
         cal_n=max(48,int(max(1,y.notna().sum())*0.15)); valid_idx=y.notna(); valid_positions=np.flatnonzero(valid_idx.to_numpy()); selection_mask=pd.Series(False,index=features.index)
         if len(valid_positions)>cal_n+100: selection_mask.iloc[valid_positions[:-cal_n]]=True
