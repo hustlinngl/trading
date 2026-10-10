@@ -506,12 +506,38 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
             else True
         )
     )
+    def _score_distribution(values):
+        values = np.asarray(values, dtype=float)
+        values = values[np.isfinite(values)]
+        if not len(values):
+            return {"n": 0}
+        return {
+            "n": int(len(values)),
+            "min": float(np.min(values)),
+            "p50": float(np.quantile(values, 0.50)),
+            "p90": float(np.quantile(values, 0.90)),
+            "p95": float(np.quantile(values, 0.95)),
+            "p99": float(np.quantile(values, 0.99)),
+            "max": float(np.max(values)),
+        }
+
+    event_pass = p_event >= min_event_probability
+    confidence_pass = p_direction >= min_confidence
     report = {
         "production_ready": bool(ready),
         "holdout_precision": precision,
         "holdout_wilson_lower": wilson,
         "holdout_signals": int(support),
         "holdout_candidates_before_nonoverlap": int(candidates.sum()),
+        "holdout_probability_diagnostics": {
+            "event_probability": _score_distribution(p_event),
+            "conditional_direction_confidence": _score_distribution(p_direction),
+            "min_event_probability": min_event_probability,
+            "min_direction_confidence": min_confidence,
+            "event_probability_gate_passes": int(event_pass.sum()),
+            "direction_confidence_gate_passes": int(confidence_pass.sum()),
+            "both_probability_gates_pass": int((event_pass & confidence_pass).sum()),
+        },
         "holdout_unexecutable_short_candidates": int(unexecutable_short_candidates),
         "holdout_ambiguous_candidate_exclusions": int(ambiguous_candidate_exclusions),
         "holdout_unresolved_candidate_exclusions": int(unresolved_candidate_exclusions),
