@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.9.43
+- Persisted the last authoritative market universe for offline market-selector navigation, with a 30-day expiry, atomic writes and explicit stale/source metadata; saved markets never widen signal eligibility.
 - Added an 8-second bounded realtime quote cache to reduce repeated public ticker calls while keeping signal inference on closed candles.
 - Realtime display price now prefers a valid bid/ask midpoint and retains the last trade separately; malformed/crossed books fall back safely.
 - Corrected short-signal net-return math to use simple PnL over entry notional, matching the event-driven backtester instead of overstating returns via an inverse-price formula.
