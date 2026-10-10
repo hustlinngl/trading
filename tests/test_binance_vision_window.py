@@ -94,3 +94,39 @@ def test_download_range_exact_uses_daily_archives_without_invalid_timestamp_kwar
         pd.Timestamp("2026-10-03").date(),
     ]
     assert len(paths) == 3
+
+
+
+def test_validate_history_window_rejects_stale_cache_and_accepts_full_closed_days():
+    from ai_trading_lab.binance_vision import validate_history_window
+
+    full = pd.date_range(
+        "2026-10-01T00:00:00Z",
+        "2026-10-09T23:45:00Z",
+        freq="15min",
+    )
+    frame = pd.DataFrame({"timestamp": full, "open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1.0})
+
+    report = validate_history_window(frame, "2026-10-01", "2026-10-09", interval="15m")
+    assert report["actual_first_timestamp"] == "2026-10-01T00:00:00+00:00"
+    assert report["actual_last_timestamp"] == "2026-10-09T23:45:00+00:00"
+
+    stale = frame.loc[frame["timestamp"] < pd.Timestamp("2026-10-09T00:00:00Z")]
+    with pytest.raises(ValueError, match="historical_window_stale"):
+        validate_history_window(stale, "2026-10-01", "2026-10-09", interval="15m")
+
+
+def test_validate_history_window_rejects_missing_start_and_invalid_interval():
+    from ai_trading_lab.binance_vision import validate_history_window
+
+    full = pd.date_range(
+        "2026-10-01T00:00:00Z",
+        "2026-10-09T23:45:00Z",
+        freq="15min",
+    )
+    frame = pd.DataFrame({"timestamp": full[10:], "open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1.0})
+    with pytest.raises(ValueError, match="historical_window_start_missing"):
+        validate_history_window(frame, "2026-10-01", "2026-10-09", interval="15m")
+
+    with pytest.raises(ValueError, match="unsupported_history_interval"):
+        validate_history_window(frame, "2026-10-01", "2026-10-09", interval="15xyz")
