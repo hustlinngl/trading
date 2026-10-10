@@ -130,17 +130,16 @@ def build_live_policy_holdout_report(
         if not len(indices):
             continue
         segment = market.iloc[indices]
-        row_scores = []
+        row_stats = []
         for actions in actions_by_variant:
             segment_actions = actions.reindex(segment.index).fillna("FLAT")
-            stats = _stats_for_actions(segment, segment_actions, settings)
-            row_scores.append(float(stats.get("total_return", 0.0)))
-        score_matrix.append(row_scores)
-        primary_stats = row_scores[0]
-        fold_returns.append(float(primary_stats))
-        primary_segment_actions = primary_actions.reindex(segment.index).fillna("FLAT")
-        primary_segment_stats = _stats_for_actions(segment, primary_segment_actions, settings)
-        fold_trades.append(int(primary_segment_stats.get("trades", primary_segment_stats.get("trades_taken", 0)) or 0))
+            row_stats.append(_stats_for_actions(segment, segment_actions, settings))
+        score_matrix.append([
+            float(stats.get("total_return", 0.0)) for stats in row_stats
+        ])
+        primary_stats = row_stats[0]
+        fold_returns.append(float(primary_stats.get("total_return", 0.0)))
+        fold_trades.append(int(primary_stats.get("trades", primary_stats.get("trades_taken", 0)) or 0))
 
     trade_returns = np.asarray([], dtype=float)
     # Per-trade net return is normalized by entry equity, keeping the DSR input
