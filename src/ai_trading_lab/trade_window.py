@@ -583,8 +583,13 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
     return report
 
 
-def score_trade_window_frame(df, settings, model_path=None, symbol=None):
+def score_trade_window_frame(
+    df, settings, model_path=None, symbol=None, *, allow_unready_for_validation=False
+):
     """Score the specialist row-by-row using the same checks as live inference.
+
+    This validation-only override lets the isolated research evaluator measure an
+    unpromoted candidate without weakening the default live-inference contract.
 
     This is used by live inference and chronological policy validation. It does not
     use future labels; features are causal, class-prior correction is identical to
@@ -649,7 +654,7 @@ def score_trade_window_frame(df, settings, model_path=None, symbol=None):
         precision = float(report.get("holdout_precision", 0.0) or 0.0)
         if report.get("probability_semantics") != BALANCED_PROBABILITY_SEMANTICS:
             return failed("probability_semantics_missing", available=True, precision=precision)
-        if not bool(report.get("production_ready", False)):
+        if not bool(report.get("production_ready", False)) and not allow_unready_for_validation:
             return failed("not_production_ready", available=True, precision=precision)
 
         base_minutes = float(
