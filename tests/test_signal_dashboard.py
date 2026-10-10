@@ -441,6 +441,7 @@ def test_bootstrap_command_is_available():
     assert "bootstrap-live-data" in source
     assert "--all-symbols" in source
     assert "--market-types" in source
+    assert "--workers" in source
 
 
 
