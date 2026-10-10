@@ -170,11 +170,20 @@ def build_live_policy_holdout_report(
     }
 
     pbo = combinatorial_pbo(np.asarray(score_matrix, dtype=float), partitions=6, seed=int(settings.seed))
-    dsr = deflated_sharpe_ratio(
-        trade_returns,
-        trials=max(3, int(getattr(settings, "master_trials", 3))),
-        periods_per_year=365.0,
-    ) if len(trade_returns) >= 30 else 0.5
+    dsr_available = bool(
+        len(trade_returns) >= 30
+        and np.isfinite(trade_returns).all()
+        and float(np.std(trade_returns, ddof=1)) > 1e-12
+    )
+    dsr = (
+        deflated_sharpe_ratio(
+            trade_returns,
+            trials=max(3, int(getattr(settings, "master_trials", 3))),
+            periods_per_year=365.0,
+        )
+        if dsr_available
+        else None
+    )
 
     # Negative control: circularly shift the already-gated signals by random,
     # non-zero offsets and rerun the same costed execution engine. This preserves
@@ -250,7 +259,8 @@ def build_live_policy_holdout_report(
         },
         "holdout": primary,
         "statistical_evidence": {
-            "deflated_sharpe_ratio": float(dsr),
+            "deflated_sharpe_ratio": float(dsr) if dsr is not None else None,
+            "deflated_sharpe_ratio_available": dsr_available,
             "probability_of_backtest_overfitting": pbo,
             "stability": stability,
             "negative_control": placebo,
