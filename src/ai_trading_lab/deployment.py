@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import json
 from datetime import datetime, timezone
+import math
 from .objectives import robust_performance_utility
 
 # Increment this when calibration behavior changes; old bundles must be retrained.
@@ -53,6 +54,7 @@ MANAGED_BUNDLE_FILES = ENGINE_ARTIFACTS + (
     "base_training_meta.json",
     "base_holdout_report.json",
     "deployment_manifest.json",
+    "live_policy_holdout_report.json",
 )
 
 def bundle_artifact_fingerprint(bundle: str | Path) -> str:
@@ -72,6 +74,127 @@ def bundle_artifact_fingerprint(bundle: str | Path) -> str:
                 h.update(chunk)
         h.update(b"\0")
     return h.hexdigest()[:24]
+
+
+def _live_policy_holdout_evidence_checks(settings, bundle: str | Path, symbol: str, meta: dict, base: dict | None = None) -> dict:
+    """Require holdout evidence from the exact deployed live gate, not two separate proxies.
+
+    The report is mandatory: base-only actions or specialist-only event predictions
+    cannot establish production readiness for a signal that must pass both the
+    strict live_signal_gate and the trade-window specialist.
+    """
+    bundle = Path(bundle)
+    path = bundle / "live_policy_holdout_report.json"
+    checks = {
+        "live_policy_holdout_report_present": path.is_file(),
+        "live_policy_schema_match": False,
+        "live_policy_gate_applied": False,
+        "live_specialist_gate_applied": False,
+        "live_policy_provenance_match": False,
+        "live_policy_holdout_pristine": False,
+        "live_policy_trade_support": False,
+        "live_policy_positive_net_return": False,
+        "live_policy_profit_factor": False,
+        "live_policy_drawdown": False,
+        "live_policy_utility": False,
+        "live_policy_dsr": False,
+        "live_policy_pbo": False,
+        "live_policy_stability": False,
+        "live_policy_negative_control": False,
+        "live_policy_fold_support": False,
+    }
+    if not path.is_file():
+        return checks
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(report, dict):
+            return checks
+        checks["live_policy_schema_match"] = int(report.get("schema_version", 0)) == 1
+        checks["live_policy_gate_applied"] = bool(report.get("live_signal_gate_applied", False))
+        if bool(getattr(settings, "trade_window_required_for_signal", True)):
+            checks["live_specialist_gate_applied"] = bool(report.get("specialist_gate_applied", False))
+        else:
+            checks["live_specialist_gate_applied"] = report.get("specialist_gate_applied") is False
+
+        expected_base = base if isinstance(base, dict) else {}
+        checks["live_policy_provenance_match"] = (
+            str(report.get("symbol", "")) == str(symbol)
+            and str(report.get("timeframe", "")) == str(getattr(settings, "timeframe", ""))
+            and str(report.get("data_fingerprint", "")) == str(meta.get("data_fingerprint", ""))
+            and str(report.get("model_semantics_fingerprint", "")) == str(meta.get("model_semantics_fingerprint", ""))
+            and str(report.get("deployment_semantics_fingerprint", "")) == deployment_semantics_fingerprint(settings)
+            and bool(report.get("validation_holdout_data_fingerprint"))
+            and str(report.get("validation_holdout_data_fingerprint", "")) == str(expected_base.get("validation_holdout_data_fingerprint", ""))
+            and str(report.get("holdout_start", "")) == str(expected_base.get("validation_holdout_start", ""))
+            and str(report.get("holdout_end", "")) == str(expected_base.get("validation_holdout_end", ""))
+        )
+
+        governance = report.get("holdout_governance", {})
+        checks["live_policy_holdout_pristine"] = (
+            isinstance(governance, dict) and bool(governance.get("pristine", False))
+        )
+        holdout = report.get("holdout", {})
+        if not isinstance(holdout, dict):
+            holdout = {}
+        try:
+            trades = int(holdout.get("trades_taken", holdout.get("trades", 0)) or 0)
+            net_return = float(holdout.get("net_compounded_return", holdout.get("total_return", -1.0)))
+            profit_factor = float(holdout.get("profit_factor", 0.0))
+            drawdown = float(holdout.get("max_drawdown", -1.0))
+        except (TypeError, ValueError, OverflowError):
+            trades, net_return, profit_factor, drawdown = 0, -1.0, 0.0, -1.0
+        checks["live_policy_trade_support"] = trades >= int(getattr(settings, "base_min_holdout_trades", 20))
+        checks["live_policy_positive_net_return"] = math.isfinite(net_return) and net_return > 0.0
+        checks["live_policy_profit_factor"] = math.isfinite(profit_factor) and profit_factor >= float(getattr(settings, "base_min_holdout_profit_factor", 1.0))
+        checks["live_policy_drawdown"] = math.isfinite(drawdown) and drawdown >= float(getattr(settings, "base_max_holdout_drawdown", -0.25))
+        utility = robust_performance_utility(
+            holdout,
+            min_trades=int(getattr(settings, "base_min_holdout_trades", 20)),
+            max_drawdown=float(getattr(settings, "base_max_holdout_drawdown", -0.25)),
+        ) if holdout else -1.0
+        checks["live_policy_utility"] = math.isfinite(float(utility)) and float(utility) >= float(getattr(settings, "base_min_holdout_utility", 0.0))
+
+        evidence = report.get("statistical_evidence", {})
+        if not isinstance(evidence, dict):
+            evidence = {}
+        try:
+            dsr = float(evidence.get("deflated_sharpe_ratio", float("nan")))
+        except (TypeError, ValueError, OverflowError):
+            dsr = float("nan")
+        checks["live_policy_dsr"] = math.isfinite(dsr) and dsr >= float(getattr(settings, "live_policy_min_dsr", 0.80))
+
+        pbo = evidence.get("probability_of_backtest_overfitting", {})
+        if not isinstance(pbo, dict):
+            pbo = {}
+        try:
+            pbo_value = float(pbo.get("pbo", float("nan")))
+        except (TypeError, ValueError, OverflowError):
+            pbo_value = float("nan")
+        checks["live_policy_pbo"] = (
+            bool(pbo.get("available", False))
+            and math.isfinite(pbo_value)
+            and 0.0 <= pbo_value <= float(getattr(settings, "live_policy_max_pbo", 0.20))
+        )
+        stability = evidence.get("stability", {})
+        checks["live_policy_stability"] = (
+            isinstance(stability, dict)
+            and bool(stability.get("available", False))
+            and bool(stability.get("stable", False))
+        )
+        placebo = evidence.get("negative_control", {})
+        checks["live_policy_negative_control"] = (
+            isinstance(placebo, dict)
+            and bool(placebo.get("available", False))
+            and bool(placebo.get("passes_95pct_negative_control", False))
+            and int(placebo.get("placebo_samples", 0) or 0) >= 100
+        )
+        checks["live_policy_fold_support"] = (
+            int(report.get("candidate_fold_count", 0) or 0)
+            >= int(getattr(settings, "master_optimization_folds", 6))
+        )
+        return checks
+    except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError):
+        return checks
 
 
 def _deployment_evidence_is_current(settings, bundle: str | Path, symbol: str, meta: dict) -> bool:
@@ -141,7 +264,8 @@ def _deployment_evidence_is_current(settings, bundle: str | Path, symbol: str, m
             )
             if not duration_ok:
                 return False
-        return True
+        live_checks = _live_policy_holdout_evidence_checks(settings, bundle, symbol, meta, base)
+        return bool(live_checks) and all(bool(value) for value in live_checks.values())
     except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError):
         return False
 
@@ -387,6 +511,8 @@ def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
         checks={**base_checks,**duration_checks}
     else:
         checks=base_checks
+    live_policy_checks = _live_policy_holdout_evidence_checks(settings, asset_dir, str(getattr(settings, "symbol", "")), meta, base)
+    checks.update(live_policy_checks)
     ready=all(bool(v) for v in checks.values())
     return_manifest={
         "symbol":str(getattr(settings,"symbol","")),
@@ -401,6 +527,7 @@ def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
         "base_holdout_report":str(base_path),
         "duration_report":str(duration_path),
         "objective":{"base_risk_adjusted_utility":float(base_utility),"duration_risk_adjusted_utility":float(duration_utility)},
+        "live_policy_evidence":{"valid":bool(all(bool(v) for v in live_policy_checks.values())),"checks":live_policy_checks},
     }
     asset_dir.mkdir(parents=True,exist_ok=True)
     tmp=asset_dir/"deployment_manifest.json.tmp"
