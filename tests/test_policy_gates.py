@@ -93,6 +93,43 @@ def test_short_economic_hurdle_includes_borrow():
     assert score.attrs["economic_hurdle_bps"] >= 20.0 * 96
 
 
+def test_short_is_disabled_by_default_even_for_bearish_predictions():
+    settings = replace(
+        load_settings("config.yaml"),
+        signal_only_mode=True,
+        short_signals_enabled=False,
+        require_short_borrow_cost=False,
+    )
+    action, reasons = live_signal_gate(
+        row(action="SHORT", trade_window_direction="SHORT", market_type="swap",
+            p_up=0.10, expected_return=-0.006, expected_return_lcb=-0.012,
+            expected_return_ucb=-0.004),
+        settings,
+    )
+
+    assert action == "FLAT"
+    assert "short_signals_disabled" in reasons
+
+
+def test_short_is_rejected_for_spot_even_when_short_capability_is_enabled():
+    settings = replace(
+        load_settings("config.yaml"),
+        signal_only_mode=True,
+        short_signals_enabled=True,
+        require_short_borrow_cost=True,
+        short_borrow_bps_per_bar=1.0,
+    )
+    action, reasons = live_signal_gate(
+        row(action="SHORT", trade_window_direction="SHORT", market_type="spot",
+            p_up=0.10, expected_return=-0.006, expected_return_lcb=-0.012,
+            expected_return_ucb=-0.004),
+        settings,
+    )
+
+    assert action == "FLAT"
+    assert "short_instrument_not_supported" in reasons
+
+
 def test_live_assessment_empty_data_fails_closed(monkeypatch):
     import ai_trading_lab.live as live_mod
     from ai_trading_lab.live import assess_symbol
