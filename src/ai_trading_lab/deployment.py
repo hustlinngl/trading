@@ -18,6 +18,7 @@ def model_semantics_fingerprint(settings) -> str:
         # Bump when target, calibration, or meta train/serve semantics change.
         # Existing bundles must be retrained rather than silently reused.
         "label_target_semantics": "direction_from_next_open_to_next_open_horizon_return_v3",
+        "trade_window_target_semantics": "three_class_gap_first_barrier_event_after_min_duration_v2",
         "probability_calibration_semantics": PROBABILITY_CALIBRATION_SEMANTICS,
         "meta_policy_semantics": "raw_oos_probability_and_unadjusted_return_bounds_v2",
         "timeframe": str(getattr(settings, "timeframe", "")),
@@ -187,6 +188,7 @@ def deployment_semantics_fingerprint(settings) -> str:
         "trade_window_min_holdout_wilson": float(getattr(settings, "trade_window_min_holdout_wilson", 0.60)),
         "trade_window_min_holdout_trades": int(getattr(settings, "trade_window_min_holdout_trades", 12)),
         "trade_window_min_confidence": float(getattr(settings, "trade_window_min_confidence", 0.80)),
+        "trade_window_min_event_probability": float(getattr(settings, "trade_window_min_event_probability", 0.60)),
         "trade_window_min_net_return": float(getattr(settings, "trade_window_min_net_return", 0.0005)),
         "trade_window_require_base_agreement": bool(getattr(settings, "trade_window_require_base_agreement", True)),
         "trade_window_min_expected_return": float(getattr(settings, "trade_window_min_expected_return", 0.0015)),
