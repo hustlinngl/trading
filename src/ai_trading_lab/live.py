@@ -211,6 +211,7 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
         for key, value in tw.items():
             last[key] = value
         last['funding_cost_return']=float(funding.get('funding_cost_return',0.0) or 0.0)
+        last['market_type']=str(funding.get('market_type','unknown') or 'unknown')
         signal,reasons=live_signal_gate(last,settings)
         p=float(last.get("p_up",0.5))
         confidence=p if signal=="LONG" else (1.0-p if signal=="SHORT" else 0.0)
