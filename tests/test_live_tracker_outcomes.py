@@ -175,3 +175,32 @@ def test_outcome_tracker_rejects_non_finite_cost_assumptions():
     frame = _market()
     result = _resolve(frame, max_bars=3, impact_bps_per_sqrt=float("nan"))
     assert result is None
+
+
+def test_outcome_tracker_accepts_legacy_signal_history_timestamp_field():
+    frame = _market()
+    frame.loc[frame.index[16], ["open", "high", "low", "close"]] = [
+        100.4, 100.5, 99.5, 100.0
+    ]
+    legacy_record = {
+        "timestamp": frame.index[14].isoformat(),
+        "signal": "LONG",
+        "_min_bars": 1,
+    }
+
+    result = _resolve_result(
+        frame, legacy_record, "15m", 1.25, 0.90, 1.0, 2.0, 8
+    )
+
+    assert result is not None
+    assert result["outcome"] == "WIN"
+
+
+def test_outcome_tracker_rejects_missing_or_invalid_timestamp_without_raising():
+    frame = _market()
+    for record in (
+        {"signal": "LONG"},
+        {"timestamp": "", "signal": "LONG"},
+        {"timestamp": "not-a-timestamp", "signal": "LONG"},
+    ):
+        assert _resolve_result(frame, record, "15m", 1.25, 0.90, 1.0, 2.0, 8) is None
