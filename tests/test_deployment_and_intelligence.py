@@ -139,7 +139,7 @@ def test_refresh_deployment_manifest_requires_matching_evidence(tmp_path):
         encoding="utf-8",
     )
     (bundle / "trade_window_training_report.json").write_text(
-        json.dumps({"production_ready":True,"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem,"holdout":{"backtest":duration_stats}}),
+        json.dumps({"production_ready":True,"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":"train-fp","training_data_start":"2025-01-01T00:00:00+00:00","training_data_end":"2025-12-31T23:45:00+00:00","model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem,"holdout":{"backtest":duration_stats}}),
         encoding="utf-8",
     )
     # Separate base/specialist reports are no longer sufficient: deployment
@@ -492,7 +492,8 @@ def test_bundle_compatibility_recomputes_deployment_evidence_instead_of_trusting
             "production_ready":False,
             "symbol":"BTC/USDT",
             "timeframe":"15m",
-            "data_fingerprint":fp,
+            "data_fingerprint":"train-fp",
+            "training_data_end":"2025-12-31T23:45:00+00:00",
             "model_semantics_fingerprint":sem,
             "deployment_semantics_fingerprint":dep_sem,
         }),
