@@ -239,6 +239,10 @@ def test_trade_window_holdout_scores_actual_barrier_exit_not_time_stop_open(monk
     report = train_trade_window_backbone(frame, settings, holdout_frac=0.20)
 
     assert report["holdout_candidates_before_nonoverlap"] == 1
+    probability_diagnostics = report["holdout_probability_diagnostics"]
+    assert probability_diagnostics["both_probability_gates_pass"] == 1
+    assert probability_diagnostics["event_probability"]["n"] > 0
+    assert probability_diagnostics["event_probability"]["max"] >= settings.trade_window_min_event_probability
     assert report["holdout_signals"] == 1
     assert report["holdout_economic_observations"] == 1
     assert np.isclose(report["holdout_net_return_mean"], 0.0025 - 0.0004)
