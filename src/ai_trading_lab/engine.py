@@ -158,9 +158,28 @@ class AdaptiveEngine:
     def predict_frame(self,features,*,strict=True):
         if features is None or features.empty: return pd.DataFrame(index=getattr(features,'index',None))
         if strict:
-            last=features.iloc[-1]
-            missing=[c for c in self.model.feature_cols if c in features.columns and pd.isna(last.get(c))]
-            if missing: raise ValueError('missing_live_features:' + ','.join(missing))
+            feature_cols = list(getattr(self.model, "feature_cols", ()) or ())
+            if not feature_cols:
+                raise ValueError("missing_live_feature_schema")
+            absent = [column for column in feature_cols if column not in features.columns]
+            if absent:
+                raise ValueError("missing_live_feature_columns:" + ",".join(absent))
+            last = features.reindex(columns=feature_cols).iloc[-1]
+            numeric = pd.to_numeric(last, errors="coerce").to_numpy(dtype=float)
+            missing_mask = ~np.isfinite(numeric)
+            missing = [feature_cols[i] for i, flag in enumerate(missing_mask) if bool(flag)]
+            missing_fraction = float(np.mean(missing_mask)) if len(missing_mask) else 1.0
+            try:
+                allowed_missing_fraction = float(getattr(self.settings, "live_max_missing_feature_fraction", 0.0))
+            except (TypeError, ValueError, OverflowError):
+                allowed_missing_fraction = -1.0
+            if not np.isfinite(allowed_missing_fraction) or not 0.0 <= allowed_missing_fraction <= 1.0:
+                raise ValueError("invalid_live_max_missing_feature_fraction")
+            if missing_fraction > allowed_missing_fraction + 1e-12:
+                raise ValueError(
+                    f"live_feature_missing_fraction:{missing_fraction:.6f}>{allowed_missing_fraction:.6f}:"
+                    + ",".join(missing[:32])
+                )
         base=self.model.predict(features); regime=self.regimes.transform(features); persistence=self.regimes.persistence(features); probs=self.regimes.semantic_probabilities(features); analog=self.memory.query_many(features)
         meta_detector=self.meta_regimes if self.meta_regimes is not None else self.regimes
         meta_regime=meta_detector.transform(features); meta_persistence=meta_detector.persistence(features); meta_probs=meta_detector.semantic_probabilities(features)
