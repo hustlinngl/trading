@@ -456,7 +456,19 @@ def _resolve_result(
     short_borrow_bps_per_bar=0.0,
 ):
     """Resolve a published signal with the same entry, barrier and time-stop semantics as training."""
-    stamp = pd.Timestamp(signal.get("data_timestamp", ""))
+    # New history records store an explicit data_timestamp. Older records only
+    # have timestamp, which LiveAssessment sets from the last OHLCV candle index.
+    stamp_value = signal.get("data_timestamp")
+    if stamp_value is None or not str(stamp_value).strip():
+        stamp_value = signal.get("timestamp")
+    if stamp_value is None or not str(stamp_value).strip():
+        return None
+    try:
+        stamp = pd.Timestamp(stamp_value)
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(stamp):
+        return None
     stamp = (
         stamp.tz_localize("UTC")
         if stamp.tzinfo is None
