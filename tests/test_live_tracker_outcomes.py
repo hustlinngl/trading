@@ -153,8 +153,36 @@ def test_outcome_tracker_subtracts_short_borrow_for_elapsed_bars():
     assert result["outcome"] == "WIN"
     assert np.isclose(result["estimated_cost_bps"], 10.0)
     assert np.isclose(
-        result["realized_return"], (100.0 / 99.6 - 1.0) - 0.0010
+        result["realized_return"], ((100.0 - 99.6) / 100.0) - 0.0010
     )
+
+
+def test_short_timeout_return_uses_entry_not_exit_denominator():
+    frame = _market()
+    # Keep the time-stop open inside both barriers so the short closes by timeout.
+    frame.loc[frame.index[18], ["open", "high", "low", "close"]] = [
+        99.9, 100.0, 99.85, 99.9
+    ]
+
+    result = _resolve(frame, max_bars=3, side="SHORT")
+
+    assert result is not None
+    assert result["outcome"] == "TIMEOUT"
+    # Simple short return is (entry - exit) / entry, less 6 bps of costs.
+    assert np.isclose(result["realized_return"], ((100.0 - 99.9) / 100.0) - 0.0006)
+
+
+def test_short_stop_loss_return_uses_entry_not_exit_denominator():
+    frame = _market()
+    frame.loc[frame.index[16], ["open", "high", "low", "close"]] = [
+        100.4, 100.5, 100.3, 100.4
+    ]
+
+    result = _resolve(frame, max_bars=8, side="SHORT")
+
+    assert result is not None
+    assert result["outcome"] == "LOSS"
+    assert np.isclose(result["realized_return"], ((100.0 - 100.4) / 100.0) - 0.0006)
 
 
 def test_outcome_tracker_does_not_report_fake_zero_return_for_ambiguous_barrier():
