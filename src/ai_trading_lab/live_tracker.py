@@ -464,25 +464,20 @@ def _resolve_result(df, signal, timeframe, pt_atr, sl_atr, fee_bps, slippage_bps
 
     entry_i = idx + 1
     horizon = int(max_bars)
-    # Entry is at the next candle open. The time stop exits at open[entry_i + horizon],
-    # so that final candle is not part of the barrier-observation window.
-    exit_open_i = entry_i + horizon
-    if horizon < 1 or exit_open_i >= len(df):
+    if horizon < 1 or entry_i >= len(df):
         return None
+    exit_open_i = entry_i + horizon
 
     opens = pd.to_numeric(df["open"], errors="coerce").to_numpy(dtype=float)
     highs = pd.to_numeric(df["high"], errors="coerce").to_numpy(dtype=float)
     lows = pd.to_numeric(df["low"], errors="coerce").to_numpy(dtype=float)
     entry = float(opens[entry_i])
-    exit_price = float(opens[exit_open_i])
     atr = float(_atr(df).iloc[idx])
     if (
         not np.isfinite(atr)
         or atr <= 0
         or not np.isfinite(entry)
         or entry <= 0
-        or not np.isfinite(exit_price)
-        or exit_price <= 0
     ):
         return None
 
@@ -518,11 +513,10 @@ def _resolve_result(df, signal, timeframe, pt_atr, sl_atr, fee_bps, slippage_bps
             "holding_hours": float(held * interval_minutes / 60.0),
         }
 
-    # Inspect only the horizon holding candles: entry_i .. exit_open_i - 1.
-    # Opening gaps are executable observations and take precedence over ambiguous
-    # intrabar ranges, matching the training labels. Count elapsed intervals from
-    # the entry open (held=0 on the entry candle).
-    for j in range(entry_i, exit_open_i):
+    # Inspect only holding candles. The final time-stop candle is excluded, and
+    # the open of each observed candle takes precedence over its intrabar range.
+    # Elapsed intervals are measured from the executable entry open (held=0 there).
+    for j in range(entry_i, min(exit_open_i, len(df))):
         bar_open = float(opens[j])
         if not np.isfinite(bar_open) or bar_open <= 0:
             return None
@@ -552,8 +546,14 @@ def _resolve_result(df, signal, timeframe, pt_atr, sl_atr, fee_bps, slippage_bps
         if hit_down:
             return result_for("lower", lower, held)
 
-    # Time-stop execution is at the next open, not at the final holding candle's
-    # close/high/low. This also avoids counting an event that occurs after liquidation.
+    # An early barrier event can be resolved without waiting for the full horizon.
+    # Otherwise, fail closed until the time-stop open is actually available.
+    if exit_open_i >= len(df):
+        return None
+    exit_price = float(opens[exit_open_i])
+    if not np.isfinite(exit_price) or exit_price <= 0:
+        return None
+
     gross = (
         exit_price / entry - 1.0
         if side == "LONG"
