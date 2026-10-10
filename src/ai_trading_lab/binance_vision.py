@@ -171,7 +171,7 @@ def validate_history_window(frame, start, end, interval="15m"):
     if stamps.empty:
         raise ValueError("historical_window_has_no_valid_timestamps")
 
-    expected_first = start_ts.floor(f"{amount}{match.group(2)}")
+    expected_first = start_ts.floor(delta)
     expected_last = end_ts.normalize() + pd.Timedelta(days=1) - delta
     actual_first = stamps.min()
     actual_last = stamps.max()
