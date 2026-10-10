@@ -119,3 +119,48 @@ def test_bootstrap_live_data_reuses_fresh_cache_without_exchange_requests(monkey
     assert summary["results"][0]["source"] == "cache"
     # Only the discovery client should be constructed because the cache is sufficient.
     assert len(client_calls) == 1
+
+
+def test_bootstrap_live_data_discovers_only_supported_active_market_types(monkeypatch, tmp_path):
+    import ai_trading_lab.main as main_module
+
+    settings = _settings()
+    exchange = SimpleNamespace(
+        markets={
+            "BTC/USDT": {"symbol": "BTC/USDT", "type": "spot", "active": True},
+            "ETH/USDT": {"symbol": "ETH/USDT", "type": "spot", "active": True},
+            "SOL/USDT:USDT": {"symbol": "SOL/USDT:USDT", "type": "swap", "active": True, "contract": True},
+            "BROKEN/USDT:USDT": {"symbol": "BROKEN/USDT:USDT", "type": "future", "active": True, "contract": False},
+            "OLD/USDT": {"symbol": "OLD/USDT", "type": "spot", "active": False},
+            "BTC/USDT-OPT": {"symbol": "BTC/USDT-OPT", "type": "option", "active": True},
+        },
+        has={"fetchOHLCV": True},
+    )
+    fetched = []
+
+    monkeypatch.setattr(main_module, "load_settings", lambda _path: settings)
+    monkeypatch.setattr(main_module, "exchange_client", lambda *args, **kwargs: exchange)
+    monkeypatch.setattr(
+        main_module,
+        "fetch_ohlcv",
+        lambda client, symbol, timeframe, limit, include_unclosed: (
+            fetched.append(symbol) or _history_frame()
+        ),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "main.py", "bootstrap-live-data", "--config", "config.yaml",
+            "--all-symbols", "--market-types", "spot,swap", "--live-bars", "120", "--workers", "2",
+        ],
+    )
+    monkeypatch.chdir(tmp_path)
+
+    main_module.main()
+
+    summary = json.loads((tmp_path / "logs" / "bootstrap_live_data.json").read_text(encoding="utf-8"))
+    assert summary["requested_symbols"] == 3
+    assert summary["completed"] == 3
+    assert summary["failed"] == 0
+    assert set(fetched) == {"BTC/USDT", "ETH/USDT", "SOL/USDT:USDT"}
