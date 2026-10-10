@@ -150,19 +150,27 @@ def _event_score_arrays(probabilities, classes):
     return p_short, p_neutral, p_long, p_event, p_direction, direction
 
 
-def directional_event_probabilities(probabilities, classes):
-    """Publicly testable scalar view of the event-gated direction prediction."""
+def directional_event_probabilities(probabilities, classes, min_event_probability=0.60):
+    """Return conditional direction only when the qualifying event is sufficiently likely."""
+    threshold = float(min_event_probability)
+    if not np.isfinite(threshold) or not 0.0 <= threshold <= 1.0:
+        raise ValueError("trade_window_min_event_probability_invalid")
     short, neutral, long, event, confidence, direction = _event_score_arrays(
         np.asarray(probabilities, dtype=float).reshape(1, -1),
         classes,
     )
     p_event = float(event[0])
+    predicted_direction = (
+        ("LONG" if int(direction[0]) > 0 else "SHORT")
+        if p_event >= threshold and p_event > 1e-12
+        else "FLAT"
+    )
     return {
         "p_short": float(short[0]),
         "p_neutral": float(neutral[0]),
         "p_long": float(long[0]),
         "event_probability": p_event,
-        "direction": ("LONG" if int(direction[0]) > 0 else "SHORT") if p_event > 1e-12 else "FLAT",
+        "direction": predicted_direction,
         "direction_confidence": float(confidence[0]),
     }
 
@@ -487,12 +495,16 @@ def assess_trade_window(df, settings, model_path=None, symbol=None):
             return out
 
         probability = model.predict_proba(x.iloc[[-1]])[0]
-        scores = directional_event_probabilities(probability, model.classes_)
+        min_confidence = float(getattr(settings, "trade_window_min_confidence", 0.80))
+        min_event_probability = float(getattr(settings, "trade_window_min_event_probability", 0.60))
+        scores = directional_event_probabilities(
+            probability,
+            model.classes_,
+            min_event_probability=min_event_probability,
+        )
         direction = scores["direction"]
         confidence = scores["direction_confidence"]
         event_probability = scores["event_probability"]
-        min_confidence = float(getattr(settings, "trade_window_min_confidence", 0.80))
-        min_event_probability = float(getattr(settings, "trade_window_min_event_probability", 0.60))
         active = direction in {"LONG", "SHORT"} and event_probability >= min_event_probability and confidence >= min_confidence
 
         out.update(
