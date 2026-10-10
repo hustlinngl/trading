@@ -68,7 +68,6 @@ def test_release_versions_are_aligned():
     match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
     assert match is not None
     readme = (root / "README.md").read_text(encoding="utf-8")
-    release_match = re.search(r"^Release \\*\\*([^*]+)\\*\\*", readme, re.MULTILINE)
-    assert match is not None
+    release_match = re.search(r"^Release [*]{2}([^*]+)[*]{2}", readme, re.MULTILINE)
     assert release_match is not None
     assert __version__ == version_file == match.group(1) == release_match.group(1)
