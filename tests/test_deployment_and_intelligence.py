@@ -165,6 +165,7 @@ def test_refresh_deployment_manifest_requires_matching_evidence(tmp_path):
         "holdout": base_stats,
         "statistical_evidence": {
             "deflated_sharpe_ratio": 0.95,
+            "deflated_sharpe_ratio_available": True,
             "probability_of_backtest_overfitting": {"available": True, "pbo": 0.10},
             "stability": {"available": True, "stable": True},
             "negative_control": {"available": True, "passes_95pct_negative_control": True, "placebo_samples": 100},
