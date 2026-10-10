@@ -64,6 +64,20 @@ def test_dashboard_js_dom_references_resolve():
     assert refs <= ids
 
 
+def test_market_universe_freshness_status_is_visible_and_explains_cached_markets():
+    import signal_dashboard as terminal_mod
+
+    html = terminal_mod.HTML
+
+    assert 'id="universeStatus"' in html
+    assert 'MARKETS LIVE' in html
+    assert 'MARKETS CACHED' in html
+    assert 'MARKETS LOCAL' in html
+    assert 'marketData.universe_stale' in html
+    assert 'marketData.universe_snapshot_at' in html
+    assert "Solo navigazione; i segnali richiedono dati e modelli attuali." in html
+
+
 def test_dashboard_market_explorer_ui():
     import signal_dashboard as terminal_mod
 
