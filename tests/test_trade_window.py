@@ -8,7 +8,9 @@ from sklearn.dummy import DummyClassifier
 from ai_trading_lab.config import load_settings
 from ai_trading_lab.deployment import deployment_semantics_fingerprint, model_semantics_fingerprint
 from ai_trading_lab.trade_window import (
+    BALANCED_PROBABILITY_SEMANTICS,
     _barrier_labels,
+    _correct_balanced_class_probabilities,
     _fill_feature_frame,
     assess_trade_window,
     directional_event_probabilities,
@@ -102,6 +104,29 @@ def test_event_probability_is_separate_from_conditional_direction_confidence():
     assert neutral["direction_confidence"] < 0.80
 
 
+
+def test_class_balanced_scores_are_prior_corrected_before_event_thresholding():
+    # Weighted training can make rare event classes appear much more likely
+    # than they are in the original 96%-neutral population.
+    corrected = _correct_balanced_class_probabilities(
+        [[0.30, 0.40, 0.30]],
+        classes=[-1, 0, 1],
+        class_counts={"-1": 200, "0": 9600, "1": 200},
+    )
+
+    assert np.isclose(corrected.sum(), 1.0)
+    assert corrected[0, 1] > 0.95
+    assert corrected[0, 0] + corrected[0, 2] < 0.05
+
+
+def test_class_prior_correction_fails_closed_when_training_counts_are_missing():
+    try:
+        _correct_balanced_class_probabilities([[0.2, 0.6, 0.2]], [-1, 0, 1], {})
+    except ValueError as exc:
+        assert str(exc) == "trade_window_class_prior_metadata_missing"
+    else:
+        raise AssertionError("missing class priors must be rejected")
+
 def test_trade_window_train_and_serve_share_training_median_imputation():
     raw = pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [np.nan, 4.0, np.nan]})
     medians = pd.Series({"a": 2.0, "b": 4.0})
@@ -151,6 +176,10 @@ def test_assess_trade_window_requires_event_probability_and_uses_training_imputa
         model = DummyClassifier(strategy="prior")
         x = np.arange(len(classes), dtype=float).reshape(-1, 1)
         model.fit(x, np.asarray(classes, dtype=int))
+        class_counts = {
+            str(label): int(np.sum(np.asarray(classes, dtype=int) == label))
+            for label in (-1, 0, 1)
+        }
         report = {
             "production_ready": True,
             "symbol": settings.symbol,
@@ -158,6 +187,8 @@ def test_assess_trade_window_requires_event_probability_and_uses_training_imputa
             "model_semantics_fingerprint": model_semantics_fingerprint(settings),
             "deployment_semantics_fingerprint": deployment_semantics_fingerprint(settings),
             "holdout_precision": 0.85,
+            "train_class_counts": class_counts,
+            "probability_semantics": BALANCED_PROBABILITY_SEMANTICS,
         }
         joblib.dump(
             {
