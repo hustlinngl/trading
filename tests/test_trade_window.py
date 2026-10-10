@@ -196,8 +196,8 @@ def test_assess_trade_window_requires_event_probability_and_uses_training_imputa
         joblib.dump(
             {
                 "model": model,
-                "feature_columns": ["synthetic_feature"],
-                "fill_values": pd.Series({"synthetic_feature": 0.25}),
+                "feature_columns": ["ret_1"],
+                "fill_values": pd.Series({"ret_1": 0.25}),
                 "report": report,
             },
             path,
