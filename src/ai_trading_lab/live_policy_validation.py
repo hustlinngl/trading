@@ -60,6 +60,10 @@ def build_live_policy_holdout_report(
     full_df = full_df.sort_index()
     train_df = train_df.sort_index()
     holdout_df = holdout_df.sort_index()
+    # atr_14 is attached only for execution simulation; the persisted dataset
+    # fingerprints must match the raw OHLCV provenance used by the base report.
+    full_fingerprint_df = full_df.drop(columns=["atr_14"], errors="ignore")
+    holdout_fingerprint_df = holdout_df.drop(columns=["atr_14"], errors="ignore")
     if holdout_df.empty or not holdout_predictions.index.equals(holdout_df.index):
         raise ValueError("live_policy_holdout_prediction_index_mismatch")
     if not train_df.index.max() < holdout_df.index.min():
@@ -137,8 +141,6 @@ def build_live_policy_holdout_report(
     trade_returns = np.asarray([], dtype=float)
     # Per-trade net return is normalized by entry equity, keeping the DSR input
     # in consistent per-observation units rather than mixing annualized Sharpe.
-    if not getattr(primary, "trades", None) and False:
-        pass
     primary_result = run_configured_backtest(market, primary_actions, settings)
     if not primary_result.trades.empty:
         trade_returns = (
@@ -204,9 +206,9 @@ def build_live_policy_holdout_report(
         "schema_version": 1,
         "symbol": str(settings.symbol),
         "timeframe": str(settings.timeframe),
-        "data_fingerprint": strong_dataset_fingerprint(full_df),
+        "data_fingerprint": strong_dataset_fingerprint(full_fingerprint_df),
         "validation_train_data_fingerprint": strong_dataset_fingerprint(train_df),
-        "validation_holdout_data_fingerprint": strong_dataset_fingerprint(holdout_df),
+        "validation_holdout_data_fingerprint": strong_dataset_fingerprint(holdout_fingerprint_df),
         "holdout_start": str(holdout_df.index.min()),
         "holdout_end": str(holdout_df.index.max()),
         "model_semantics_fingerprint": model_semantics_fingerprint(settings),
