@@ -3,6 +3,35 @@ from pathlib import Path
 from datetime import date,timedelta,datetime,timezone
 import hashlib,io,json,zipfile,requests,pandas as pd
 BASE='https://data.binance.vision/data'
+
+
+def rolling_closed_history_window(now=None, months=24):
+    """Return UTC date bounds for full monthly archives plus the latest closed days.
+
+    Monthly Binance Vision archives are only complete after a month closes. The
+    latest partial month must therefore be downloaded from daily archives through
+    yesterday (UTC), not from the not-yet-published monthly archive.
+    """
+    months = int(months)
+    if months < 1:
+        raise ValueError("months must be >= 1")
+
+    stamp = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+    if stamp.tzinfo is None:
+        stamp = stamp.tz_localize("UTC")
+    else:
+        stamp = stamp.tz_convert("UTC")
+    today = stamp.normalize()
+    recent_start = today.replace(day=1)
+    monthly_end = recent_start - pd.Timedelta(days=1)
+    start = recent_start - pd.DateOffset(months=months)
+    end = today - pd.Timedelta(days=1)
+    return {
+        "start": start.strftime("%Y-%m-%d"),
+        "monthly_end": monthly_end.strftime("%Y-%m-%d"),
+        "recent_start": recent_start.strftime("%Y-%m-%d"),
+        "end": end.strftime("%Y-%m-%d"),
+    }
 def _months(start,end):
     s=pd.Timestamp(start).to_period('M'); e=pd.Timestamp(end).to_period('M')
     for p in pd.period_range(s,e,freq='M'): yield p.year,p.month
