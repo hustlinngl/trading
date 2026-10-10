@@ -43,6 +43,7 @@ class Settings:
     trade_window_enabled: bool = True
     trade_window_required_for_signal: bool = True
     trade_window_min_confidence: float = 0.80
+    trade_window_min_event_probability: float = 0.60
     trade_window_min_expected_return: float = 0.0015
     trade_window_require_base_agreement: bool = True
     trade_window_min_hours: float = 3.0
@@ -229,6 +230,7 @@ def load_settings(path: str | Path = ROOT / "config.yaml") -> Settings:
         trade_window_enabled=_bool(d.get("trade_window_enabled", True)),
         trade_window_required_for_signal=_bool(d.get("trade_window_required_for_signal", True)),
         trade_window_min_confidence=float(d.get("trade_window_min_confidence", 0.80)),
+        trade_window_min_event_probability=float(d.get("trade_window_min_event_probability", 0.60)),
         trade_window_min_expected_return=float(d.get("trade_window_min_expected_return", 0.0015)),
         trade_window_require_base_agreement=_bool(d.get("trade_window_require_base_agreement", True)),
         trade_window_min_hours=float(d.get("trade_window_min_hours", 3.0)),
