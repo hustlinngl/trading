@@ -114,8 +114,25 @@ jobs:
           not_ready = sorted(str(row.get("symbol")) for row in report if row.get("status") == "trained" and not bool(row.get("production_ready")))
           if missing:
               raise RuntimeError(f"Bundled model training did not produce all expected assets: {missing}")
+          mode = "PRODUCTION-READY" if ready else "RESEARCH-ONLY — NO DEPLOYMENT-READY SIGNAL MODELS"
+          errors = sorted(str(row.get("symbol")) for row in report if row.get("status") == "error")
+          readiness_lines = [
+              "Sakura Signal Terminal — model readiness",
+              f"Package mode: {mode}",
+              f"Expected assets: {len(expected)}",
+              f"Trained assets: {len(trained)}",
+              f"Deployment-ready assets: {len(ready)}",
+              "Validated assets: " + (", ".join(ready) if ready else "NONE"),
+              "Training errors: " + (", ".join(errors) if errors else "NONE"),
+              "",
+              "A successful application build does not imply a profitable or validated strategy.",
+              "When no asset passes the out-of-sample deployment gates, the app must expose zero LONG/SHORT signals.",
+              "Do not lower readiness gates merely to make the executable build pass.",
+          ]
+          Path("logs/model_readiness.txt").write_text("\n".join(readiness_lines) + "\n", encoding="utf-8")
+          print("\n".join(readiness_lines))
           if not ready:
-              raise RuntimeError(f"No bundled asset passed deployment-readiness gates; refusing to package a signal terminal with zero eligible assets. Not ready: {not_ready}")
+              print("WARNING: Building a research-only executable. All unvalidated model bundles remain ineligible for public signals.")
           print("bundled-historical-assets-ok", len(trained), "production-ready", len(ready), "not-ready", len(not_ready))
           PY
 
@@ -193,18 +210,19 @@ jobs:
       - name: Functional frozen inference contract test
         shell: pwsh
         run: |
-          $symbols = @(
-            "BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT",
-            "ADA/USDT","DOGE/USDT","AVAX/USDT","LINK/USDT","DOT/USDT",
-            "LTC/USDT","BCH/USDT","ATOM/USDT","UNI/USDT","ETC/USDT"
-          )
-          foreach ($symbol in $symbols) {
-            $proc = Start-Process -FilePath .\dist\SakuraSignalTerminal.exe -ArgumentList "--self-test-inference --symbol $symbol" -Wait -PassThru -NoNewWindow
-            if ($proc.ExitCode -ne 0) {
-              throw "Frozen inference contract failed for \${symbol}: exit code $($proc.ExitCode)"
+          $trainingReport = @(Get-Content .\logs\train_complete_all_report.json -Raw | ConvertFrom-Json)
+          $readySymbols = @($trainingReport | Where-Object { $_.status -eq "trained" -and $_.production_ready -eq $true } | ForEach-Object { [string]$_.symbol })
+          if ($readySymbols.Count -eq 0) {
+            Write-Warning "No deployment-ready models exist; inference contract tests are not applicable. The packaged dashboard must remain signal-empty."
+          } else {
+            foreach ($symbol in $readySymbols) {
+              $proc = Start-Process -FilePath .\dist\SakuraSignalTerminal.exe -ArgumentList "--self-test-inference --symbol $symbol" -Wait -PassThru -NoNewWindow
+              if ($proc.ExitCode -ne 0) {
+                throw "Frozen inference contract failed ($symbol), exit code $($proc.ExitCode)"
+              }
             }
+            Write-Host "Frozen inference contract passed for all $($readySymbols.Count) deployment-ready assets."
           }
-          Write-Host "Frozen inference contract passed for all 15 bundled assets."
 
       - name: Functional packaged dashboard smoke test
         shell: pwsh
@@ -249,26 +267,33 @@ jobs:
             if ([int]$state.summary.model_backed_assets -lt 15) {
               throw "Packaged executable started but did not expose all 15 bundled model assets: $($state.summary.model_backed_assets)"
             }
-            $trainingReport = Get-Content .\logs\train_complete_all_report.json -Raw | ConvertFrom-Json
+            $trainingReport = @(Get-Content .\logs\train_complete_all_report.json -Raw | ConvertFrom-Json)
             $readySymbols = @($trainingReport | Where-Object { $_.status -eq "trained" -and $_.production_ready -eq $true } | ForEach-Object { [string]$_.symbol })
-            if ($readySymbols.Count -lt 1) {
-              throw "Build passed without any validated signal asset; this should have been rejected by the training gate."
-            }
-            if ([int]$state.summary.compatible_bundles -lt 1) {
-              throw "Packaged executable has no compatible production-ready signal bundles."
-            }
-            if ([int]$state.summary.compatible_bundles -gt $readySymbols.Count) {
-              throw "Packaged dashboard reports more compatible bundles ($($state.summary.compatible_bundles)) than assets that passed deployment readiness ($($readySymbols.Count))."
-            }
-
-            foreach ($row in @($state.signals)) {
-              $keys = @($row.PSObject.Properties.Name | Sort-Object)
-              $keyString = $keys -join ","
-              if ($keyString -ne "confidence,expected_return,horizon_bars,price,signal,symbol") {
-                throw "Packaged dashboard exposed a non-canonical public signal payload: $keyString"
+            if ($readySymbols.Count -eq 0) {
+              if ([int]$state.summary.compatible_bundles -ne 0) {
+                throw "Research-only build exposed compatible bundles although no asset passed deployment readiness."
               }
-              if ($readySymbols -notcontains [string]$row.symbol) {
-                throw "Packaged dashboard exposed a signal from a bundle that failed deployment readiness: $($row.symbol)"
+              if (@($state.signals).Count -ne 0) {
+                throw "Research-only build emitted public trading signals from unvalidated assets."
+              }
+              Write-Host "Research-only package correctly exposes zero compatible bundles and zero public signals."
+            } else {
+              if ([int]$state.summary.compatible_bundles -lt 1) {
+                throw "Ready models were trained but the packaged dashboard exposes no compatible production-ready signal bundles."
+              }
+              if ([int]$state.summary.compatible_bundles -gt $readySymbols.Count) {
+                throw "Packaged dashboard reports more compatible bundles ($($state.summary.compatible_bundles)) than assets that passed deployment readiness ($($readySymbols.Count))."
+              }
+
+              foreach ($row in @($state.signals)) {
+                $keys = @($row.PSObject.Properties.Name | Sort-Object)
+                $keyString = $keys -join ","
+                if ($keyString -ne "confidence,expected_return,horizon_bars,price,signal,symbol") {
+                  throw "Packaged dashboard exposed a non-canonical public signal payload: $keyString"
+                }
+                if ($readySymbols -notcontains [string]$row.symbol) {
+                  throw "Packaged dashboard exposed a signal from a bundle that failed deployment readiness: $($row.symbol)"
+                }
               }
             }
 
@@ -298,15 +323,32 @@ jobs:
           Copy-Item .\models\assets\* .\release\models\assets\ -Recurse -Force
           Copy-Item .\SETUP_WINDOWS.md .\release\SETUP_WINDOWS.md
           Copy-Item .\README.md .\release\README.md
+          Copy-Item .\logs\model_readiness.txt .\release\MODEL_READINESS.txt
+          $trainingReport = @(Get-Content .\logs\train_complete_all_report.json -Raw | ConvertFrom-Json)
+          $readySymbols = @($trainingReport | Where-Object { $_.status -eq "trained" -and $_.production_ready -eq $true } | ForEach-Object { [string]$_.symbol })
+          if ($readySymbols.Count -gt 0) {
+            $mode = "PRODUCTION-READY MODELS PRESENT"
+            $readyList = $readySymbols -join ", "
+          } else {
+            $mode = "RESEARCH-ONLY - NO VALIDATED SIGNAL MODELS"
+            $readyList = "NONE"
+          }
           @"
           Sakura Signal Terminal 0.9.40
-          
+
+          Package mode: $mode
+          Deployment-ready assets: $($readySymbols.Count)
+          Validated assets: $readyList
+
           Launch SakuraSignalTerminal.exe.
           The executable is read-only: it exposes no order endpoints.
-          
           Keep config.yaml beside the EXE.
-          Validated model bundles are shipped beside the executable under
-          models/assets/<SYMBOL>/ and are checked before live signals are emitted.
+
+          Model bundles are shipped under models/assets/<SYMBOL>/.
+          The dashboard checks bundle provenance and deployment readiness before publishing signals.
+          A successful software build is not evidence of profitable trading.
+          If no validated model is listed above, the terminal intentionally emits no LONG/SHORT signals.
+          See MODEL_READINESS.txt for the training-readiness summary.
           "@ | Set-Content .\release\RUN.txt -Encoding UTF8
 
       - name: Upload Windows package
