@@ -1,14 +1,21 @@
+# Python runtime and test artifacts
 .venv/
 __pycache__/
-*.pyc
+*.py[cod]
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 .env
-models/*.joblib
-models/**/*.joblib
-data/*.parquet
-logs/*.csv
-logs/*.json
-logs/*.jsonl
+*.log
+
+# Downloaded/derived market data, trained bundles and mutable runtime journals.
+# These are reproducible outputs, not source files; do not commit user data or
+# generated model assets by accident.
+data/
+models/
+logs/
 
 # Windows packaging
 build/
