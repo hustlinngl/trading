@@ -384,6 +384,7 @@ def test_train_all_ignores_stale_registry_path_when_historical_asset_exists(monk
 
 def test_train_complete_asset_can_skip_global_champion_promotion(monkeypatch, tmp_path, capsys):
     from types import SimpleNamespace
+    import pandas as pd
     import ai_trading_lab.main as main_module
 
     settings = SimpleNamespace(symbol="ETH/USDT")
