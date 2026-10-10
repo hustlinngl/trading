@@ -419,7 +419,7 @@ def test_train_complete_asset_can_skip_global_champion_promotion(monkeypatch, tm
     )
 
     main_module.train_complete_asset(
-        [1, 2, 3], settings, holdout_frac=0.15, promote_champion=False
+        pd.DataFrame({"close": [1.0, 2.0, 3.0]}), settings, holdout_frac=0.15, promote_champion=False
     )
 
     import json
