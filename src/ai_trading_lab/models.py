@@ -94,12 +94,13 @@ class SignalModel:
                 ycore_c, ycore_r = yc.iloc[:core_end], yr.iloc[:core_end]
                 ycal = yc.iloc[cal_start:]
                 ycal_r = yr.iloc[cal_start:]
-                if ycore_c.nunique() < 2:
+                if ycore_c.nunique() < 2 or len(Xcal_raw) <= purge + 32:
+                    # There is not enough calibration history to reserve both an
+                    # early fit slice and a purged, later meta-training slice.
                     use_cal = False
         if use_cal:
             self.fill_values = Xcore_raw.median(numeric_only=True)
             Xcore = Xcore_raw.fillna(self.fill_values).ffill().fillna(0.0)
-            Xcal = Xcal_raw.fillna(self.fill_values).ffill().fillna(0.0)
             for clf in self.clfs:
                 clf.fit(Xcore, ycore_c)
             for reg in self.regs:
@@ -109,9 +110,10 @@ class SignalModel:
             # estimated only on the earlier calibration slice; using the same rows
             # for both selection and meta labels would leak holdout outcomes.
             n_cal_fit = max(32, int(len(Xcal_raw) * 0.60))
-            n_cal_fit = min(n_cal_fit, max(1, len(Xcal_raw) - 1))
+            n_cal_fit = min(n_cal_fit, len(Xcal_raw) - purge - 1)
+            meta_start = n_cal_fit + purge
             Xcal_fit_raw = Xcal_raw.iloc[:n_cal_fit]
-            Xmeta_raw = Xcal_raw.iloc[n_cal_fit:]
+            Xmeta_raw = Xcal_raw.iloc[meta_start:]
             ycal_fit = ycal.iloc[:n_cal_fit]
             ycal_fit_r = ycal_r.iloc[:n_cal_fit]
 
