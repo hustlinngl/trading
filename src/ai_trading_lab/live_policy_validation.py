@@ -109,12 +109,16 @@ def build_live_policy_holdout_report(
         _actions_for_gate(holdout_predictions, specialist_holdout, variant)
         for variant in variants
     ]
-    results = [
-        _stats_for_actions(market, actions, settings)
+    backtest_results = [
+        run_configured_backtest(market, actions, settings)
         for actions in actions_by_variant
     ]
+    results = [result.stats for result in backtest_results]
+    primary_result = backtest_results[0]
     primary = results[0]
     primary_actions = actions_by_variant[0]
+    min_trades = int(getattr(settings, "base_min_holdout_trades", 20))
+    primary_trade_count = int(primary.get("trades", primary.get("trades_taken", 0)) or 0)
 
     # Fold diagnostics use contiguous, non-overlapping segments of the untouched
     # holdout. A fold without trades is retained as a zero-return observation.
@@ -132,23 +136,21 @@ def build_live_policy_holdout_report(
             stats = _stats_for_actions(segment, segment_actions, settings)
             row_scores.append(float(stats.get("total_return", 0.0)))
         score_matrix.append(row_scores)
-        primary_stats = _stats_for_actions(
-            segment, primary_actions.reindex(segment.index).fillna("FLAT"), settings
-        )
-        fold_returns.append(float(primary_stats.get("total_return", 0.0)))
-        fold_trades.append(int(primary_stats.get("trades", primary_stats.get("trades_taken", 0)) or 0))
+        primary_stats = row_scores[0]
+        fold_returns.append(float(primary_stats))
+        primary_segment_actions = primary_actions.reindex(segment.index).fillna("FLAT")
+        primary_segment_stats = _stats_for_actions(segment, primary_segment_actions, settings)
+        fold_trades.append(int(primary_segment_stats.get("trades", primary_segment_stats.get("trades_taken", 0)) or 0))
 
     trade_returns = np.asarray([], dtype=float)
     # Per-trade net return is normalized by entry equity, keeping the DSR input
     # in consistent per-observation units rather than mixing annualized Sharpe.
-    primary_result = run_configured_backtest(market, primary_actions, settings)
     if not primary_result.trades.empty:
         trade_returns = (
             pd.to_numeric(primary_result.trades["pnl_net"], errors="coerce")
             / pd.to_numeric(primary_result.trades["entry_equity"], errors="coerce").replace(0.0, np.nan)
         ).replace([np.inf, -np.inf], np.nan).dropna().to_numpy(dtype=float)
 
-    min_trades = int(getattr(settings, "base_min_holdout_trades", 20))
     active_folds = sum(1 for count in fold_trades if count > 0)
     positive_fold_fraction = (
         float(np.mean(np.asarray(fold_returns) > 0.0)) if fold_returns else 0.0
@@ -197,7 +199,7 @@ def build_live_policy_holdout_report(
     # non-zero offsets and rerun the same costed execution engine. This preserves
     # signal count while breaking its timestamp alignment to subsequent prices.
     placebo_returns = []
-    if len(primary_actions) >= 30:
+    if len(primary_actions) >= 30 and primary_trade_count >= min_trades:
         rng = np.random.default_rng(int(settings.seed))
         values = primary_actions.to_numpy(dtype=object)
         for _ in range(100):
@@ -206,13 +208,13 @@ def build_live_policy_holdout_report(
             placebo_stats = _stats_for_actions(market, placebo_actions, settings)
             placebo_returns.append(float(placebo_stats.get("total_return", 0.0)))
     placebo = {
-        "available": bool(len(placebo_returns) >= 100 and int(primary.get("trades", 0) or 0) >= min_trades),
+        "available": bool(len(placebo_returns) >= 100 and primary_trade_count >= min_trades),
         "placebo_samples": int(len(placebo_returns)),
         "observed_return": float(primary.get("total_return", -1.0)),
         "placebo_p95_return": float(np.quantile(placebo_returns, 0.95)) if placebo_returns else None,
         "passes_95pct_negative_control": bool(
             len(placebo_returns) >= 100
-            and int(primary.get("trades", 0) or 0) >= min_trades
+            and primary_trade_count >= min_trades
             and float(primary.get("total_return", -1.0)) > float(np.quantile(placebo_returns, 0.95))
         ),
     }
