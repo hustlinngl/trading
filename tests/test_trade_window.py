@@ -170,6 +170,9 @@ def test_assess_trade_window_requires_event_probability_and_uses_training_imputa
     settings.symbol = "BTC/USDT"
     settings.trade_window_min_event_probability = 0.60
     settings.trade_window_min_confidence = 0.80
+    # This test exercises the persisted training-median imputer itself. The
+    # production default remains fail-closed (0.0 missing-feature fraction).
+    settings.live_max_missing_feature_fraction = 1.0
     frame = _flat_market(rows=40)
 
     def save_prior(path, classes):
