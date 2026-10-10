@@ -4,7 +4,7 @@
 - Aligned live signal outcome tracking with executable opening-gap, minimum-holding and time-stop semantics.
 - Corrected class-balanced trade-window scores for the training class prior before treating them as event probabilities; legacy model bundles are invalidated by the semantic fingerprint.
 - Added regression coverage for outcome execution, class-prior correction and release-version consistency.
-- Made the Windows package's displayed version derive from VERSION instead of a hard-coded release number.
+- Made the Windows package's displayed version derive from VERSION instead of a hard-coded release number and removed a stale version label from the Windows setup guide.
 
 ## 0.9.40
 - Expanded the model/data defaults to 30k training bars, 1.2k live bars and 15 configured live assets.
