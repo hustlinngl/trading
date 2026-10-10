@@ -250,6 +250,7 @@ jobs:
       - name: Functional frozen inference contract test
         shell: pwsh
         run: |
+          $version = (Get-Content .\VERSION -Raw).Trim()
           $trainingReport = @(Get-Content .\logs\train_complete_all_report.json -Raw | ConvertFrom-Json)
           $readySymbols = @($trainingReport | Where-Object { $_.status -eq "trained" -and $_.production_ready -eq $true } | ForEach-Object { [string]$_.symbol })
           if ($readySymbols.Count -eq 0) {
@@ -374,7 +375,7 @@ jobs:
             $readyList = "NONE"
           }
           @"
-          Sakura Signal Terminal 0.9.40
+          Sakura Signal Terminal $version
 
           Package mode: $mode
           Deployment-ready assets: $($readySymbols.Count)
