@@ -1,4 +1,4 @@
-# Architecture and runtime boundaries — release 0.9.43
+# Architecture and runtime boundaries — release 0.9.45
 
 The project has two related but distinct paths: **research/training** produces asset-specific, evidence-bound model bundles; the **read-only terminal** consumes only compatible bundles and publishes strict, canonical signals. A successful build is not evidence of a profitable strategy.
 

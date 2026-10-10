@@ -42,6 +42,44 @@ def test_trade_window_retains_neutral_no_event_labels():
     assert labels["direction"].iloc[-4:].isna().all()
 
 
+def test_trade_window_records_barrier_exit_return_not_later_time_stop_return():
+    frame = _flat_market(rows=40)
+    decision = frame.index[14]
+    # For decision 14, entry is open[15], the upper barrier is crossed in bar 16,
+    # then price gaps down at the later time-stop open[18]. Realized PnL is the
+    # barrier exit (+0.25%), not the fictive time-stop return (-1%).
+    frame.loc[frame.index[16], ["open", "high", "low", "close"]] = [
+        100.0, 100.6, 99.9, 100.2
+    ]
+    frame.loc[frame.index[18], ["open", "high", "low", "close"]] = [
+        99.0, 99.1, 98.9, 99.0
+    ]
+
+    labels = _barrier_labels(frame, horizon_bars=3, min_bars=1, pt_atr=1.25, sl_atr=0.90)
+
+    # ATR is 0.2 on the decision bar: the take-profit is at 100.25.
+    assert labels.loc[decision, "direction"] == 1.0
+    assert labels.loc[decision, "execution_status"] == "take_profit"
+    assert labels.loc[decision, "exit_position"] == 16.0
+    assert labels.loc[decision, "holding_bars"] == 2.0
+    assert np.isclose(labels.loc[decision, "gross_return"], 0.0025)
+    assert np.isclose(frame.loc[frame.index[18], "open"] / frame.loc[frame.index[15], "open"] - 1.0, -0.01)
+
+
+def test_trade_window_ambiguous_barrier_collision_has_unknown_pnl():
+    frame = _flat_market(rows=40)
+    decision = frame.index[14]
+    frame.loc[frame.index[16], ["open", "high", "low", "close"]] = [
+        100.0, 100.6, 99.5, 100.0
+    ]
+
+    labels = _barrier_labels(frame, horizon_bars=3, min_bars=1, pt_atr=1.25, sl_atr=0.90)
+
+    assert labels.loc[decision, "direction"] == 0.0
+    assert labels.loc[decision, "execution_status"] == "ambiguous_intrabar"
+    assert np.isnan(labels.loc[decision, "gross_return"])
+
+
 def test_trade_window_opening_gap_is_classified_before_later_intrabar_collision():
     frame = _flat_market()
     # At decision bar 14, entry is open[15]. This candle gaps below the lower
@@ -60,12 +98,15 @@ def test_trade_window_time_stop_candle_is_not_misread_as_barrier_event():
     # horizon=3 enters on bar 15 and time-stops at open[18]. A huge high on the
     # exit candle must not create a LONG event because liquidation is at its open.
     frame.loc[frame.index[18], ["open", "high", "low", "close"]] = [
-        100.0, 110.0, 99.9, 100.0
+        100.5, 110.0, 100.4, 100.5
     ]
 
     labels = _barrier_labels(frame, horizon_bars=3, min_bars=1, pt_atr=1.25, sl_atr=0.90)
 
     assert labels.loc[frame.index[14], "direction"] == 0.0
+    assert labels.loc[frame.index[14], "execution_status"] == "time_stop"
+    assert labels.loc[frame.index[14], "exit_position"] == 18.0
+    assert np.isclose(labels.loc[frame.index[14], "gross_return"], 0.005)
 
 
 
@@ -134,6 +175,75 @@ def test_trade_window_train_and_serve_share_training_median_imputation():
     prepared = _fill_feature_frame(raw, ["a", "b"], medians)
 
     assert prepared.to_numpy().tolist() == [[1.0, 4.0], [2.0, 4.0], [3.0, 4.0]]
+
+
+def test_trade_window_holdout_scores_actual_barrier_exit_not_time_stop_open(monkeypatch):
+    import ai_trading_lab.trade_window as trade_window
+
+    frame = _flat_market(rows=600)
+    settings = load_settings("config.yaml")
+    settings.symbol = "BTC/USDT"
+    settings.timeframe = "15m"
+    settings.trade_window_min_hours = 0.25
+    settings.trade_window_max_hours = 1.0
+    settings.trade_window_min_event_probability = 0.60
+    settings.trade_window_min_confidence = 0.80
+    settings.trade_window_target_precision = 0.80
+    settings.trade_window_min_holdout_wilson = 0.0
+    settings.trade_window_min_holdout_trades = 1
+    settings.trade_window_min_net_return = 0.0
+    settings.trade_window_require_positive_holdout_backtest = True
+    settings.fee_bps = 1.0
+    settings.slippage_bps = 1.0
+    settings.impact_bps_per_sqrt = 0.0
+    settings.require_short_borrow_cost = True
+    settings.short_borrow_bps_per_bar = 0.0
+
+    # Put a few executable up/down events in the training segment so the
+    # three-class model has valid training support.
+    for pos in range(30, 450, 20):
+        if (pos // 20) % 2:
+            frame.loc[frame.index[pos], ["open", "high", "low", "close"]] = [
+                100.0, 100.6, 99.9, 100.2
+            ]
+        else:
+            frame.loc[frame.index[pos], ["open", "high", "low", "close"]] = [
+                100.0, 100.1, 99.5, 99.8
+            ]
+
+    candidate_pos = 485
+    candidate_time = frame.index[candidate_pos]
+    # Its take-profit triggers after entry. The later time-stop open is -5%,
+    # but a real barrier-driven position has already exited at +0.25%.
+    frame.loc[frame.index[candidate_pos + 2], ["open", "high", "low", "close"]] = [
+        100.0, 100.6, 99.9, 100.2
+    ]
+    frame.loc[frame.index[candidate_pos + 5], ["open", "high", "low", "close"]] = [
+        95.0, 95.1, 94.9, 95.0
+    ]
+
+    class FakeExtraTrees:
+        def __init__(self, **kwargs):
+            self.classes_ = np.asarray([-1, 0, 1])
+
+        def fit(self, X, y):
+            assert set(np.asarray(y, dtype=int)) == {-1, 0, 1}
+            return self
+
+        def predict_proba(self, X):
+            result = np.tile([0.01, 0.98, 0.01], (len(X), 1))
+            result[X.index == candidate_time] = [0.01, 0.03, 0.96]
+            return result
+
+    monkeypatch.setattr(trade_window, "ExtraTreesClassifier", FakeExtraTrees)
+    report = train_trade_window_backbone(frame, settings, holdout_frac=0.20)
+
+    assert report["holdout_candidates_before_nonoverlap"] == 1
+    assert report["holdout_signals"] == 1
+    assert report["holdout_economic_observations"] == 1
+    assert np.isclose(report["holdout_net_return_mean"], 0.0025 - 0.0004)
+    assert report["holdout_net_return_mean"] > 0.0
+    assert report["holdout_net_return_compounded"] > 0.0
 
 
 def test_trade_window_refuses_binary_only_training_and_removes_stale_artifact(tmp_path, monkeypatch):
