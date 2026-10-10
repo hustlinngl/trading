@@ -349,7 +349,7 @@ def test_train_all_ignores_stale_registry_path_when_historical_asset_exists(monk
     assert report[0]["source"] == "historical"
 
 
-def test_train_complete_asset_can_skip_global_champion_promotion(monkeypatch, tmp_path):
+def test_train_complete_asset_can_skip_global_champion_promotion(monkeypatch, tmp_path, capsys):
     from types import SimpleNamespace
     import ai_trading_lab.main as main_module
 
@@ -389,6 +389,24 @@ def test_train_complete_asset_can_skip_global_champion_promotion(monkeypatch, tm
         [1, 2, 3], settings, holdout_frac=0.15, promote_champion=False
     )
 
+    import json
+    events = [
+        json.loads(line)
+        for line in capsys.readouterr().out.splitlines()
+        if line.strip()
+    ]
+    stages = [event["stage"] for event in events]
+    assert stages[0] == "asset_training_started"
+    assert "base_bundle_fit_started" in stages
+    assert "base_bundle_fit_completed" in stages
+    assert "base_holdout_validation_started" in stages
+    assert "base_holdout_validation_completed" in stages
+    assert "trade_window_fit_started" in stages
+    assert "trade_window_fit_completed" in stages
+    assert stages[-1] == "asset_training_completed"
+    assert all(event["event"] == "training_progress" for event in events)
+    assert all(event["symbol"] == "ETH/USDT" for event in events)
+    assert any("stage_elapsed_seconds" in event for event in events)
     assert calls["copy_legacy"] is False
     assert promoted == []
 
