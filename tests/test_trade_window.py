@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import joblib
 import numpy as np
 import pandas as pd
+from sklearn.dummy import DummyClassifier
 
 from ai_trading_lab.config import load_settings
+from ai_trading_lab.deployment import deployment_semantics_fingerprint, model_semantics_fingerprint
 from ai_trading_lab.trade_window import (
     _barrier_labels,
     _fill_feature_frame,
+    assess_trade_window,
     directional_event_probabilities,
     train_trade_window_backbone,
 )
@@ -109,3 +113,53 @@ def test_trade_window_refuses_binary_only_training_and_removes_stale_artifact(tm
     assert report["production_ready"] is False
     assert report["reason"] == "insufficient_three_class_training_support"
     assert not path.exists()
+
+
+
+def test_assess_trade_window_requires_event_probability_and_uses_training_imputation(tmp_path):
+    settings = load_settings("config.yaml")
+    settings.symbol = "BTC/USDT"
+    settings.trade_window_min_event_probability = 0.60
+    settings.trade_window_min_confidence = 0.80
+    frame = _flat_market(rows=40)
+
+    def save_prior(path, classes):
+        model = DummyClassifier(strategy="prior")
+        x = np.arange(len(classes), dtype=float).reshape(-1, 1)
+        model.fit(x, np.asarray(classes, dtype=int))
+        report = {
+            "production_ready": True,
+            "symbol": settings.symbol,
+            "timeframe": settings.timeframe,
+            "model_semantics_fingerprint": model_semantics_fingerprint(settings),
+            "deployment_semantics_fingerprint": deployment_semantics_fingerprint(settings),
+            "holdout_precision": 0.85,
+        }
+        joblib.dump(
+            {
+                "model": model,
+                "feature_columns": ["synthetic_feature"],
+                "fill_values": pd.Series({"synthetic_feature": 0.25}),
+                "report": report,
+            },
+            path,
+        )
+
+    strong_path = tmp_path / "strong.joblib"
+    save_prior(strong_path, [-1, 0, 0, 1, 1, 1, 1, 1, 1, 1])
+    result = assess_trade_window(frame, settings, strong_path, symbol=settings.symbol)
+
+    assert result["trade_window_available"] is True
+    assert result["trade_window_ready"] is True
+    assert result["trade_window_direction"] == "LONG"
+    assert result["trade_window_event_probability"] >= settings.trade_window_min_event_probability
+    assert result["trade_window_confidence"] >= settings.trade_window_min_confidence
+
+    neutral_path = tmp_path / "neutral.joblib"
+    save_prior(neutral_path, [-1, 0, 0, 0, 0, 0, 0, 0, 1, 0])
+    neutral = assess_trade_window(frame, settings, neutral_path, symbol=settings.symbol)
+
+    assert neutral["trade_window_available"] is True
+    assert neutral["trade_window_ready"] is False
+    assert neutral["trade_window_direction"] == "FLAT"
+    assert neutral["trade_window_event_probability"] < settings.trade_window_min_event_probability
