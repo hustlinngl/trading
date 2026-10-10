@@ -78,10 +78,15 @@ def _promote_asset_bundle(asset_dir: str | Path, champion_dir: str | Path = "mod
             target.unlink()
 
 
-def train_base_asset(df, settings, *, promote_champion: bool = False):
-    """Train and persist one asset's base bundle in the canonical location."""
+def train_base_asset(df, settings, *, promote_champion: bool = False, data_provenance_df=None):
+    """Train and persist one asset's base bundle in the canonical location.
+
+    data_provenance_df may include a later untouched validation tail. The bundle
+    records that corpus fingerprint separately from the rows actually used to fit.
+    """
     eng = AdaptiveEngine(settings)
     art = eng.fit(df)
+    provenance_df = data_provenance_df if data_provenance_df is not None else df
     asset_dir = asset_model_dir(settings.symbol)
     asset_dir.mkdir(parents=True, exist_ok=True)
     eng.save(asset_dir)
@@ -89,7 +94,11 @@ def train_base_asset(df, settings, *, promote_champion: bool = False):
         "symbol": settings.symbol, "rows": int(len(df)),
         "start": str(df.index.min()), "end": str(df.index.max()),
         "timeframe": str(settings.timeframe),
-        "data_fingerprint": strong_dataset_fingerprint(df),
+        "data_fingerprint": strong_dataset_fingerprint(provenance_df),
+        "training_data_fingerprint": strong_dataset_fingerprint(df),
+        "provenance_rows": int(len(provenance_df)),
+        "provenance_start": str(provenance_df.index.min()),
+        "provenance_end": str(provenance_df.index.max()),
         "model_semantics_fingerprint": model_semantics_fingerprint(settings),
         "deployment_semantics_fingerprint": deployment_semantics_fingerprint(settings),
         "trained_at": datetime.now(timezone.utc).isoformat(),
@@ -113,6 +122,8 @@ def train_duration_asset(df, settings, *, holdout_frac: float, copy_legacy: bool
     asset_dir.mkdir(parents=True, exist_ok=True)
     asset_model = asset_dir / 'trade_window_specialist.joblib'
     report = train_trade_window_backbone(df, settings, holdout_frac=holdout_frac, save_path=asset_model)
+    report["training_data_start"] = str(df.index.min()) if len(df) else None
+    report["training_data_end"] = str(df.index.max()) if len(df) else None
     (asset_dir / "trade_window_training_report.json").write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
     Path("logs").mkdir(exist_ok=True)
     Path("logs/trade_window_training_report.json").write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
@@ -141,7 +152,24 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
         raise ValueError("Not enough rows for requested train/holdout split")
     train_df, test_df = df.iloc[:split].copy(), df.iloc[split:].copy()
     eng = AdaptiveEngine(settings)
-    eng.fit(train_df)
+    # Reuse the already-fitted train-only bundle during complete training. For a
+    # standalone holdout command, fit an isolated train-only engine as before.
+    bundle_dir = asset_model_dir(settings.symbol)
+    meta_path = bundle_dir / "base_training_meta.json"
+    loaded_train_bundle = False
+    if meta_path.is_file() and (bundle_dir / "signal_model.joblib").is_file():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            if (
+                str(meta.get("training_data_fingerprint", "")) == strong_dataset_fingerprint(train_df)
+                and str(meta.get("model_semantics_fingerprint", "")) == model_semantics_fingerprint(settings)
+            ):
+                eng.load(bundle_dir)
+                loaded_train_bundle = True
+        except (OSError, ValueError, KeyError, TypeError):
+            loaded_train_bundle = False
+    if not loaded_train_bundle:
+        eng.fit(train_df)
     from .features import make_oos_features
     feat = make_oos_features(
         train_df, test_df, settings.horizon_bars,
@@ -199,6 +227,39 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     asset_dir = asset_model_dir(settings.symbol)
     asset_dir.mkdir(parents=True, exist_ok=True)
     (asset_dir / "base_holdout_report.json").write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+
+    # Invalidate any previous evidence before attempting a new run. If generation
+    # fails, a stale report must never satisfy the deployment manifest.
+    live_report_path = asset_dir / "live_policy_holdout_report.json"
+    live_report_path.unlink(missing_ok=True)
+    # Build combined-policy evidence only when the matching specialist artifact exists.
+    # The base engine above is fitted exclusively on train_df; specialist training
+    # uses the same purged chronological split, so holdout labels never enter fitting.
+    specialist_path = asset_dir / "trade_window_specialist.joblib"
+    if specialist_path.is_file():
+        try:
+            from .live_policy_validation import build_live_policy_holdout_report
+            live_predictions = eng.predict_frame(feat, strict=True)
+            build_live_policy_holdout_report(
+                full_df=df,
+                train_df=train_df,
+                holdout_df=bt,
+                holdout_predictions=live_predictions,
+                settings=settings,
+                specialist_path=specialist_path,
+                output_path=asset_dir / "live_policy_holdout_report.json",
+            )
+        except Exception as exc:
+            # Fail closed: an absent/invalid evidence report blocks deployment.
+            # Keep training diagnostics available instead of fabricating a passing report.
+            error_path = asset_dir / "live_policy_holdout_error.json"
+            error_path.write_text(json.dumps({
+                "error": f"{type(exc).__name__}: {exc}",
+                "symbol": str(settings.symbol),
+                "timeframe": str(settings.timeframe),
+                "holdout_start": str(test_df.index.min()),
+                "holdout_end": str(test_df.index.max()),
+            }, indent=2), encoding="utf-8")
     report["deployment"] = refresh_deployment_manifest(settings)
     return report
 
@@ -221,6 +282,13 @@ def _emit_training_progress(symbol: str, stage: str, *, asset_started_at=None, s
 def train_complete_asset(df, settings, *, holdout_frac: float, promote_champion: bool = True):
     """One-click training with observable fit, holdout, specialist and readiness stages."""
     symbol = str(settings.symbol)
+    specialist_split = int(len(df) * (1.0 - float(holdout_frac)))
+    if specialist_split <= 0 or specialist_split >= len(df):
+        raise ValueError("invalid_final_holdout_split")
+    training_df = df.iloc[:specialist_split].copy()
+    # Invalidate prior combined-gate evidence before changing any model artifact;
+    # interrupted training must never leave an old report eligible for promotion.
+    (asset_model_dir(symbol) / "live_policy_holdout_report.json").unlink(missing_ok=True)
     asset_started_at = time.perf_counter()
     _emit_training_progress(
         symbol, "asset_training_started", asset_started_at=asset_started_at,
@@ -229,12 +297,36 @@ def train_complete_asset(df, settings, *, holdout_frac: float, promote_champion:
 
     stage_started_at = time.perf_counter()
     _emit_training_progress(symbol, "base_bundle_fit_started", asset_started_at=asset_started_at, rows=len(df))
-    asset_dir, _ = train_base_asset(df, settings)
+    asset_dir, _ = train_base_asset(training_df, settings, data_provenance_df=df)
     _emit_training_progress(
         symbol, "base_bundle_fit_completed", asset_started_at=asset_started_at,
         stage_started_at=stage_started_at, bundle=str(asset_dir),
     )
 
+    stage_started_at = time.perf_counter()
+    _emit_training_progress(
+        symbol, "trade_window_fit_started", asset_started_at=asset_started_at,
+        rows=len(df),
+    )
+    # Reserve the final temporal holdout exclusively for the combined live gate.
+    # The specialist's own purged validation happens entirely inside the earlier
+    # training segment, avoiding reuse of its readiness holdout as final evidence.
+    asset_model, duration_report = train_duration_asset(
+        training_df,
+        settings,
+        holdout_frac=holdout_frac,
+        copy_legacy=promote_champion,
+    )
+    _emit_training_progress(
+        symbol, "trade_window_fit_completed", asset_started_at=asset_started_at,
+        stage_started_at=stage_started_at,
+        production_ready=bool(duration_report.get("production_ready", False)),
+        readiness_reason=duration_report.get("reason"),
+        artifact=str(asset_model),
+    )
+
+    # Generate the base and combined-live-policy holdouts only after both model
+    # paths exist, allowing the evidence builder to apply the actual specialist gate.
     stage_started_at = time.perf_counter()
     _emit_training_progress(
         symbol, "base_holdout_validation_started", asset_started_at=asset_started_at,
@@ -247,28 +339,10 @@ def train_complete_asset(df, settings, *, holdout_frac: float, promote_champion:
         stage_started_at=stage_started_at,
         holdout_rows=base_holdout.get("holdout_rows") if isinstance(base_holdout, dict) else None,
         holdout_trades=holdout_stats.get("trades_taken", holdout_stats.get("trades")),
+        live_policy_evidence=(asset_dir / "live_policy_holdout_report.json").is_file(),
     )
     Path("logs").mkdir(exist_ok=True)
     Path("logs/test_report.json").write_text(json.dumps(base_holdout, indent=2, default=str), encoding="utf-8")
-
-    stage_started_at = time.perf_counter()
-    _emit_training_progress(
-        symbol, "trade_window_fit_started", asset_started_at=asset_started_at,
-        rows=len(df),
-    )
-    asset_model, duration_report = train_duration_asset(
-        df,
-        settings,
-        holdout_frac=holdout_frac,
-        copy_legacy=promote_champion,
-    )
-    _emit_training_progress(
-        symbol, "trade_window_fit_completed", asset_started_at=asset_started_at,
-        stage_started_at=stage_started_at,
-        production_ready=bool(duration_report.get("production_ready", False)),
-        readiness_reason=duration_report.get("reason"),
-        artifact=str(asset_model),
-    )
 
     stage_started_at = time.perf_counter()
     _emit_training_progress(symbol, "deployment_readiness_started", asset_started_at=asset_started_at)

@@ -126,7 +126,7 @@ def test_refresh_deployment_manifest_requires_matching_evidence(tmp_path):
         (bundle / name).write_bytes(name.encode())
     (bundle / "trade_window_specialist.joblib").write_bytes(b"window")
     (bundle / "base_training_meta.json").write_text(
-        json.dumps({"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem}),
+        json.dumps({"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"training_data_fingerprint":"train-fp","model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem}),
         encoding="utf-8",
     )
     base_stats = {
@@ -139,7 +139,7 @@ def test_refresh_deployment_manifest_requires_matching_evidence(tmp_path):
         encoding="utf-8",
     )
     (bundle / "trade_window_training_report.json").write_text(
-        json.dumps({"production_ready":True,"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem,"holdout":{"backtest":duration_stats}}),
+        json.dumps({"production_ready":True,"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":"train-fp","training_data_start":"2025-01-01T00:00:00+00:00","training_data_end":"2025-12-31T23:45:00+00:00","model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem,"holdout":{"backtest":duration_stats}}),
         encoding="utf-8",
     )
     # Separate base/specialist reports are no longer sufficient: deployment
@@ -165,6 +165,7 @@ def test_refresh_deployment_manifest_requires_matching_evidence(tmp_path):
         "holdout": base_stats,
         "statistical_evidence": {
             "deflated_sharpe_ratio": 0.95,
+            "deflated_sharpe_ratio_available": True,
             "probability_of_backtest_overfitting": {"available": True, "pbo": 0.10},
             "stability": {"available": True, "stable": True},
             "negative_control": {"available": True, "passes_95pct_negative_control": True, "placebo_samples": 100},
@@ -384,6 +385,7 @@ def test_train_all_ignores_stale_registry_path_when_historical_asset_exists(monk
 
 def test_train_complete_asset_can_skip_global_champion_promotion(monkeypatch, tmp_path, capsys):
     from types import SimpleNamespace
+    import pandas as pd
     import ai_trading_lab.main as main_module
 
     settings = SimpleNamespace(symbol="ETH/USDT")
@@ -392,7 +394,7 @@ def test_train_complete_asset_can_skip_global_champion_promotion(monkeypatch, tm
     monkeypatch.setattr(
         main_module,
         "train_base_asset",
-        lambda df, ss: (tmp_path / "bundle", object()),
+        lambda df, ss, **kwargs: (tmp_path / "bundle", object()),
     )
     monkeypatch.setattr(
         main_module,
@@ -419,7 +421,7 @@ def test_train_complete_asset_can_skip_global_champion_promotion(monkeypatch, tm
     )
 
     main_module.train_complete_asset(
-        [1, 2, 3], settings, holdout_frac=0.15, promote_champion=False
+        pd.DataFrame({"close": [1.0, 2.0, 3.0]}), settings, holdout_frac=0.15, promote_champion=False
     )
 
     import json
@@ -492,7 +494,8 @@ def test_bundle_compatibility_recomputes_deployment_evidence_instead_of_trusting
             "production_ready":False,
             "symbol":"BTC/USDT",
             "timeframe":"15m",
-            "data_fingerprint":fp,
+            "data_fingerprint":"train-fp",
+            "training_data_end":"2025-12-31T23:45:00+00:00",
             "model_semantics_fingerprint":sem,
             "deployment_semantics_fingerprint":dep_sem,
         }),

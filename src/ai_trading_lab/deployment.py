@@ -161,7 +161,11 @@ def _live_policy_holdout_evidence_checks(settings, bundle: str | Path, symbol: s
             dsr = float(evidence.get("deflated_sharpe_ratio", float("nan")))
         except (TypeError, ValueError, OverflowError):
             dsr = float("nan")
-        checks["live_policy_dsr"] = math.isfinite(dsr) and dsr >= float(getattr(settings, "live_policy_min_dsr", 0.80))
+        checks["live_policy_dsr"] = (
+            bool(evidence.get("deflated_sharpe_ratio_available", False))
+            and math.isfinite(dsr)
+            and dsr >= float(getattr(settings, "live_policy_min_dsr", 0.80))
+        )
 
         pbo = evidence.get("probability_of_backtest_overfitting", {})
         if not isinstance(pbo, dict):
@@ -220,6 +224,7 @@ def _deployment_evidence_is_current(settings, bundle: str | Path, symbol: str, m
             or str(base.get("model_semantics_fingerprint")) != str(meta.get("model_semantics_fingerprint"))
             or str(base.get("deployment_semantics_fingerprint")) != str(meta.get("deployment_semantics_fingerprint"))
             or not base.get("validation_train_data_fingerprint")
+            or str(meta.get("training_data_fingerprint", "")) != str(base.get("validation_train_data_fingerprint", ""))
             or not base.get("validation_holdout_data_fingerprint")
             or str(base.get("validation_holdout_start")) > str(base.get("validation_holdout_end"))
         ):
@@ -250,7 +255,9 @@ def _deployment_evidence_is_current(settings, bundle: str | Path, symbol: str, m
                 and bool(duration.get("production_ready", False))
                 and str(duration.get("symbol")) == str(symbol)
                 and str(duration.get("timeframe")) == str(getattr(settings, "timeframe", ""))
-                and str(duration.get("data_fingerprint")) == str(current_fp)
+                and str(duration.get("data_fingerprint")) == str(base.get("validation_train_data_fingerprint"))
+                and bool(duration.get("training_data_end"))
+                and str(duration.get("training_data_end")) < str(base.get("validation_holdout_start"))
                 and str(duration.get("model_semantics_fingerprint")) == str(meta.get("model_semantics_fingerprint"))
                 and str(duration.get("deployment_semantics_fingerprint")) == str(meta.get("deployment_semantics_fingerprint"))
                 and (
@@ -480,6 +487,7 @@ def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
             and str(base.get("model_semantics_fingerprint"))==str(meta.get("model_semantics_fingerprint"))
             and str(base.get("deployment_semantics_fingerprint"))==str(meta.get("deployment_semantics_fingerprint"))
             and bool(base.get("validation_train_data_fingerprint"))
+            and str(meta.get("training_data_fingerprint", ""))==str(base.get("validation_train_data_fingerprint", ""))
             and bool(base.get("validation_holdout_data_fingerprint"))
             and str(base.get("validation_holdout_start")) <= str(base.get("validation_holdout_end"))
         ),
@@ -494,7 +502,10 @@ def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
     current_fp=meta.get("data_fingerprint") or base.get("data_fingerprint")
     duration_provenance_match=(
         bool(duration)
-        and str(duration.get("data_fingerprint"))==str(current_fp)
+        and bool(base)
+        and str(duration.get("data_fingerprint"))==str(base.get("validation_train_data_fingerprint"))
+        and bool(duration.get("training_data_end"))
+        and str(duration.get("training_data_end")) < str(base.get("validation_holdout_start",""))
         and str(duration.get("symbol"))==str(getattr(settings,"symbol",""))
         and str(duration.get("timeframe"))==str(getattr(settings,"timeframe",""))
     )

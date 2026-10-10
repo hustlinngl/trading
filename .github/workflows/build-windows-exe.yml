@@ -8,7 +8,7 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 # Only the newest package build for a branch/ref is useful.
 # This prevents expensive historical-cache builds from piling up after UI/data commits.
@@ -36,6 +36,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
+
+      - name: Restore persistent research ledger
+        id: restore-ledger
+        shell: bash
+        run: |
+          mkdir -p data
+          git fetch --no-tags origin refs/heads/research-ledger:refs/remotes/origin/research-ledger
+          git show refs/remotes/origin/research-ledger:research_ledger.json > data/research_ledger.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          ledger = json.loads(Path("data/research_ledger.json").read_text(encoding="utf-8"))
+          if not isinstance(ledger, dict) or ledger.get("schema_version") != 2:
+              raise SystemExit("Persistent research ledger has an unsupported schema; refusing to reset governance.")
+          print("research-ledger-restored", {
+              "total_trials": ledger.get("total_trials", 0),
+              "holdout_accesses": len(ledger.get("holdout_accesses", [])),
+          })
+          PY
 
       - name: Generate bundled historical cache
         shell: bash
@@ -175,6 +194,32 @@ jobs:
               print("WARNING: Building a research-only executable. All unvalidated model bundles remain ineligible for public signals.")
           print("bundled-historical-assets-ok", len(trained), "production-ready", len(ready), "not-ready", len(not_ready))
           PY
+
+      - name: Persist research ledger after bundled validation
+        if: always() && steps.restore-ledger.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s data/research_ledger.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          ledger = json.loads(Path("data/research_ledger.json").read_text(encoding="utf-8"))
+          if not isinstance(ledger, dict) or ledger.get("schema_version") != 2:
+              raise SystemExit("Research ledger schema changed or became corrupt; refusing to persist/reset it.")
+          PY
+          git fetch --no-tags origin refs/heads/research-ledger:refs/remotes/origin/research-ledger
+          git worktree add --detach "$RUNNER_TEMP/research-ledger" refs/remotes/origin/research-ledger
+          install -m 600 data/research_ledger.json "$RUNNER_TEMP/research-ledger/research_ledger.json"
+          git -C "$RUNNER_TEMP/research-ledger" config user.name "github-actions[bot]"
+          git -C "$RUNNER_TEMP/research-ledger" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$RUNNER_TEMP/research-ledger" add research_ledger.json
+          if git -C "$RUNNER_TEMP/research-ledger" diff --cached --quiet; then
+            echo "Research ledger unchanged."
+            exit 0
+          fi
+          git -C "$RUNNER_TEMP/research-ledger" commit -m "chore: persist research governance ledger from package run ${GITHUB_RUN_ID}"
+          git -C "$RUNNER_TEMP/research-ledger" push origin HEAD:refs/heads/research-ledger
 
       - name: Upload model readiness diagnostics when packaging is blocked
         if: failure()
