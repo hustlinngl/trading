@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -202,21 +203,90 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     return report
 
 
+def _emit_training_progress(symbol: str, stage: str, *, asset_started_at=None, stage_started_at=None, **details) -> None:
+    """Emit line-buffered JSON progress events for long multi-asset training runs."""
+    event = {
+        "event": "training_progress",
+        "symbol": str(symbol),
+        "stage": str(stage),
+    }
+    if asset_started_at is not None:
+        event["asset_elapsed_seconds"] = round(max(0.0, time.perf_counter() - asset_started_at), 2)
+    if stage_started_at is not None:
+        event["stage_elapsed_seconds"] = round(max(0.0, time.perf_counter() - stage_started_at), 2)
+    event.update(details)
+    print(json.dumps(event, sort_keys=True, default=str), flush=True)
+
+
 def train_complete_asset(df, settings, *, holdout_frac: float, promote_champion: bool = True):
-    """One-click training: fit, untouched holdout, duration validation, then manifest."""
+    """One-click training with observable fit, holdout, specialist and readiness stages."""
+    symbol = str(settings.symbol)
+    asset_started_at = time.perf_counter()
+    _emit_training_progress(
+        symbol, "asset_training_started", asset_started_at=asset_started_at,
+        rows=len(df), holdout_frac=float(holdout_frac),
+    )
+
+    stage_started_at = time.perf_counter()
+    _emit_training_progress(symbol, "base_bundle_fit_started", asset_started_at=asset_started_at, rows=len(df))
     asset_dir, _ = train_base_asset(df, settings)
+    _emit_training_progress(
+        symbol, "base_bundle_fit_completed", asset_started_at=asset_started_at,
+        stage_started_at=stage_started_at, bundle=str(asset_dir),
+    )
+
+    stage_started_at = time.perf_counter()
+    _emit_training_progress(
+        symbol, "base_holdout_validation_started", asset_started_at=asset_started_at,
+        holdout_frac=float(holdout_frac),
+    )
     base_holdout = test_base_holdout(df, settings, holdout_frac)
+    holdout_stats = base_holdout.get("holdout", {}) if isinstance(base_holdout, dict) else {}
+    _emit_training_progress(
+        symbol, "base_holdout_validation_completed", asset_started_at=asset_started_at,
+        stage_started_at=stage_started_at,
+        holdout_rows=base_holdout.get("holdout_rows") if isinstance(base_holdout, dict) else None,
+        holdout_trades=holdout_stats.get("trades_taken", holdout_stats.get("trades")),
+    )
     Path("logs").mkdir(exist_ok=True)
     Path("logs/test_report.json").write_text(json.dumps(base_holdout, indent=2, default=str), encoding="utf-8")
+
+    stage_started_at = time.perf_counter()
+    _emit_training_progress(
+        symbol, "trade_window_fit_started", asset_started_at=asset_started_at,
+        rows=len(df),
+    )
     asset_model, duration_report = train_duration_asset(
         df,
         settings,
         holdout_frac=holdout_frac,
         copy_legacy=promote_champion,
     )
+    _emit_training_progress(
+        symbol, "trade_window_fit_completed", asset_started_at=asset_started_at,
+        stage_started_at=stage_started_at,
+        production_ready=bool(duration_report.get("production_ready", False)),
+        readiness_reason=duration_report.get("reason"),
+        artifact=str(asset_model),
+    )
+
+    stage_started_at = time.perf_counter()
+    _emit_training_progress(symbol, "deployment_readiness_started", asset_started_at=asset_started_at)
     deployment = refresh_deployment_manifest(settings)
+    _emit_training_progress(
+        symbol, "deployment_readiness_completed", asset_started_at=asset_started_at,
+        stage_started_at=stage_started_at, production_ready=bool(deployment.get("ready")),
+        failed_checks=sorted(
+            name for name, ok in (deployment.get("checks", {}) or {}).items() if not bool(ok)
+        ),
+    )
     if deployment.get("ready") and promote_champion:
         _promote_asset_bundle(asset_dir)
+
+    _emit_training_progress(
+        symbol, "asset_training_completed", asset_started_at=asset_started_at,
+        production_ready=bool(deployment.get("ready")), bundle=str(asset_dir),
+    )
     return {
         "symbol": settings.symbol, "rows": len(df), "status": "trained",
         "bundle": str(asset_dir), "duration_bundle": str(asset_model),
@@ -225,7 +295,6 @@ def train_complete_asset(df, settings, *, holdout_frac: float, promote_champion:
         "base_holdout": base_holdout,
         "duration_report": duration_report,
     }
-
 
 def system_doctor(settings, root: str | Path = ".") -> dict:
     import importlib.util, platform
@@ -656,17 +725,25 @@ def main():
                     sources.setdefault(str(infer_symbol(path)), ('historical', str(path)))
                 except Exception:
                     continue
-        for sym, (source, path) in sources.items():
+        for asset_index, (sym, (source, path)) in enumerate(sources.items(), start=1):
             try:
                 ss = load_settings(args.config); ss.symbol = sym
                 data = read_asset_dataframe({'path': path})
                 validate_research_data(data, ss)
+                _emit_training_progress(
+                    sym, "asset_data_ready", asset_index=asset_index, asset_count=len(sources),
+                    source=source, rows=len(data), path=str(path),
+                )
                 out = train_complete_asset(
                     data, ss, holdout_frac=args.holdout_frac, promote_champion=False
                 )
                 out['source'] = source
                 reports.append(out)
             except Exception as exc:
+                _emit_training_progress(
+                    sym, "asset_training_failed", asset_index=asset_index, asset_count=len(sources),
+                    source=source, error=f'{type(exc).__name__}: {exc}',
+                )
                 reports.append({
                     'symbol': sym, 'source': source, 'status': 'error',
                     'error': f'{type(exc).__name__}: {exc}',
