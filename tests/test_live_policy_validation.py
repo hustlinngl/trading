@@ -131,7 +131,7 @@ def test_holdout_builder_persists_combined_gate_provenance(monkeypatch, tmp_path
     (asset_dir / "base_holdout_report.json").write_text(
         json.dumps(
             {
-                "validation_holdout_data_fingerprint": validation.strong_dataset_fingerprint(holdout),
+                "validation_holdout_data_fingerprint": validation.strong_dataset_fingerprint(holdout.drop(columns=["atr_14"], errors="ignore")),
                 "validation_holdout_start": str(holdout.index.min()),
                 "validation_holdout_end": str(holdout.index.max()),
             }
