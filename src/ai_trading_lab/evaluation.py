@@ -113,6 +113,11 @@ def run_configured_backtest(market: pd.DataFrame, actions: pd.Series, settings, 
         cost_multiplier=cm,
         max_holding_bars=holding,
     )
+    # Use the same side capability in evidence as in live inference.
+    # A missing or unconfigured borrow quote is not treated as a free short.
+    if not bool(getattr(settings, "short_signals_enabled", False)):
+        actions = actions.copy()
+        actions.loc[actions.astype(str).str.upper().eq("SHORT")] = "FLAT"
     return run_backtest(
         market,
         actions,
