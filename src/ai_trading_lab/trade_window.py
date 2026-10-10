@@ -108,6 +108,11 @@ def _barrier_labels(df, horizon_bars=96, min_bars=12, pt_atr=1.25, sl_atr=0.90):
     )
 
 
+def _fill_feature_frame(frame, feature_columns, fill_values):
+    numeric = frame.reindex(columns=feature_columns).replace([np.inf, -np.inf], np.nan)
+    return numeric.fillna(fill_values.reindex(feature_columns)).fillna(0.0)
+
+
 def _wilson_lower_bound(successes, total, z=1.6448536269514722):
     n = int(total)
     if n <= 0:
@@ -199,6 +204,11 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
     common = x.index.intersection(labels.index)
     x = x.loc[common]
     labels = labels.loc[common]
+    feature_columns = [
+        column for column in x.columns
+        if pd.api.types.is_numeric_dtype(x[column])
+    ]
+    x = x.reindex(columns=feature_columns).replace([np.inf, -np.inf], np.nan)
     valid = labels["direction"].notna()
     x = x.loc[valid]
     y = labels.loc[valid, "direction"].astype(int)
@@ -211,18 +221,29 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
     # before the first holdout row. Purge that boundary bar as well.
     train_mask = (original_positions >= 0) & ((original_positions + max_bars + 1) < split_pos)
     holdout_mask = (original_positions >= split_pos)
-    train_x = x.loc[train_mask]
+    train_x_raw = x.loc[train_mask]
     train_y = y.loc[train_mask]
-    holdout_x = x.loc[holdout_mask]
+    holdout_x_raw = x.loc[holdout_mask]
     holdout_y = y.loc[holdout_mask]
-    if len(train_x) < 40 or len(holdout_x) < 20:
+    if len(train_x_raw) < 40 or len(holdout_x_raw) < 20:
         return _not_ready_report(
             "insufficient_purged_split",
             save_path=save_path,
             rows=int(len(x)),
-            train_rows=int(len(train_x)),
-            holdout_rows=int(len(holdout_x)),
+            train_rows=int(len(train_x_raw)),
+            holdout_rows=int(len(holdout_x_raw)),
         )
+
+    # Impute with statistics from the chronological training subset only and
+    # persist the exact transform used by live inference.
+    fill_values = (
+        train_x_raw.median(numeric_only=True)
+        .reindex(feature_columns)
+        .replace([np.inf, -np.inf], np.nan)
+        .fillna(0.0)
+    )
+    train_x = _fill_feature_frame(train_x_raw, feature_columns, fill_values)
+    holdout_x = _fill_feature_frame(holdout_x_raw, feature_columns, fill_values)
 
     class_counts = {str(label): int((train_y == label).sum()) for label in (-1, 0, 1)}
     if any(count == 0 for count in class_counts.values()):
@@ -368,7 +389,15 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
     if save_path is not None:
         path = Path(save_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump({"model": model, "feature_columns": list(x.columns), "report": report}, path)
+        joblib.dump(
+            {
+                "model": model,
+                "feature_columns": list(feature_columns),
+                "fill_values": fill_values,
+                "report": report,
+            },
+            path,
+        )
     return report
 
 
@@ -396,7 +425,11 @@ def assess_trade_window(df, settings, model_path=None, symbol=None):
         artifact = joblib.load(path)
         model = artifact["model"]
         feature_columns = list(artifact.get("feature_columns", []))
+        fill_values = artifact.get("fill_values")
         report = artifact.get("report", {}) or {}
+        if not feature_columns or not isinstance(fill_values, pd.Series):
+            out["trade_window_reason"] = "feature_imputation_metadata_missing"
+            return out
         expected_symbol = str(symbol or getattr(settings, "symbol", ""))
         expected_timeframe = str(getattr(settings, "timeframe", "15m"))
         if str(report.get("symbol", "")) != expected_symbol:
@@ -426,7 +459,7 @@ def assess_trade_window(df, settings, model_path=None, symbol=None):
             max_bars,
             external_feature_lag_bars=getattr(settings, "external_feature_lag_bars", 1),
         )
-        x = features.reindex(columns=feature_columns).replace([np.inf, -np.inf], np.nan).ffill().fillna(0.0)
+        x = _fill_feature_frame(features, feature_columns, fill_values)
         if x.empty:
             out["trade_window_reason"] = "empty_features"
             return out
