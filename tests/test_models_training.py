@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from ai_trading_lab.meta import MetaPolicy
 from ai_trading_lab.models import SignalModel
 
 
@@ -34,7 +35,7 @@ class _FakeRegressor:
 
 
 def test_signal_model_refits_production_learners_on_all_rows_after_oos_calibration():
-    n = 320
+    n = 800
     index = pd.date_range("2025-01-01", periods=n, freq="15min", tz="UTC")
     x = pd.DataFrame({"feature": np.linspace(-2.0, 2.0, n)}, index=index)
     y_cls = pd.Series((np.arange(n) % 3 != 0).astype(float), index=index)
@@ -49,11 +50,18 @@ def test_signal_model_refits_production_learners_on_all_rows_after_oos_calibrati
     model.fit(x, y_cls, y_ret, purge_bars=12)
 
     assert model.calibration_oos_ is not None
+    # A later calibration tail is reserved for meta training after a purge gap;
+    # its labels are not used to fit ensemble weights, the calibrator, or intervals.
+    assert model.calibration_oos_.index.equals(index[-36:])
+    assert {"p_up", "p_up_raw"} <= set(model.calibration_oos_.columns)
     assert model.fit_rows_ == n
     assert clf_fit_lengths[-1] == n
     assert reg_fit_lengths[-1] == n
     assert clf_fit_lengths.count(n) == len(model.clfs)
     assert reg_fit_lengths.count(n) == len(model.regs)
+
+    predictions = model.predict(x.tail(4))
+    assert {"p_up_raw", "p_up"} <= set(predictions.columns)
 
 
 def test_isotonic_calibration_uses_platt_fallback_outside_oos_score_range():
@@ -78,3 +86,36 @@ def test_isotonic_calibration_uses_platt_fallback_outside_oos_score_range():
     assert np.all((calibrated > 0.0) & (calibrated < 1.0))
     assert np.all(np.diff(calibrated) > 0.0)
     assert np.allclose(calibrated, expected)
+
+
+
+def test_meta_policy_uses_oos_probability_and_training_time_return_features():
+    index = pd.date_range("2026-01-01", periods=1, freq="15min", tz="UTC")
+    pred = pd.DataFrame(
+        {
+            # The execution policy consumes the calibrated probability, while the
+            # meta policy was trained with the raw, out-of-sample ensemble score.
+            "p_up_raw": [0.31],
+            "p_up": [0.91],
+            "expected_return": [0.004],
+            # Conformal bounds exist at inference but were not available in the
+            # meta-training OOS frame; they must not create a train/serve mismatch.
+            "expected_return_lcb": [-0.03],
+            "expected_return_ucb": [0.04],
+            "model_disagreement": [0.02],
+            "return_disagreement": [0.01],
+        },
+        index=index,
+    )
+    features = pd.DataFrame(index=index)
+    regimes = pd.Series(["trend_up"], index=index)
+    analog = pd.DataFrame(
+        {"edge": [0.002], "agreement": [0.8], "dispersion": [0.01]},
+        index=index,
+    )
+
+    frame = MetaPolicy.frame(pred, features, regimes, analog)
+
+    assert np.isclose(frame.loc[index[0], "p_up"], 0.31)
+    assert np.isclose(frame.loc[index[0], "expected_return_lcb"], 0.004)
+    assert np.isclose(frame.loc[index[0], "expected_return_ucb"], 0.004)
