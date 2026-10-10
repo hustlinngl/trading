@@ -1,6 +1,9 @@
 # Changelog
 
 ## 0.9.43
+- Corrected short-signal net-return math to use simple PnL over entry notional, matching the event-driven backtester instead of overstating returns via an inverse-price formula.
+- Added short win/loss/timeout regression tests and a maintainer-facing source/data map.
+- Tightened Git exclusions for generated market data, trained bundles, runtime logs and Python tooling caches.
 - Added flushed JSON progress events for each asset and long-running training stage, including elapsed durations, readiness status and immediate per-asset failures.
 - Added a regression test for the multi-stage training progress contract.
 
