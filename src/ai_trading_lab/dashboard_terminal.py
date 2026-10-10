@@ -1761,6 +1761,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
         </div>
         <div class="chart-tools">
           <span id="livePrice" class="pill good">REALTIME —</span>
+          <span id="universeStatus" class="pill warn" title="L'elenco dei mercati non autorizza alcun segnale.">MARKETS —</span>
           <span id="historySource" class="pill">HISTORY —</span>
           <div class="asset-picker"><input id="asset" list="marketSymbols" inputmode="search" autocomplete="off" spellcheck="false" placeholder="Cerca simbolo..." aria-label="Cerca un simbolo di mercato"/><datalist id="marketSymbols"></datalist><button id="loadAsset" type="button">Apri</button></div>
           <select id="range" aria-label="Numero di candele"><option value="120">120</option><option value="240" selected>240</option><option value="480">480</option></select>
@@ -2154,7 +2155,10 @@ function renderFocus(data){
     box.innerHTML='<div class="top5-empty"><h2 style="margin:0">Nessun segnale</h2><p class="small" style="margin:10px 0 0">'+esc(message)+'</p></div>';
     return;
   }
-  const coverage=(data.summary&&data.summary.universe_total!=null)?Number(data.summary.universe_total):null;
+  const marketUniverse=data.market_data||{};
+  const coverage=marketUniverse.universe_total!=null
+    ?Number(marketUniverse.universe_total)
+    :((data.summary&&data.summary.universe_total!=null)?Number(data.summary.universe_total):null);
   const eligible=(data.summary&&data.summary.model_eligible_assets!=null)?Number(data.summary.model_eligible_assets):((data.summary&&data.summary.compatible_bundles!=null)?Number(data.summary.compatible_bundles):null);
   const coverageNode=$("coverageSummary");
   if(coverageNode){
@@ -2536,6 +2540,23 @@ function renderLiveData(data){
 
 function render(data){
   state.data=data;
+  const marketData=data.market_data||{};
+  const universeNode=$("universeStatus");
+  if(universeNode){
+    const source=marketData.universe_source||(data.config||{}).market_universe_source||"local_fallback";
+    const universeSymbols=Array.isArray(marketData.symbols)?marketData.symbols:((data.config||{}).market_symbols||[]);
+    const rawTotal=marketData.universe_total!=null?Number(marketData.universe_total):universeSymbols.length;
+    const total=Number.isFinite(rawTotal)?Math.max(0,rawTotal):universeSymbols.length;
+    const stale=marketData.universe_stale!==false;
+    const label=source==="live_exchange"&&!stale?"MARKETS LIVE":source==="persisted_snapshot"?"MARKETS CACHED":"MARKETS LOCAL";
+    universeNode.textContent=label+" · "+total;
+    universeNode.className="pill "+(stale?"warn":"good");
+    universeNode.title=source==="persisted_snapshot"
+      ?"Elenco dell'ultima scoperta exchange riuscita ("+(marketData.universe_snapshot_at||"data sconosciuta")+"). Solo navigazione; i segnali richiedono dati e modelli attuali."
+      :source==="live_exchange"&&!stale
+        ?"Universo exchange appena verificato. L'idoneità ai segnali viene controllata separatamente."
+        :"Universo locale/fallback. Non equivale a una lista exchange aggiornata e non abilita segnali.";
+  }
   if(!data.ok){
     $("radarRows").innerHTML='<tr><td colspan="3"><span class="signal signal-wait">WAIT</span></td></tr>';
     $("detailRows").innerHTML='<tr><td colspan="11" class="small">'+esc(data.error||"Terminale non disponibile")+'</td></tr>';
@@ -2547,7 +2568,10 @@ function render(data){
   populateAssets(signals,liveSymbols);
   renderRadar(signals);
   renderLiveData(data);
-  const coverage=(data.summary&&data.summary.universe_total!=null)?Number(data.summary.universe_total):null;
+  const marketUniverse=data.market_data||{};
+  const coverage=marketUniverse.universe_total!=null
+    ?Number(marketUniverse.universe_total)
+    :((data.summary&&data.summary.universe_total!=null)?Number(data.summary.universe_total):null);
   const eligible=(data.summary&&data.summary.model_eligible_assets!=null)?Number(data.summary.model_eligible_assets):((data.summary&&data.summary.compatible_bundles!=null)?Number(data.summary.compatible_bundles):null);
   const coverageNode=$("coverageSummary");
   if(coverageNode){
