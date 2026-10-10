@@ -677,7 +677,8 @@ def update_live_signal_outcomes(
                 rec.update(resolved)
                 rec.pop("_min_bars", None)
                 rec["resolved_at"] = pd.Timestamp.now(tz="UTC").isoformat()
-                stamp = pd.Timestamp(rec["data_timestamp"])
+                stamp_value = rec.get("data_timestamp") or rec.get("timestamp")
+                stamp = pd.Timestamp(stamp_value)
                 stamp = (
                     stamp.tz_localize("UTC")
                     if stamp.tzinfo is None
