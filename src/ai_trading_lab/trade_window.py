@@ -300,6 +300,8 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
         float(np.clip(getattr(settings, "max_participation_pct", 0.10), 0.0, 1.0))
     )
     borrow_bps_per_bar = max(0.0, float(getattr(settings, "short_borrow_bps_per_bar", 0.0)))
+    require_short_borrow_cost = bool(getattr(settings, "require_short_borrow_cost", True))
+    unexecutable_short_candidates = 0
 
     open_prices = pd.to_numeric(df["open"], errors="coerce").to_numpy(float)
     for local_i, candidate in enumerate(candidates):
@@ -315,6 +317,11 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
         if not np.isfinite(entry) or entry <= 0 or not np.isfinite(exit_price) or exit_price <= 0:
             continue
         side = int(pred_direction[local_i])
+        if side < 0 and require_short_borrow_cost and borrow_bps_per_bar <= 0.0:
+            # The configured execution model cannot open this short, so do not
+            # count it as evidence that the deployable strategy is profitable.
+            unexecutable_short_candidates += 1
+            continue
         cost_bps = raw_cost_bps + (borrow_bps_per_bar * max_bars if side < 0 else 0.0)
         gross = float(side) * (exit_price / entry - 1.0)
         net_return = gross - cost_bps / 10_000.0
@@ -363,6 +370,7 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
         "holdout_wilson_lower": wilson,
         "holdout_signals": int(support),
         "holdout_candidates_before_nonoverlap": int(candidates.sum()),
+        "holdout_unexecutable_short_candidates": int(unexecutable_short_candidates),
         "holdout_event_probability_mean": float(p_event.mean()) if len(p_event) else 0.0,
         "holdout_neutral_rate": float(np.mean(truth == 0)) if len(truth) else 0.0,
         "holdout_directional_confidence_mean": float(p_direction.mean()) if len(p_direction) else 0.0,
