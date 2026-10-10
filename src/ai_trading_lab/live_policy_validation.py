@@ -170,6 +170,14 @@ def build_live_policy_holdout_report(
     }
 
     pbo = combinatorial_pbo(np.asarray(score_matrix, dtype=float), partitions=6, seed=int(settings.seed))
+    from .research_ledger import total_trials
+    ledger_path = Path(getattr(settings, "research_ledger_path", "data/research_ledger.json"))
+    prior_trial_count = total_trials(ledger_path)
+    effective_trial_count = max(
+        3,
+        int(getattr(settings, "master_trials", 3)),
+        prior_trial_count + len(variants),
+    )
     dsr_available = bool(
         len(trade_returns) >= 30
         and np.isfinite(trade_returns).all()
@@ -178,7 +186,7 @@ def build_live_policy_holdout_report(
     dsr = (
         deflated_sharpe_ratio(
             trade_returns,
-            trials=max(3, int(getattr(settings, "master_trials", 3))),
+            trials=effective_trial_count,
             periods_per_year=365.0,
         )
         if dsr_available
@@ -214,7 +222,6 @@ def build_live_policy_holdout_report(
     # Reuse the same overlap-aware governance ledger as research/tuning. A changed
     # full-data fingerprint does not make an overlapping holdout pristine again.
     from .research_ledger import register_holdout_access
-    ledger_path = Path(getattr(settings, "research_ledger_path", "data/research_ledger.json"))
     scope = (
         f"{getattr(settings, 'symbol', 'UNKNOWN')}|"
         f"{getattr(settings, 'timeframe', 'UNKNOWN')}|"
@@ -261,6 +268,8 @@ def build_live_policy_holdout_report(
         "statistical_evidence": {
             "deflated_sharpe_ratio": float(dsr) if dsr is not None else None,
             "deflated_sharpe_ratio_available": dsr_available,
+            "deflated_sharpe_trial_count": int(effective_trial_count),
+            "prior_research_trial_count": int(prior_trial_count),
             "probability_of_backtest_overfitting": pbo,
             "stability": stability,
             "negative_control": placebo,
