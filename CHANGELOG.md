@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.43
+- Added flushed JSON progress events for each asset and long-running training stage, including elapsed durations, readiness status and immediate per-asset failures.
+- Added a regression test for the multi-stage training progress contract.
+
 ## 0.9.42
 - Fixed signal-history timestamp handoff so historical outcomes resolve against the original market-data candle, including legacy journal entries.
 - Corrected historical signal net returns to include configured round-trip market impact and elapsed short-borrow costs.
