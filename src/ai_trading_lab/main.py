@@ -659,8 +659,8 @@ def main():
         return
 
     if args.command == 'real-history':
-        from .kraken_data import fetch_ohlcv, fingerprint_frame, save_provenance
-        df, provenance = fetch_ohlcv(s.symbol, s.timeframe, limit=args.limit)
+        from .kraken_data import fetch_ohlcv as fetch_kraken_ohlcv, fingerprint_frame, save_provenance
+        df, provenance = fetch_kraken_ohlcv(s.symbol, s.timeframe, limit=args.limit)
         out_dir = Path(args.data_dir) / 'kraken'
         out_dir.mkdir(parents=True, exist_ok=True)
         stem = f"{s.symbol.replace('/', '_')}_{s.timeframe}_kraken"
