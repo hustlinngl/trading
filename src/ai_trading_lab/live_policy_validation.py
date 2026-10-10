@@ -70,7 +70,11 @@ def build_live_policy_holdout_report(
         raise ValueError("live_policy_holdout_not_temporally_pristine")
 
     specialist_all = score_trade_window_frame(
-        full_df, settings, model_path=specialist_path, symbol=str(settings.symbol)
+        full_df,
+        settings,
+        model_path=specialist_path,
+        symbol=str(settings.symbol),
+        allow_unready_for_validation=True,
     )
     specialist_holdout = specialist_all.reindex(holdout_df.index)
     market = holdout_df.copy()
