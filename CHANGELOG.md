@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.42
+- Corrected historical signal net returns to include configured round-trip market impact and elapsed short-borrow costs.
+- Marked outcomes as ambiguous with an unknown return when OHLC data cannot determine barrier ordering; invalid cost inputs fail closed.
+- Added regression tests for execution-cost accounting and ambiguous candle outcomes.
+
 ## 0.9.41
 - Aligned live signal outcome tracking with executable opening-gap, minimum-holding and time-stop semantics.
 - Corrected class-balanced trade-window scores for the training class prior before treating them as event probabilities; legacy model bundles are invalidated by the semantic fingerprint.
