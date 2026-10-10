@@ -191,6 +191,113 @@ def test_signal_terminal_publishes_market_data_without_model_signals(tmp_path, m
 
 
 
+def test_market_universe_snapshot_round_trips_only_authoritative_discovery(tmp_path):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path)
+    live = {
+        "exchange_market_metadata": True,
+        "universe_mode": "all_active_markets",
+        "universe_total": 3,
+        "market_counts": {"spot": 3},
+    }
+
+    terminal._save_market_snapshot(
+        ["BTC/USDT", "ETH/USDT", "BTC/USDT", "bad-symbol", "SOL/USDT"],
+        live,
+    )
+    snapshot = terminal._load_market_snapshot()
+
+    assert snapshot["symbols"] == ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
+    assert snapshot["universe_total"] == 3
+    assert snapshot["market_counts"] == {"spot": 3}
+    assert snapshot["source"] == "all_active_markets"
+
+    # A fallback scan must never overwrite the last authoritative snapshot.
+    terminal._save_market_snapshot(
+        ["LOCAL/USDT"],
+        {"exchange_market_metadata": False, "universe_total": 1},
+    )
+    assert terminal._load_market_snapshot()["symbols"] == snapshot["symbols"]
+
+
+def test_market_universe_snapshot_rejects_expired_or_wrong_exchange(tmp_path):
+    import json
+    from datetime import datetime, timedelta, timezone
+
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path)
+    terminal._save_market_snapshot(
+        ["BTC/USDT"],
+        {"exchange_market_metadata": True, "universe_total": 1},
+    )
+    payload = json.loads(terminal._market_snapshot_path.read_text(encoding="utf-8"))
+    payload["generated_at"] = (datetime.now(timezone.utc) - timedelta(days=31)).isoformat()
+    terminal._market_snapshot_path.write_text(json.dumps(payload), encoding="utf-8")
+    assert terminal._load_market_snapshot() == {}
+
+    payload["generated_at"] = datetime.now(timezone.utc).isoformat()
+    payload["exchange"] = "other-exchange"
+    terminal._market_snapshot_path.write_text(json.dumps(payload), encoding="utf-8")
+    assert terminal._load_market_snapshot() == {}
+
+
+def test_offline_terminal_uses_saved_universe_for_navigation_not_scan_scope(tmp_path, monkeypatch):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    settings.live_symbols = ("BTC/USDT",)
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path, refresh_seconds=30)
+    terminal._save_market_snapshot(
+        ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT"],
+        {
+            "exchange_market_metadata": True,
+            "universe_mode": "all_active_markets",
+            "universe_total": 4,
+            "market_counts": {"spot": 4},
+        },
+    )
+    monkeypatch.setattr(terminal, "_get_exchange", lambda: None)
+    terminal._exchange_error = "offline"
+    monkeypatch.setattr(
+        terminal_mod,
+        "scan_top5",
+        lambda *args, **kwargs: ([], {
+            "universe_total": 1,
+            "universe_model_backed": 1,
+            "universe_model_eligible": 1,
+            "universe_evaluated": 1,
+            "universe_signals": 0,
+            "universe_waits": 1,
+            "assessment_failures": 0,
+            "market_symbols": ["BTC/USDT"],
+            "market_counts": {"spot": 1},
+            "exchange_market_metadata": False,
+            "universe_mode": "local_fallback_universe",
+        }),
+    )
+    monkeypatch.setattr(
+        terminal_mod,
+        "update_live_signal_outcomes",
+        lambda *args, **kwargs: {"updated": 0, "open": 0, "closed": 0},
+    )
+
+    state = terminal._terminal_state(force=True)
+
+    assert state["market_data"]["symbols"] == [
+        "BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT"
+    ]
+    assert state["market_data"]["universe_source"] == "persisted_snapshot"
+    assert state["market_data"]["universe_stale"] is True
+    assert state["market_data"]["universe_total"] == 4
+    assert state["market_data"]["quote_symbols"] == ["BTC/USDT"]
+    assert state["summary"]["universe_total"] == 1
+    assert state["signals"] == []
+
+
 def test_signal_terminal_quotes_visible_symbols_without_scanning_all_tickers(tmp_path, monkeypatch):
     import signal_dashboard as terminal_mod
 
