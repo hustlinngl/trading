@@ -36,11 +36,15 @@ def load_ledger(path: str | Path) -> dict[str, Any]:
         return _default()
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, TypeError):
-        # A corrupt ledger cannot be interpreted as a pristine holdout.
-        return _default()
+    except (OSError, json.JSONDecodeError, TypeError) as exc:
+        # A present-but-unreadable ledger must never reset global trial counts
+        # or turn a previously touched holdout back into a pristine one.
+        raise RuntimeError(f"research_ledger_unreadable:{p}") from exc
     if not isinstance(data, dict):
-        return _default()
+        raise RuntimeError(f"research_ledger_invalid_schema:{p}")
+    schema = data.get("schema_version")
+    if schema is not None and int(schema) > SCHEMA_VERSION:
+        raise RuntimeError(f"research_ledger_schema_too_new:{schema}")
     data.setdefault("schema_version", SCHEMA_VERSION)
     data.setdefault("created_at", _now())
     data.setdefault("updated_at", _now())
