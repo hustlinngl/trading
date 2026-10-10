@@ -557,25 +557,50 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
     return report
 
 
-def assess_trade_window(df, settings, model_path=None, symbol=None):
-    """Evaluate the persisted multi-class 3–24h specialist as an event/direction verifier."""
-    path = Path(
-        model_path
-        or getattr(settings, "trade_window_model_path", "models/champion/trade_window_specialist.joblib")
-    )
-    out = {
+def score_trade_window_frame(df, settings, model_path=None, symbol=None):
+    """Score the specialist row-by-row using the same checks as live inference.
+
+    This is used by live inference and chronological policy validation. It does not
+    use future labels; features are causal, class-prior correction is identical to
+    the live path, and missing/untrained features are rejected before imputation.
+    """
+    frame = df.sort_index().copy() if isinstance(df, pd.DataFrame) else pd.DataFrame()
+    index = frame.index
+    columns = {
         "trade_window_available": False,
         "trade_window_ready": False,
         "trade_window_direction": "FLAT",
         "trade_window_confidence": 0.0,
         "trade_window_event_probability": 0.0,
-        "trade_window_reason": "disabled",
+        "trade_window_reason": "unavailable",
+        "trade_window_report_precision": np.nan,
+        "trade_window_feature_missing_fraction": 1.0,
     }
+
+    def failed(reason, *, available=False, precision=np.nan):
+        result = pd.DataFrame(index=index)
+        result["trade_window_available"] = bool(available)
+        result["trade_window_ready"] = False
+        result["trade_window_direction"] = "FLAT"
+        result["trade_window_confidence"] = 0.0
+        result["trade_window_event_probability"] = 0.0
+        result["trade_window_reason"] = str(reason)
+        result["trade_window_report_precision"] = float(precision) if np.isfinite(precision) else np.nan
+        result["trade_window_feature_missing_fraction"] = 1.0
+        return result
+
     if not bool(getattr(settings, "trade_window_enabled", True)):
-        return out
+        return failed("disabled")
+    path = Path(
+        model_path
+        or getattr(settings, "trade_window_model_path", "models/champion/trade_window_specialist.joblib")
+    )
     if not path.exists():
-        out["trade_window_reason"] = "artifact_missing"
-        return out
+        return failed("artifact_missing")
+    if frame.empty:
+        return failed("empty_data")
+    if frame.index.has_duplicates:
+        return failed("duplicate_timestamps")
 
     try:
         artifact = joblib.load(path)
@@ -584,88 +609,105 @@ def assess_trade_window(df, settings, model_path=None, symbol=None):
         fill_values = artifact.get("fill_values")
         report = artifact.get("report", {}) or {}
         if not feature_columns or not isinstance(fill_values, pd.Series):
-            out["trade_window_reason"] = "feature_imputation_metadata_missing"
-            return out
+            return failed("feature_imputation_metadata_missing")
         expected_symbol = str(symbol or getattr(settings, "symbol", ""))
         expected_timeframe = str(getattr(settings, "timeframe", "15m"))
         if str(report.get("symbol", "")) != expected_symbol:
-            out["trade_window_reason"] = "symbol_mismatch"
-            return out
+            return failed("symbol_mismatch")
         if str(report.get("timeframe", "")) != expected_timeframe:
-            out["trade_window_reason"] = "timeframe_mismatch"
-            return out
+            return failed("timeframe_mismatch")
         if str(report.get("model_semantics_fingerprint", "")) != model_semantics_fingerprint(settings):
-            out["trade_window_reason"] = "model_semantics_mismatch"
-            return out
+            return failed("model_semantics_mismatch")
         if str(report.get("deployment_semantics_fingerprint", "")) != deployment_semantics_fingerprint(settings):
-            out["trade_window_reason"] = "deployment_semantics_mismatch"
-            return out
+            return failed("deployment_semantics_mismatch")
+        precision = float(report.get("holdout_precision", 0.0) or 0.0)
+        if report.get("probability_semantics") != BALANCED_PROBABILITY_SEMANTICS:
+            return failed("probability_semantics_missing", available=True, precision=precision)
         if not bool(report.get("production_ready", False)):
-            out.update(
-                {
-                    "trade_window_available": True,
-                    "trade_window_reason": "not_production_ready",
-                    "trade_window_report_precision": float(report.get("holdout_precision", 0.0) or 0.0),
-                }
-            )
-            return out
-
-        df = df.sort_index().copy()
-        if df.index.has_duplicates:
-            out["trade_window_reason"] = "duplicate_timestamps"
-            return out
+            return failed("not_production_ready", available=True, precision=precision)
 
         base_minutes = float(
             getattr(settings, "base_bar_minutes", timeframe_minutes(getattr(settings, "timeframe", "15m")))
         )
         max_bars = max(
-            1, int(round(float(getattr(settings, "trade_window_max_hours", 24.0)) * 60.0 / base_minutes))
+            1,
+            int(round(float(getattr(settings, "trade_window_max_hours", 24.0)) * 60.0 / base_minutes)),
         )
         features, _, _ = make_features(
-            df,
+            frame,
             max_bars,
             external_feature_lag_bars=getattr(settings, "external_feature_lag_bars", 1),
         )
-        x = _fill_feature_frame(features, feature_columns, fill_values)
-        if x.empty:
-            out["trade_window_reason"] = "empty_features"
-            return out
-
-        if report.get("probability_semantics") != BALANCED_PROBABILITY_SEMANTICS:
-            out["trade_window_reason"] = "probability_semantics_missing"
-            return out
-        weighted_probability = model.predict_proba(x.iloc[[-1]])
+        absent = [column for column in feature_columns if column not in features.columns]
+        if absent:
+            return failed("missing_feature_columns:" + ",".join(absent[:32]), available=True, precision=precision)
+        raw = features.reindex(columns=feature_columns).replace([np.inf, -np.inf], np.nan)
+        numeric = raw.apply(pd.to_numeric, errors="coerce")
+        missing_fraction = numeric.isna().mean(axis=1).astype(float)
         try:
-            probability = _correct_balanced_class_probabilities(
-                weighted_probability, model.classes_, report.get("train_class_counts")
-            )[0]
-        except ValueError as exc:
-            out["trade_window_reason"] = str(exc)
-            return out
+            allowed_missing_fraction = float(getattr(settings, "live_max_missing_feature_fraction", 0.0))
+        except (TypeError, ValueError, OverflowError):
+            allowed_missing_fraction = -1.0
+        if not np.isfinite(allowed_missing_fraction) or not 0.0 <= allowed_missing_fraction <= 1.0:
+            return failed("invalid_live_max_missing_feature_fraction", available=True, precision=precision)
+        valid_features = missing_fraction.le(allowed_missing_fraction + 1e-12)
+        x = _fill_feature_frame(numeric, feature_columns, fill_values)
+        if x.empty:
+            return failed("empty_features", available=True, precision=precision)
+
+        weighted_probability = model.predict_proba(x)
+        probability = _correct_balanced_class_probabilities(
+            weighted_probability, model.classes_, report.get("train_class_counts")
+        )
+        p_short, p_neutral, p_long, p_event, p_direction, pred_direction = _event_score_arrays(
+            probability, model.classes_
+        )
         min_confidence = float(getattr(settings, "trade_window_min_confidence", 0.80))
         min_event_probability = float(getattr(settings, "trade_window_min_event_probability", 0.60))
-        scores = directional_event_probabilities(
-            probability,
-            model.classes_,
-            min_event_probability=min_event_probability,
+        active = (
+            valid_features.to_numpy(dtype=bool)
+            & (p_event >= min_event_probability)
+            & (p_direction >= min_confidence)
+            & (p_event > 1e-12)
         )
-        direction = scores["direction"]
-        confidence = scores["direction_confidence"]
-        event_probability = scores["event_probability"]
-        active = direction in {"LONG", "SHORT"} and event_probability >= min_event_probability and confidence >= min_confidence
-
-        out.update(
+        directions = np.where(pred_direction > 0, "LONG", "SHORT")
+        directions = np.where(active, directions, "FLAT")
+        reasons = np.where(
+            ~valid_features.to_numpy(dtype=bool),
+            "live_feature_missing_fraction",
+            np.where(active, "ok", "below_event_or_direction_threshold"),
+        )
+        result = pd.DataFrame(
             {
                 "trade_window_available": True,
-                "trade_window_ready": bool(active),
-                "trade_window_direction": direction if active else "FLAT",
-                "trade_window_confidence": confidence,
-                "trade_window_event_probability": event_probability,
-                "trade_window_report_precision": float(report.get("holdout_precision", 0.0) or 0.0),
-                "trade_window_reason": "ok" if active else "below_event_or_direction_threshold",
-            }
+                "trade_window_ready": active,
+                "trade_window_direction": directions,
+                "trade_window_confidence": p_direction.astype(float),
+                "trade_window_event_probability": p_event.astype(float),
+                "trade_window_reason": reasons,
+                "trade_window_report_precision": precision,
+                "trade_window_feature_missing_fraction": missing_fraction.astype(float),
+            },
+            index=features.index,
         )
-        return out
+        return result.reindex(index)
     except Exception as exc:
-        out["trade_window_reason"] = f"{type(exc).__name__}:{exc}"
-        return out
+        return failed(f"{type(exc).__name__}:{exc}")
+
+
+def assess_trade_window(df, settings, model_path=None, symbol=None):
+    """Return the final row from the shared strict specialist inference path."""
+    fallback = {
+        "trade_window_available": False,
+        "trade_window_ready": False,
+        "trade_window_direction": "FLAT",
+        "trade_window_confidence": 0.0,
+        "trade_window_event_probability": 0.0,
+        "trade_window_reason": "unavailable",
+        "trade_window_report_precision": 0.0,
+        "trade_window_feature_missing_fraction": 1.0,
+    }
+    scores = score_trade_window_frame(df, settings, model_path=model_path, symbol=symbol)
+    if scores.empty:
+        return fallback
+    return scores.iloc[-1].to_dict()

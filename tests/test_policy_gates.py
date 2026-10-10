@@ -54,7 +54,9 @@ def test_short_signal_uses_upper_bound_for_directional_uncertainty():
     settings = replace(
         load_settings("config.yaml"),
         signal_only_mode=True,
-        require_short_borrow_cost=False,
+        require_short_borrow_cost=True,
+        short_signals_enabled=True,
+        short_borrow_bps_per_bar=1.0,
     )
     # A bearish forecast is only robust if the upper confidence bound remains below zero.
     risky = row(p_up=0.10, expected_return=-0.004, expected_return_lcb=-0.010, expected_return_ucb=0.002)
@@ -62,7 +64,7 @@ def test_short_signal_uses_upper_bound_for_directional_uncertainty():
     assert action == "FLAT"
     assert "signal_expected_return" in reasons
 
-    robust = row(action="SHORT", trade_window_direction="SHORT", p_up=0.10, expected_return=-0.006, expected_return_lcb=-0.012, expected_return_ucb=-0.004)
+    robust = row(action="SHORT", trade_window_direction="SHORT", market_type="swap", p_up=0.10, expected_return=-0.006, expected_return_lcb=-0.012, expected_return_ucb=-0.004)
     action, reasons = live_signal_gate(robust, settings)
     assert action == "SHORT"
     assert reasons == []
@@ -89,6 +91,43 @@ def test_short_economic_hurdle_includes_borrow():
     action, score = decide_actions(pred, regime, analog, np.array([0.9]), settings)
     assert action.iloc[0] in {"SHORT","FLAT"}
     assert score.attrs["economic_hurdle_bps"] >= 20.0 * 96
+
+
+def test_short_is_disabled_by_default_even_for_bearish_predictions():
+    settings = replace(
+        load_settings("config.yaml"),
+        signal_only_mode=True,
+        short_signals_enabled=False,
+        require_short_borrow_cost=False,
+    )
+    action, reasons = live_signal_gate(
+        row(action="SHORT", trade_window_direction="SHORT", market_type="swap",
+            p_up=0.10, expected_return=-0.006, expected_return_lcb=-0.012,
+            expected_return_ucb=-0.004),
+        settings,
+    )
+
+    assert action == "FLAT"
+    assert "short_signals_disabled" in reasons
+
+
+def test_short_is_rejected_for_spot_even_when_short_capability_is_enabled():
+    settings = replace(
+        load_settings("config.yaml"),
+        signal_only_mode=True,
+        short_signals_enabled=True,
+        require_short_borrow_cost=True,
+        short_borrow_bps_per_bar=1.0,
+    )
+    action, reasons = live_signal_gate(
+        row(action="SHORT", trade_window_direction="SHORT", market_type="spot",
+            p_up=0.10, expected_return=-0.006, expected_return_lcb=-0.012,
+            expected_return_ucb=-0.004),
+        settings,
+    )
+
+    assert action == "FLAT"
+    assert "short_instrument_not_supported" in reasons
 
 
 def test_live_assessment_empty_data_fails_closed(monkeypatch):

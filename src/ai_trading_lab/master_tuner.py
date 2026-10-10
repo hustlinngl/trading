@@ -81,7 +81,11 @@ def _actions(snapshot,settings,params):
     pred=snapshot.pred.copy(); er=pred.expected_return.to_numpy(float)
     if snapshot.conformal_scaled_residuals is not None and len(snapshot.conformal_scaled_residuals) and 'atr_pct' in snapshot.features:
         level=float(np.clip(params.get('conformal_level',getattr(settings,'conformal_level',0.90)),0.50,0.999)); q=float(np.quantile(snapshot.conformal_scaled_residuals,level,method='higher')); margin=np.maximum(np.abs(snapshot.features.atr_pct.to_numpy(float)),1e-6)*q; pred['expected_return_lcb']=er-margin; pred['expected_return_ucb']=er+margin
-    actions,_=decide_actions(pred,snapshot.regimes,snapshot.analog,snapshot.meta_p,settings,regime_persistence=snapshot.regime_persistence,regime_probs=snapshot.regime_probs,**params); return actions
+    actions,_=decide_actions(pred,snapshot.regimes,snapshot.analog,snapshot.meta_p,settings,regime_persistence=snapshot.regime_persistence,regime_probs=snapshot.regime_probs,**params)
+    if not bool(getattr(settings, "short_signals_enabled", False)):
+        actions = actions.copy()
+        actions.loc[actions.astype(str).str.upper().eq("SHORT")] = "FLAT"
+    return actions
 
 def _evaluate_params(folds,settings,params,cost_multipliers=(1.0,1.25,1.5)):
     rows=[]
@@ -104,30 +108,157 @@ def _evaluate_params(folds,settings,params,cost_multipliers=(1.0,1.25,1.5)):
     if worst_dd<-0.20: objective-=1.5*(-0.20-worst_dd)
     return {'objective':objective,'rows':frame,'median_score':float(frame.robust_score.median()),'score_std':float(score_std),'positive_ratio':positive,'worst_drawdown':worst_dd,'total_trades':trades,'q25_score':q25,'fold_trade_coverage':coverage,'cost_degradation':cost_degradation,'selection_penalty':float(selection_penalty),'regime_coverage':regime_cov,'positive_regime_ratio':regime_pos}
 
-def _suggest(trial):
-    return {'probability_threshold':trial.suggest_float('probability_threshold',0.52,0.66),'min_expected_return':trial.suggest_float('min_expected_return',0.00005,0.0075,log=True),'decision_threshold':trial.suggest_float('decision_threshold',0.02,0.24),'meta_threshold':trial.suggest_float('meta_threshold',0.50,0.62),'stop_atr_mult':float(1.0),'take_profit_rr':float(1.6),'max_holding_bars':int(8),'regime_weight':trial.suggest_float('regime_weight',0,0.12),'uncertainty_penalty_mult':trial.suggest_float('uncertainty_penalty_mult',0.5,4.0),'memory_weight':trial.suggest_float('memory_weight',0.05,0.28),'meta_weight':trial.suggest_float('meta_weight',0.08,0.28),'conviction_weight':trial.suggest_float('conviction_weight',0.20,0.45),'edge_weight':trial.suggest_float('edge_weight',0.18,0.42),'conformal_blend':trial.suggest_float('conformal_blend',0,1),'conformal_level':trial.suggest_float('conformal_level',0.70,0.95)}
+def _suggest(trial, settings=None, aligned=None):
+    """Suggest policy values while preserving the configured execution geometry.
 
-def _placebo_test(folds,settings,params,seed=42,n=6):
-    rng=np.random.default_rng(seed); real=_evaluate_params(folds,settings,params,cost_multipliers=(1.0,))['objective']; null_values=[]
-    for _ in range(max(1,int(n))):
+    Stops, take-profit ratio and holding horizon are currently intentionally
+    locked to validated execution semantics. Never tune with one geometry and
+    then report/promote with another.
+    """
+    if aligned is None:
+        if settings is not None:
+            aligned = aligned_execution_parameters(settings)
+        else:
+            aligned = {
+                "stop_atr_mult": 1.8,
+                "take_profit_rr": 2.2,
+                "max_holding_bars": 96,
+            }
+    return {
+        "probability_threshold": trial.suggest_float("probability_threshold", 0.52, 0.66),
+        "min_expected_return": trial.suggest_float("min_expected_return", 0.00005, 0.0075, log=True),
+        "decision_threshold": trial.suggest_float("decision_threshold", 0.02, 0.24),
+        "meta_threshold": trial.suggest_float("meta_threshold", 0.50, 0.62),
+        "stop_atr_mult": float(aligned["stop_atr_mult"]),
+        "take_profit_rr": float(aligned["take_profit_rr"]),
+        "max_holding_bars": int(aligned["max_holding_bars"]),
+        "regime_weight": trial.suggest_float("regime_weight", 0, 0.12),
+        "uncertainty_penalty_mult": trial.suggest_float("uncertainty_penalty_mult", 0.5, 4.0),
+        "memory_weight": trial.suggest_float("memory_weight", 0.05, 0.28),
+        "meta_weight": trial.suggest_float("meta_weight", 0.08, 0.28),
+        "conviction_weight": trial.suggest_float("conviction_weight", 0.20, 0.45),
+        "edge_weight": trial.suggest_float("edge_weight", 0.18, 0.42),
+        "conformal_blend": trial.suggest_float("conformal_blend", 0, 1),
+        "conformal_level": trial.suggest_float("conformal_level", 0.70, 0.95),
+    }
+
+def _activity_summary(report, folds):
+    rows = report.get("rows")
+    if not isinstance(rows, pd.DataFrame) or rows.empty:
+        return {"trades": 0, "active_folds": 0, "folds": int(len(folds))}
+    base = rows.loc[np.isclose(pd.to_numeric(rows.get("cost_multiplier", 1.0), errors="coerce"), 1.0)]
+    if base.empty:
+        return {"trades": 0, "active_folds": 0, "folds": int(len(folds))}
+    trades = pd.to_numeric(base.get("trades", 0), errors="coerce").fillna(0)
+    active = int((trades > 0).sum())
+    return {
+        "trades": int(trades.sum()),
+        "active_folds": active,
+        "folds": int(len(folds)),
+    }
+
+
+def _sufficient_activity(report, folds):
+    activity = _activity_summary(report, folds)
+    required_active = max(3, int(math.ceil(max(1, activity["folds"]) * 0.5)))
+    enough = activity["trades"] >= max(10, 2 * len(folds)) and activity["active_folds"] >= required_active
+    return bool(enough), activity
+
+
+def _placebo_test(folds,settings,params,seed=42,n=100):
+    requested=max(0,int(n))
+    real_report=_evaluate_params(folds,settings,params,cost_multipliers=(1.0,))
+    real=float(real_report.get("objective",-1e9))
+    real_activity=_activity_summary(real_report,folds)
+    if real_activity["trades"] < max(10,2*len(folds)) or real_activity["active_folds"] < max(3,int(math.ceil(len(folds)*0.5))):
+        return {
+            "available":False,"reason":"insufficient_real_trading_activity",
+            "real_objective":real,"real_activity":real_activity,"placebo_samples":0,
+            "placebo_q95":None,"passes_95pct_negative_control":False,
+        }
+    if requested < 100:
+        return {
+            "available":False,"reason":"insufficient_placebo_replicates",
+            "real_objective":real,"real_activity":real_activity,"placebo_samples":requested,
+            "placebo_q95":None,"passes_95pct_negative_control":False,
+        }
+    rng=np.random.default_rng(seed); null_values=[]
+    for _ in range(requested):
         shuffled=[]
         for snap in folds:
-            order=rng.permutation(len(snap.test)); pred=snap.pred.iloc[order].copy(); pred.index=snap.pred.index; analog=snap.analog.iloc[order].copy(); analog.index=snap.analog.index; regimes=snap.regimes.iloc[order].copy(); regimes.index=snap.regimes.index; persistence=None if snap.regime_persistence is None else snap.regime_persistence.iloc[order]; probs=None if snap.regime_probs is None else snap.regime_probs.iloc[order]
+            order=rng.permutation(len(snap.test))
+            pred=snap.pred.iloc[order].copy(); pred.index=snap.pred.index
+            analog=snap.analog.iloc[order].copy(); analog.index=snap.analog.index
+            regimes=snap.regimes.iloc[order].copy(); regimes.index=snap.regimes.index
+            persistence=None if snap.regime_persistence is None else snap.regime_persistence.iloc[order]
+            probs=None if snap.regime_probs is None else snap.regime_probs.iloc[order]
             if persistence is not None: persistence.index=snap.regime_persistence.index
             if probs is not None: probs.index=snap.regime_probs.index
             shuffled.append(FoldSnapshot(snap.fold,snap.test,snap.features,pred,regimes,analog,np.asarray(snap.meta_p)[order],persistence,probs,snap.conformal_abs_residuals,snap.conformal_scaled_residuals))
-        null_values.append(float(_evaluate_params(shuffled,settings,params,cost_multipliers=(1.0,))['objective']))
-    arr=np.asarray(null_values,float); q95=float(np.quantile(arr,0.95)) if len(arr) else float('inf')
-    return {'real_objective':float(real),'placebo_mean':float(np.mean(arr)) if len(arr) else 0.0,'placebo_q95':q95,'placebo_max':float(np.max(arr)) if len(arr) else 0.0,'placebo_samples':int(len(arr)),'passes_95pct_negative_control':bool(real>q95)}
+        placebo_report=_evaluate_params(shuffled,settings,params,cost_multipliers=(1.0,))
+        placebo_activity=_activity_summary(placebo_report,shuffled)
+        if placebo_activity["trades"] > 0:
+            null_values.append(float(placebo_report.get("objective",-1e9)))
+        else:
+            # A no-trade placebo is still a valid null observation and should
+            # not be discarded in favor of the more optimistic active samples.
+            null_values.append(float(placebo_report.get("objective",-1e9)))
+    arr=np.asarray(null_values,float)
+    q95=float(np.quantile(arr,0.95)) if len(arr)>=100 else None
+    available=bool(len(arr)>=100 and np.isfinite(q95))
+    return {
+        "available":available,
+        "reason":None if available else "insufficient_valid_placebo_replicates",
+        "real_objective":real,"real_activity":real_activity,
+        "placebo_mean":float(np.mean(arr)) if len(arr) else None,
+        "placebo_q95":q95,
+        "placebo_max":float(np.max(arr)) if len(arr) else None,
+        "placebo_samples":int(len(arr)),
+        "passes_95pct_negative_control":bool(available and real>q95),
+    }
 
 def _stability_test(folds,settings,best,seed=42,n=12):
-    rng=np.random.default_rng(seed); base=_evaluate_params(folds,settings,best,cost_multipliers=(1,1.25,1.5))['objective']; vals=[]
-    for _ in range(int(n)):
+    rng=np.random.default_rng(seed)
+    base_report=_evaluate_params(folds,settings,best,cost_multipliers=(1.0,1.25,1.5))
+    base=float(base_report.get("objective",-1e9))
+    enough,activity=_sufficient_activity(base_report,folds)
+    if not enough:
+        return {
+            "available":False,"reason":"insufficient_trading_activity",
+            "base_objective":base,"base_activity":activity,
+            "median_perturbed":None,"worst_perturbed":None,
+            "degradation_median":None,"degradation_worst":None,
+            "stable":False,
+        }
+    vals=[]; perturb_activity=[]; valid=True
+    for _ in range(max(1,int(n))):
         p=dict(best)
         for key in ['probability_threshold','decision_threshold','meta_threshold','regime_weight','uncertainty_penalty_mult','memory_weight','meta_weight','conviction_weight','edge_weight']:
-            scale=0.04 if key!='uncertainty_penalty_mult' else 0.08; p[key]=float(p[key]*(1+rng.normal(0,scale)))
-        p['probability_threshold']=float(np.clip(p['probability_threshold'],0.50,0.80)); p['meta_threshold']=float(np.clip(p['meta_threshold'],0.50,0.75)); p['decision_threshold']=float(np.clip(p['decision_threshold'],0.01,0.50)); p['min_expected_return']=float(max(1e-5,p['min_expected_return']*(1+rng.normal(0,0.04)))); vals.append(_evaluate_params(folds,settings,p,cost_multipliers=(1.25,1.5))['objective'])
-    vals=np.asarray(vals,float); return {'base_objective':float(base),'median_perturbed':float(np.median(vals)),'worst_perturbed':float(np.min(vals)),'degradation_median':float(base-np.median(vals)),'degradation_worst':float(base-np.min(vals)),'stable':bool(np.median(vals)>=base-0.10 and np.min(vals)>=base-0.35)}
+            scale=0.04 if key!='uncertainty_penalty_mult' else 0.08
+            p[key]=float(p[key]*(1+rng.normal(0,scale)))
+        p['probability_threshold']=float(np.clip(p['probability_threshold'],0.50,0.80))
+        p['meta_threshold']=float(np.clip(p['meta_threshold'],0.50,0.75))
+        p['decision_threshold']=float(np.clip(p['decision_threshold'],0.01,0.50))
+        p['min_expected_return']=float(max(1e-5,p['min_expected_return']*(1+rng.normal(0,0.04))))
+        report=_evaluate_params(folds,settings,p,cost_multipliers=(1.0,1.25,1.5))
+        activity_ok, activity_row=_sufficient_activity(report,folds)
+        perturb_activity.append(activity_row)
+        if not activity_ok:
+            valid=False
+        vals.append(float(report.get("objective",-1e9)))
+    vals=np.asarray(vals,float)
+    median=float(np.median(vals)); worst=float(np.min(vals))
+    stable=bool(valid and median>=base-0.10 and worst>=base-0.35)
+    return {
+        "available":bool(valid and len(vals)>=max(1,int(n))),
+        "reason":None if valid else "perturbation_lost_trading_activity",
+        "base_objective":base,"base_activity":activity,
+        "median_perturbed":median,"worst_perturbed":worst,
+        "degradation_median":float(base-median),
+        "degradation_worst":float(base-worst),
+        "perturbed_activity":perturb_activity,
+        "stable":stable,
+    }
 
 def master_tune(df,settings,trials=40,final_holdout_frac=0.15,stability_samples=8,tuning_folds=6,save_path=None):
     if not 0.05<=final_holdout_frac<=0.30: raise ValueError('final_holdout_frac must be between 0.05 and 0.30')
@@ -152,7 +283,7 @@ def master_tune(df,settings,trials=40,final_holdout_frac=0.15,stability_samples=
     cache={}
     trial_fold_scores={}
     def objective(trial):
-        params=_suggest(trial); rep=_evaluate_params(folds,settings,params,cost_multipliers=(1.0,1.5)); cache[trial.number]=rep
+        params=_suggest(trial,settings=settings,aligned=aligned); rep=_evaluate_params(folds,settings,params,cost_multipliers=(1.0,1.5)); cache[trial.number]=rep
         if isinstance(rep.get('rows'),pd.DataFrame) and not rep['rows'].empty:
             trial_fold_scores[int(trial.number)] = rep['rows'].groupby('fold').robust_score.median().to_dict()
         return float(rep['objective'])
@@ -178,17 +309,46 @@ def master_tune(df,settings,trials=40,final_holdout_frac=0.15,stability_samples=
             pbo_evidence=combinatorial_pbo(mat,partitions=min(8,len(fold_ids)),seed=settings.seed)
     except Exception as exc:
         pbo_evidence={'available':False,'reason':f'{type(exc).__name__}: {exc}','pbo':None,'combinations':0}
-    stability=_stability_test(folds,settings,best,seed=settings.seed,n=stability_samples); placebo=_placebo_test(folds,settings,best,seed=settings.seed+17,n=min(6,max(3,stability_samples//2)))
-    holdout_fp=strong_dataset_fingerprint(df); holdout_access=register_holdout_access(ledger_path,dataset_fingerprint=holdout_fp,holdout_start=str(holdout_df.index[0]),holdout_end=str(holdout_df.index[-1]),holdout_frac=float(final_holdout_frac),purpose='master_tune_final_holdout'); tuned=replace(settings,**{k:v for k,v in best.items() if hasattr(settings,k)}); engine=AdaptiveEngine(tuned); engine.fit(tuning_df); feat=make_oos_features(tuning_df,holdout_df,tuned.horizon_bars,external_feature_lag_bars=getattr(tuned,'external_feature_lag_bars',1)); pred=engine.model.predict(feat); regimes=engine.regimes.transform(feat); analog=engine.memory.query_many(feat); rp=engine.regimes.persistence(feat); rprob=engine.regimes.semantic_probabilities(feat); meta_p=engine.meta.predict_proba(MetaPolicy.frame(pred,feat,regimes,analog,regime_persistence=rp,regime_probs=rprob)); snap=FoldSnapshot(-1,holdout_df,feat,pred,regimes,analog,meta_p,rp,rprob,getattr(engine.model,'conformal_abs_residuals_',None),getattr(engine.model,'conformal_scaled_residuals_',None)); final=_evaluate_params([snap],tuned,best,cost_multipliers=(1,1.25,1.5))
-    final_stats=final['rows'].copy() if isinstance(final.get('rows'),pd.DataFrame) else pd.DataFrame(); final_evidence={}
+    stability=_stability_test(folds,settings,best,seed=settings.seed,n=stability_samples); placebo=_placebo_test(folds,settings,best,seed=settings.seed+17,n=max(100,int(getattr(settings,'master_placebo_samples',100))))
+    holdout_fp=strong_dataset_fingerprint(df); holdout_scope=f"{getattr(settings,'symbol','UNKNOWN')}|{getattr(settings,'timeframe','UNKNOWN')}|{getattr(settings,'model_name','adaptive_signal')}"; holdout_access=register_holdout_access(ledger_path,dataset_fingerprint=holdout_fp,holdout_start=str(holdout_df.index[0]),holdout_end=str(holdout_df.index[-1]),holdout_frac=float(final_holdout_frac),purpose='master_tune_final_holdout',scope=holdout_scope,metadata={'symbol':str(getattr(settings,'symbol','UNKNOWN')),'timeframe':str(getattr(settings,'timeframe','UNKNOWN')),'holdout_start':str(holdout_df.index[0]),'holdout_end':str(holdout_df.index[-1])}); tuned=replace(settings,**{k:v for k,v in best.items() if hasattr(settings,k)}); engine=AdaptiveEngine(tuned); engine.fit(tuning_df); feat=make_oos_features(tuning_df,holdout_df,tuned.horizon_bars,external_feature_lag_bars=getattr(tuned,'external_feature_lag_bars',1)); pred=engine.model.predict(feat); regimes=engine.regimes.transform(feat); analog=engine.memory.query_many(feat); rp=engine.regimes.persistence(feat); rprob=engine.regimes.semantic_probabilities(feat); meta_p=engine.meta.predict_proba(MetaPolicy.frame(pred,feat,regimes,analog,regime_persistence=rp,regime_probs=rprob)); snap=FoldSnapshot(-1,holdout_df,feat,pred,regimes,analog,meta_p,rp,rprob,getattr(engine.model,'conformal_abs_residuals_',None),getattr(engine.model,'conformal_scaled_residuals_',None)); final=_evaluate_params([snap],tuned,best,cost_multipliers=(1,1.25,1.5))
+    final_stats=final['rows'].copy() if isinstance(final.get('rows'),pd.DataFrame) else pd.DataFrame()
+    final_evidence={}; final_holdout_trade_count=0
     try:
-        final_risk=make_risk(tuned,stop_atr_mult=best['stop_atr_mult'],take_profit_rr=best['take_profit_rr']); final_bt=run_backtest(holdout_df.assign(atr_14=feat['atr_14']),_actions(snap,tuned,best),final_risk,tuned.initial_cash,fee_bps=tuned.fee_bps,slippage_bps=tuned.slippage_bps,max_holding_bars=int(best['max_holding_bars']),intrabar_barriers=getattr(tuned,'intrabar_barriers',True),impact_bps_per_sqrt=getattr(tuned,'impact_bps_per_sqrt',1.5),force_daily_loss_exit=getattr(tuned,'force_daily_loss_exit',True),short_borrow_bps_per_bar=getattr(tuned,'short_borrow_bps_per_bar',0.0)); bar_returns=final_bt.equity.pct_change().replace([np.inf,-np.inf],np.nan).dropna().to_numpy(float)
+        final_risk=make_risk(tuned,stop_atr_mult=best['stop_atr_mult'],take_profit_rr=best['take_profit_rr'])
+        final_bt=run_backtest(
+            holdout_df.assign(atr_14=feat['atr_14']),
+            _actions(snap,tuned,best),
+            final_risk,tuned.initial_cash,
+            fee_bps=tuned.fee_bps,slippage_bps=tuned.slippage_bps,
+            max_holding_bars=int(best['max_holding_bars']),
+            intrabar_barriers=getattr(tuned,'intrabar_barriers',True),
+            impact_bps_per_sqrt=getattr(tuned,'impact_bps_per_sqrt',1.5),
+            force_daily_loss_exit=getattr(tuned,'force_daily_loss_exit',True),
+            short_borrow_bps_per_bar=getattr(tuned,'short_borrow_bps_per_bar',0.0),
+            require_short_borrow_cost=bool(getattr(tuned,'require_short_borrow_cost',True)),
+        )
+        final_holdout_trade_count=int(len(final_bt.trades))
+        bar_returns=final_bt.equity.pct_change().replace([np.inf,-np.inf],np.nan).dropna().to_numpy(float)
+        periods=365.25*24*3600/max(1.0,pd.Series(holdout_df.index).diff().dropna().dt.total_seconds().median()) if len(holdout_df.index)>1 else 365.0
         if len(bar_returns)>=30:
-            periods=365.25*24*3600/max(1.0,pd.Series(holdout_df.index).diff().dropna().dt.total_seconds().median()) if len(holdout_df.index)>1 else 365.0
-            final_evidence={'selection_adjusted_psr_proxy':selection_adjusted_psr(bar_returns,global_trial_count,periods_per_year=periods),
-            'deflated_sharpe_ratio':deflated_sharpe_ratio(bar_returns,global_trial_count,periods_per_year=periods),'path_stress':bootstrap_max_drawdown(bar_returns,reps=min(1000,max(200,stability_samples*100)),block=max(1,int(best['max_holding_bars'])//4),seed=settings.seed)}
-    except Exception as exc: final_evidence={'error':f'{type(exc).__name__}: {exc}'}
-    result={'data':{'rows_total':len(df),'rows_tuning':len(tuning_df),'rows_final_holdout':len(holdout_df),'final_holdout_start':str(holdout_df.index[0]),'final_holdout_end':str(holdout_df.index[-1])},'best_params':best,'study_best_value':float(study.best_value),'trials':len(study.trials),'tuning_summary':{k:v for k,v in rep.items() if k!='rows'},'full_tuning_set_verification':{k:v for k,v in full_rep.items() if k!='rows'},'full_tuning_fold_rows': full_rep['rows'].to_dict(orient='records'),'stability':stability,'negative_control_placebo':placebo,'final_holdout':{k:v for k,v in final.items() if k!='rows'},'final_holdout_summary':final_stats.to_dict(orient='records'),'final_holdout_rows':final['rows'].to_dict(orient='records'),'final_statistical_evidence':final_evidence,'holdout_governance':holdout_access,'promotion_allowed_from_holdout':bool(holdout_access['pristine']),'probability_of_backtest_overfitting':pbo_evidence,'trial_count_ledger':global_trial_count,'folds_used_for_optimization':[{'fold':x.fold,'start':str(x.test.index[0]),'end':str(x.test.index[-1])} for x in folds],'all_tuning_folds':[{'fold':x.fold,'start':str(x.test.index[0]),'end':str(x.test.index[-1])} for x in folds_all],'candidate_fold_count':len(all_ids),'representative_audit_fold_count':len(audit_ids),'optimization_fold_count':len(selected_ids),'interpretation':'Final holdout evidence is promotion-eligible only on its first ledgered access; repeated reads are retained for diagnostics but cannot restore pristine status. No finite tuning run can establish a perfect or future-proof optimum. The objective rewards robustness, cost tolerance and parameter plateau stability while preserving an untouched final holdout.'}
+            final_evidence={
+                'selection_adjusted_psr_proxy':selection_adjusted_psr(bar_returns,global_trial_count,periods_per_year=periods),
+                'deflated_sharpe_ratio':deflated_sharpe_ratio(bar_returns,global_trial_count,periods_per_year=periods),
+                'path_stress':bootstrap_max_drawdown(bar_returns,reps=max(200,int(getattr(settings,'master_bootstrap_replicates',1000))),block=max(1,int(best['max_holding_bars'])//4),seed=settings.seed),
+                'holdout_trade_count':final_holdout_trade_count,
+            }
+        else:
+            final_evidence={'available':False,'reason':'insufficient_holdout_returns','holdout_trade_count':final_holdout_trade_count}
+    except Exception as exc:
+        final_evidence={'available':False,'error':f'{type(exc).__name__}: {exc}','holdout_trade_count':final_holdout_trade_count}
+    promotion_reasons=[]
+    if not bool(holdout_access.get('pristine')): promotion_reasons.append('holdout_window_previously_accessed_or_overlapping')
+    if not bool(stability.get('available')) or not bool(stability.get('stable')): promotion_reasons.append('stability_evidence_unavailable_or_failed')
+    if not bool(placebo.get('available')) or not bool(placebo.get('passes_95pct_negative_control')): promotion_reasons.append('negative_control_unavailable_or_failed')
+    if not bool(pbo_evidence.get('available')) or pbo_evidence.get('pbo') is None or float(pbo_evidence.get('pbo',1.0))>0.20: promotion_reasons.append('pbo_unavailable_or_above_0_20')
+    if not final_evidence or 'error' in final_evidence or float(final_evidence.get('deflated_sharpe_ratio',0.0) or 0.0)<0.80: promotion_reasons.append('deflated_sharpe_unavailable_or_below_0_80')
+    if final_holdout_trade_count < int(getattr(settings,'base_min_holdout_trades',20)): promotion_reasons.append('insufficient_final_holdout_trade_support')
+    result={'data':{'rows_total':len(df),'rows_tuning':len(tuning_df),'rows_final_holdout':len(holdout_df),'final_holdout_start':str(holdout_df.index[0]),'final_holdout_end':str(holdout_df.index[-1])},'best_params':best,'study_best_value':float(study.best_value),'trials':len(study.trials),'tuning_summary':{k:v for k,v in rep.items() if k!='rows'},'full_tuning_set_verification':{k:v for k,v in full_rep.items() if k!='rows'},'full_tuning_fold_rows': full_rep['rows'].to_dict(orient='records'),'stability':stability,'negative_control_placebo':placebo,'final_holdout':{k:v for k,v in final.items() if k!='rows'},'final_holdout_summary':final_stats.to_dict(orient='records'),'final_holdout_rows':final['rows'].to_dict(orient='records'),'final_statistical_evidence':final_evidence,'holdout_governance':holdout_access,'promotion_allowed_from_holdout':bool(not promotion_reasons),'promotion_gate_reasons':promotion_reasons,'probability_of_backtest_overfitting':pbo_evidence,'trial_count_ledger':global_trial_count,'folds_used_for_optimization':[{'fold':x.fold,'start':str(x.test.index[0]),'end':str(x.test.index[-1])} for x in folds],'all_tuning_folds':[{'fold':x.fold,'start':str(x.test.index[0]),'end':str(x.test.index[-1])} for x in folds_all],'candidate_fold_count':len(all_ids),'representative_audit_fold_count':len(audit_ids),'optimization_fold_count':len(selected_ids),'interpretation':'Promotion eligibility requires distinct, active candidate evidence, stable live-like trading activity under parameter perturbations, an adequately replicated negative control, usable PBO, a deflated Sharpe probability >= 0.80, enough trades on the final holdout, and an unaccessed non-overlapping holdout. Missing/degenerate evidence blocks promotion.'}
     if save_path:
         path=Path(save_path); path.parent.mkdir(parents=True,exist_ok=True); path.write_text(json.dumps(result,indent=2,default=str),encoding='utf-8')
     return result

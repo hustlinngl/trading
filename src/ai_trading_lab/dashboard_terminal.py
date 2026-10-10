@@ -823,6 +823,8 @@ class SignalTerminal:
                 "paper_only": bool(self.settings.paper_only),
                 "sandbox": bool(self.settings.sandbox),
                 "trade_window_required": bool(self.settings.trade_window_required_for_signal),
+                "short_signals_enabled": bool(getattr(self.settings, "short_signals_enabled", False)),
+                "short_borrow_bps_per_bar": float(getattr(self.settings, "short_borrow_bps_per_bar", 0.0)),
             },
             "summary": {
                 "exchange_available": self._exchange is not None,
@@ -1043,6 +1045,8 @@ class SignalTerminal:
                     "trade_window_required": bool(
                         self.settings.trade_window_required_for_signal
                     ),
+                    "short_signals_enabled": bool(getattr(self.settings, "short_signals_enabled", False)),
+                    "short_borrow_bps_per_bar": float(getattr(self.settings, "short_borrow_bps_per_bar", 0.0)),
                 },
                 "summary": {
                     "exchange_available": self._get_exchange() is not None,
@@ -1762,6 +1766,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
         <div class="chart-tools">
           <span id="livePrice" class="pill good">REALTIME —</span>
           <span id="universeStatus" class="pill warn" title="L'elenco dei mercati non autorizza alcun segnale.">MARKETS —</span>
+          <span id="sideCapability" class="pill warn" title="Gli short richiedono uno strumento shortabile e costi di prestito verificati.">LONG ONLY</span>
           <span id="historySource" class="pill">HISTORY —</span>
           <div class="asset-picker"><input id="asset" list="marketSymbols" inputmode="search" autocomplete="off" spellcheck="false" placeholder="Cerca simbolo..." aria-label="Cerca un simbolo di mercato"/><datalist id="marketSymbols"></datalist><button id="loadAsset" type="button">Apri</button></div>
           <select id="range" aria-label="Numero di candele"><option value="120">120</option><option value="240" selected>240</option><option value="480">480</option></select>
@@ -2556,6 +2561,16 @@ function render(data){
       :source==="live_exchange"&&!stale
         ?"Universo exchange appena verificato. L'idoneità ai segnali viene controllata separatamente."
         :"Universo locale/fallback. Non equivale a una lista exchange aggiornata e non abilita segnali.";
+  }
+  const capabilityNode=$("sideCapability");
+  if(capabilityNode){
+    const cfg=data.config||{};
+    const configuredShorts=Boolean(cfg.short_signals_enabled)&&Number(cfg.short_borrow_bps_per_bar)>0;
+    capabilityNode.textContent=configuredShorts?"LONG + CONDITIONAL SHORT":"LONG ONLY";
+    capabilityNode.className="pill "+(configuredShorts?"warn":"good");
+    capabilityNode.title=configuredShorts
+      ?"Gli short sono possibili solo su strumenti verificati margin/swap/future con borrow positivo; funding e tutti i gate restano obbligatori."
+      :"SHORT disabilitati: manca abilitazione esplicita e/o un costo di prestito positivo. I backtest applicano la stessa capacità.";
   }
   if(!data.ok){
     $("radarRows").innerHTML='<tr><td colspan="3"><span class="signal signal-wait">WAIT</span></td></tr>';

@@ -7,7 +7,8 @@ import json
 import os
 from typing import Any
 
-SCHEMA_VERSION = 1
+
+SCHEMA_VERSION = 2
 
 
 def _now() -> str:
@@ -35,10 +36,15 @@ def load_ledger(path: str | Path) -> dict[str, Any]:
         return _default()
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, TypeError):
-        return _default()
+    except (OSError, json.JSONDecodeError, TypeError) as exc:
+        # A present-but-unreadable ledger must never reset global trial counts
+        # or turn a previously touched holdout back into a pristine one.
+        raise RuntimeError(f"research_ledger_unreadable:{p}") from exc
     if not isinstance(data, dict):
-        return _default()
+        raise RuntimeError(f"research_ledger_invalid_schema:{p}")
+    schema = data.get("schema_version")
+    if schema is not None and int(schema) > SCHEMA_VERSION:
+        raise RuntimeError(f"research_ledger_schema_too_new:{schema}")
     data.setdefault("schema_version", SCHEMA_VERSION)
     data.setdefault("created_at", _now())
     data.setdefault("updated_at", _now())
@@ -95,15 +101,39 @@ def register_trials(
     }
 
 
+def _parse_timestamp(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _overlaps(start_a: Any, end_a: Any, start_b: Any, end_b: Any) -> bool:
+    a0, a1 = _parse_timestamp(start_a), _parse_timestamp(end_a)
+    b0, b1 = _parse_timestamp(start_b), _parse_timestamp(end_b)
+    # Missing/unparseable historical bounds are uncertainty, not proof of novelty.
+    if None in (a0, a1, b0, b1) or a0 > a1 or b0 > b1:
+        return True
+    return max(a0, b0) <= min(a1, b1)
+
+
 def holdout_key(
     *,
     dataset_fingerprint: str,
     holdout_start: str,
     holdout_end: str,
     holdout_frac: float,
+    scope: str = "global",
 ) -> str:
+    """Exact id for an interval, distinct from the overlap-based pristine test."""
     payload = json.dumps(
         {
+            "scope": str(scope or "global"),
             "dataset_fingerprint": str(dataset_fingerprint),
             "holdout_start": str(holdout_start),
             "holdout_end": str(holdout_end),
@@ -124,26 +154,49 @@ def register_holdout_access(
     holdout_frac: float,
     purpose: str,
     run_id: str | None = None,
+    scope: str = "global",
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Record a holdout read and explicitly classify whether that holdout is still pristine."""
+    """Persist a holdout read and reject overlapping windows across dataset fingerprints.
+
+    Pristine status is based on temporal overlap within a data/model scope, not on
+    an exact dataset fingerprint. Thus daily rolling windows cannot become pristine
+    just because the full dataset hash changes. Legacy entries without scope are
+    treated as global and conservatively block overlapping scoped windows.
+    """
     ledger = load_ledger(path)
+    scope = str(scope or "global")
     key = holdout_key(
         dataset_fingerprint=dataset_fingerprint,
         holdout_start=holdout_start,
         holdout_end=holdout_end,
         holdout_frac=holdout_frac,
+        scope=scope,
     )
     previous = [
         x for x in ledger.get("holdout_accesses", [])
         if isinstance(x, dict) and str(x.get("holdout_key")) == key
     ]
     current_run_id = str(run_id or f"{purpose}:{_now()}")
-    prior_run_ids = {str(x.get("run_id")) for x in previous}
-    prior_other_runs = {x for x in prior_run_ids if x != current_run_id}
+    prior_overlapping_runs: set[str] = set()
+    for prior in ledger.get("holdout_accesses", []):
+        if not isinstance(prior, dict):
+            continue
+        prior_scope = str(prior.get("scope") or "global")
+        if prior_scope not in {"global", scope} and scope != "global":
+            continue
+        if not _overlaps(
+            holdout_start, holdout_end,
+            prior.get("holdout_start"), prior.get("holdout_end"),
+        ):
+            continue
+        prior_run = str(prior.get("run_id") or "")
+        if prior_run and prior_run != current_run_id:
+            prior_overlapping_runs.add(prior_run)
     access = {
         "access_id": f"{key}:{len(previous) + 1}",
         "holdout_key": key,
+        "scope": scope,
         "dataset_fingerprint": str(dataset_fingerprint),
         "holdout_start": str(holdout_start),
         "holdout_end": str(holdout_end),
@@ -152,13 +205,16 @@ def register_holdout_access(
         "run_id": current_run_id,
         "accessed_at": _now(),
         "metadata": metadata or {},
+        "overlapping_prior_run_count": len(prior_overlapping_runs),
     }
     ledger["holdout_accesses"] = [*ledger.get("holdout_accesses", []), access][-5000:]
     ledger["updated_at"] = _now()
     _write_atomic(_path(path), ledger)
     return {
         "holdout_key": key,
-        "pristine": not prior_other_runs,
+        "scope": scope,
+        "pristine": not prior_overlapping_runs,
+        "overlapping_prior_runs": sorted(prior_overlapping_runs),
         "access_count": len(previous) + 1,
         "previous_access_count": len(previous),
         "same_run_access_count": sum(1 for x in previous if str(x.get("run_id")) == current_run_id),

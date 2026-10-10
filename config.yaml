@@ -40,12 +40,17 @@ risk:
   impact_bps_per_sqrt: 1.5
   max_participation_pct: 0.10
   require_short_borrow_cost: true
+  # Enable only after shortability and borrow pricing are verified for the selected instrument.
+  short_signals_enabled: false
   funding_rate_column: funding_rate
   funding_interval_hours: 8.0
   funding_bps_per_bar: 0.0
   require_funding_data_for_derivatives: true
   backtest_market_type: spot
 research:
+  # These statistical thresholds are requirements, not tuning targets.
+  live_policy_min_dsr: 0.80
+  live_policy_max_pbo: 0.20
   walk_forward_train_bars: 3000
   walk_forward_test_bars: 500
   step_bars: 500
@@ -58,6 +63,8 @@ execution:
   sandbox: true
   poll_seconds: 60
   live_lookback_bars: 1200
+  # Fail closed if trained features are absent/non-finite on the latest closed candle.
+  live_max_missing_feature_fraction: 0.0
   # 0 = unlimited model-backed active markets discovered from the exchange.
   live_max_symbols: 0
   live_market_types: [spot, swap, future, margin, option]
