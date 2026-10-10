@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "adaptive-ai-trading-lab"
-version = "0.9.40"
+version = "0.9.41"
 description = "Autonomous adaptive trading research platform with real-data research, strict validation and safe paper trading."
 requires-python = ">=3.11"
 dependencies = [
