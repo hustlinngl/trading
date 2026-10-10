@@ -75,7 +75,9 @@ def _barrier_labels(df, horizon_bars=96, min_bars=12, pt_atr=1.25, sl_atr=0.90):
                 outcome = np.nan
                 break
 
-            held = j - i
+            # Elapsed holding bars are measured from the executable entry open,
+            # not the preceding decision candle.
+            held = j - entry_i
             # The opening print is the earliest executable event in this candle.
             if bar_open >= upper:
                 outcome = 1.0 if held >= minimum else 0.0

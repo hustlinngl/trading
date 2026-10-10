@@ -66,6 +66,30 @@ def test_trade_window_time_stop_candle_is_not_misread_as_barrier_event():
     assert labels.loc[frame.index[14], "direction"] == 0.0
 
 
+
+def test_trade_window_minimum_holding_duration_is_measured_from_entry_open():
+    # At 15m bars, the event in bar i+12 occurs only 11 intervals after the
+    # executable entry open[i+1] (2h45m). It must not qualify for a 3h minimum.
+    early = _flat_market(rows=40)
+    early.loc[early.index[26], ["open", "high", "low", "close"]] = [
+        100.0, 100.7, 99.9, 100.5
+    ]
+    early_labels = _barrier_labels(
+        early, horizon_bars=16, min_bars=12, pt_atr=1.25, sl_atr=0.90
+    )
+    assert early_labels.loc[early.index[14], "direction"] == 0.0
+
+    # The same barrier in bar i+13 is 12 intervals after entry and qualifies.
+    on_time = _flat_market(rows=40)
+    on_time.loc[on_time.index[27], ["open", "high", "low", "close"]] = [
+        100.0, 100.7, 99.9, 100.5
+    ]
+    on_time_labels = _barrier_labels(
+        on_time, horizon_bars=16, min_bars=12, pt_atr=1.25, sl_atr=0.90
+    )
+    assert on_time_labels.loc[on_time.index[14], "direction"] == 1.0
+
+
 def test_event_probability_is_separate_from_conditional_direction_confidence():
     long = directional_event_probabilities([0.10, 0.20, 0.70], [-1, 0, 1])
     assert long["direction"] == "LONG"
