@@ -175,6 +175,8 @@ def deployment_semantics_fingerprint(settings) -> str:
         "impact_bps_per_sqrt": float(getattr(settings, "impact_bps_per_sqrt", 1.5)),
         "max_participation_pct": float(getattr(settings, "max_participation_pct", 0.10)),
         "short_borrow_bps_per_bar": float(getattr(settings, "short_borrow_bps_per_bar", 0.0)),
+        "short_signals_enabled": bool(getattr(settings, "short_signals_enabled", False)),
+        "live_max_missing_feature_fraction": float(getattr(settings, "live_max_missing_feature_fraction", 0.0)),
         "force_daily_loss_exit": bool(getattr(settings, "force_daily_loss_exit", True)),
         "intrabar_barriers": bool(getattr(settings, "intrabar_barriers", True)),
         "signal_only_mode": bool(getattr(settings, "signal_only_mode", True)),
