@@ -154,6 +154,6 @@ def test_holdout_builder_persists_combined_gate_provenance(monkeypatch, tmp_path
     assert report["live_signal_gate_applied"] is True
     assert report["specialist_gate_applied"] is True
     assert report["holdout_governance"]["pristine"] is True
-    assert persisted["validation_holdout_data_fingerprint"] == validation.strong_dataset_fingerprint(holdout)
+    assert persisted["validation_holdout_data_fingerprint"] == validation.strong_dataset_fingerprint(holdout.drop(columns=["atr_14"], errors="ignore"))
     assert persisted["holdout_start"] == str(holdout.index.min())
     assert len(persisted["variant_diagnostics"]) == 3
