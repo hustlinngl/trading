@@ -39,6 +39,9 @@ def test_dashboard_responsive_ui_and_chart_edge_case():
     assert 'function renderMetrics' not in html
     assert 'function pill(' not in html
     assert "renderRadar(signals);" in html
+    assert "model_eligible_assets" in html
+    assert 'eligible+" validated"' in html
+    assert "I modelli disponibili non superano i controlli di validazione o compatibilità." in html
     assert "renderLiveData(data);" in html
     assert 'fetch("/api/state?force="+(force?"1":"0")' in html
 
