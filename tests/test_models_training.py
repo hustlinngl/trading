@@ -35,7 +35,7 @@ class _FakeRegressor:
 
 
 def test_signal_model_refits_production_learners_on_all_rows_after_oos_calibration():
-    n = 320
+    n = 800
     index = pd.date_range("2025-01-01", periods=n, freq="15min", tz="UTC")
     x = pd.DataFrame({"feature": np.linspace(-2.0, 2.0, n)}, index=index)
     y_cls = pd.Series((np.arange(n) % 3 != 0).astype(float), index=index)
@@ -50,9 +50,9 @@ def test_signal_model_refits_production_learners_on_all_rows_after_oos_calibrati
     model.fit(x, y_cls, y_ret, purge_bars=12)
 
     assert model.calibration_oos_ is not None
-    # The final 40% of the calibration window is reserved for meta training;
+    # A later calibration tail is reserved for meta training after a purge gap;
     # its labels are not used to fit ensemble weights, the calibrator, or intervals.
-    assert model.calibration_oos_.index.equals(index[-16:])
+    assert model.calibration_oos_.index.equals(index[-36:])
     assert {"p_up", "p_up_raw"} <= set(model.calibration_oos_.columns)
     assert model.fit_rows_ == n
     assert clf_fit_lengths[-1] == n
