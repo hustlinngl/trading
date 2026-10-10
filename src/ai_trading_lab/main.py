@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -215,7 +216,7 @@ def _emit_training_progress(symbol: str, stage: str, *, asset_started_at=None, s
     if stage_started_at is not None:
         event["stage_elapsed_seconds"] = round(max(0.0, time.perf_counter() - stage_started_at), 2)
     event.update(details)
-    print(json.dumps(event, sort_keys=True, default=str), flush=True)
+    print(json.dumps(event, sort_keys=True, default=str), file=sys.stderr, flush=True)
 
 
 def train_complete_asset(df, settings, *, holdout_frac: float, promote_champion: bool = True):
