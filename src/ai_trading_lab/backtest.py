@@ -223,12 +223,31 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
                 hit_stop = hit_take = False
                 barrier_fill = None
                 if intrabar_barriers:
-                    hit_stop = low <= stop if side > 0 else high >= stop
-                    hit_take = high >= take if side > 0 else low <= take
-                    if hit_stop:
-                        barrier_fill = open_ if (open_ <= stop if side > 0 else open_ >= stop) else stop
-                    elif hit_take:
-                        barrier_fill = open_ if (open_ >= take if side > 0 else open_ <= take) else take
+                    # An opening gap is the first executable price of the candle.
+                    # Resolve it before looking at later intrabar extrema; otherwise a
+                    # candle that opens beyond take-profit and later spans the stop
+                    # would be incorrectly booked as a stop-out.
+                    if side > 0 and open_ <= stop:
+                        hit_stop = True
+                        barrier_fill = open_
+                    elif side > 0 and open_ >= take:
+                        hit_take = True
+                        barrier_fill = open_
+                    elif side < 0 and open_ >= stop:
+                        hit_stop = True
+                        barrier_fill = open_
+                    elif side < 0 and open_ <= take:
+                        hit_take = True
+                        barrier_fill = open_
+                    else:
+                        hit_stop = low <= stop if side > 0 else high >= stop
+                        hit_take = high >= take if side > 0 else low <= take
+                        # If both are touched intrabar, retain the conservative
+                        # stop-first convention because OHLC cannot resolve ordering.
+                        if hit_stop:
+                            barrier_fill = stop
+                        elif hit_take:
+                            barrier_fill = take
                 else:
                     hit_stop = close <= stop if side > 0 else close >= stop
                     hit_take = close >= take if side > 0 else close <= take

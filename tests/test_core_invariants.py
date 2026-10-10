@@ -298,3 +298,122 @@ def test_auto_update_cache_hits_only_when_artifact_hash_matches(tmp_path, monkey
         pass
     else:
         raise AssertionError("tampered artifact unexpectedly hit cache")
+
+
+
+def test_triple_barrier_timeout_matches_backtest_exit_at_next_open():
+    idx = pd.date_range("2026-01-01", periods=22, freq="15min", tz="UTC")
+    df = pd.DataFrame(
+        {
+            "open": np.full(22, 100.0),
+            "high": np.full(22, 100.1),
+            "low": np.full(22, 99.9),
+            "close": np.full(22, 100.0),
+            "volume": np.full(22, 100_000.0),
+        },
+        index=idx,
+    )
+    # For decision i=14 and horizon 2: entry is open[15], time-stop is
+    # open[17]. That candle later spikes through the profit barrier, but the
+    # backtest exits at its open before its intrabar range is inspected.
+    df.loc[idx[17], ["open", "high", "low", "close"]] = [101.0, 120.0, 100.5, 119.0]
+
+    out = triple_barrier_labels(df, horizon=2, pt_atr=10.0, sl_atr=10.0)
+
+    assert out.loc[idx[14], "tb_label"] == 0.0
+    assert np.isclose(out.loc[idx[14], "tb_return"], 0.01)
+
+    bt_df = df.assign(atr_14=1.0)
+    actions = pd.Series("FLAT", index=idx)
+    actions.iloc[14:17] = "LONG"
+    risk = RiskEngine(
+        initial_cash=10_000.0,
+        risk_per_trade=0.01,
+        max_position_pct=0.25,
+        max_daily_loss_pct=0.50,
+        stop_atr_mult=1.0,
+        rr=2.0,
+        fee_bps=0.0,
+        slippage_bps=0.0,
+        max_participation_pct=1.0,
+        impact_bps_per_sqrt=0.0,
+    )
+    backtest = run_backtest(
+        bt_df, actions, risk, 10_000.0,
+        fee_bps=0.0, slippage_bps=0.0, impact_bps_per_sqrt=0.0,
+        max_holding_bars=2, intrabar_barriers=True,
+    )
+    trade = backtest.trades.iloc[0]
+    assert trade["exit_reason"] == "time_stop"
+    assert np.isclose(trade["exit"], 101.0)
+
+
+def test_triple_barrier_opening_gap_uses_executable_open_before_intrabar_collision():
+    idx = pd.date_range("2026-01-01", periods=22, freq="15min", tz="UTC")
+    df = pd.DataFrame(
+        {
+            "open": np.full(22, 100.0),
+            "high": np.full(22, 100.1),
+            "low": np.full(22, 99.9),
+            "close": np.full(22, 100.0),
+            "volume": np.full(22, 100_000.0),
+        },
+        index=idx,
+    )
+    # A gap below the lower barrier is the first executable event even though
+    # this same candle later spans both barrier prices.
+    df.loc[idx[16], ["open", "high", "low", "close"]] = [97.0, 104.0, 96.0, 98.0]
+
+    out = triple_barrier_labels(df, horizon=3, pt_atr=10.0, sl_atr=10.0)
+
+    assert out.loc[idx[14], "tb_label"] == -1.0
+    assert np.isclose(out.loc[idx[14], "tb_return"], -0.03)
+
+
+def test_backtest_executes_gap_through_take_profit_at_open_before_later_stop_touch():
+    idx = pd.date_range("2026-01-01", periods=40, freq="15min", tz="UTC")
+    df = pd.DataFrame(
+        {
+            "open": np.full(40, 100.0),
+            "high": np.full(40, 100.2),
+            "low": np.full(40, 99.8),
+            "close": np.full(40, 100.0),
+            "volume": np.full(40, 1_000_000.0),
+            "atr_14": np.full(40, 1.0),
+        },
+        index=idx,
+    )
+    # Entry is at index 5. At index 6 the market gaps above take-profit before
+    # later trading down through the stop; the fill must be the opening price.
+    df.loc[idx[6], ["open", "high", "low", "close"]] = [103.0, 104.0, 98.0, 100.0]
+    actions = pd.Series("FLAT", index=idx)
+    actions.iloc[4] = "LONG"
+    actions.iloc[5] = "LONG"
+    risk = RiskEngine(
+        initial_cash=10_000.0,
+        risk_per_trade=0.01,
+        max_position_pct=0.25,
+        max_daily_loss_pct=0.50,
+        stop_atr_mult=1.0,
+        rr=2.0,
+        fee_bps=0.0,
+        slippage_bps=0.0,
+        max_participation_pct=1.0,
+        impact_bps_per_sqrt=0.0,
+    )
+
+    result = run_backtest(
+        df,
+        actions,
+        risk,
+        10_000.0,
+        fee_bps=0.0,
+        slippage_bps=0.0,
+        impact_bps_per_sqrt=0.0,
+        max_holding_bars=10,
+        intrabar_barriers=True,
+    )
+
+    assert not result.trades.empty
+    assert result.trades.iloc[0]["exit_reason"] == "take_profit"
+    assert np.isclose(result.trades.iloc[0]["exit"], 103.0)
