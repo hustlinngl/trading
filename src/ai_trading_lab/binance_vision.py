@@ -134,6 +134,65 @@ def _normalize_vision_csv(raw):
             raise ValueError(f"Conflicting duplicate market bar in archive at {bad}")
         df=df.drop_duplicates('timestamp',keep='first')
     return df
+def validate_history_window(frame, start, end, interval="15m"):
+    """Fail when merged history does not actually span the requested closed UTC window.
+
+    Daily Binance Vision archives can be unavailable without raising from
+    download_range(exact=True); a long but stale monthly cache must not be
+    reported as a fresh rolling window. For OHLCV bar-open timestamps, the last
+    expected bar is the start of the final interval on the requested UTC date.
+    """
+    if frame is None or frame.empty or "timestamp" not in frame.columns:
+        raise ValueError("historical_window_empty_or_missing_timestamp")
+
+    import re
+
+    match = re.fullmatch(r"(\d+)([mhd])", str(interval).strip().lower())
+    if not match:
+        raise ValueError(f"unsupported_history_interval:{interval}")
+    amount = int(match.group(1))
+    unit = {"m": "minutes", "h": "hours", "d": "days"}[match.group(2)]
+    delta = pd.Timedelta(**{unit: amount})
+    if delta <= pd.Timedelta(0):
+        raise ValueError("history_interval_must_be_positive")
+
+    start_ts = pd.Timestamp(start)
+    end_ts = pd.Timestamp(end)
+    start_ts = start_ts.tz_localize("UTC") if start_ts.tzinfo is None else start_ts.tz_convert("UTC")
+    end_ts = end_ts.tz_localize("UTC") if end_ts.tzinfo is None else end_ts.tz_convert("UTC")
+    if len(str(start).strip()) == 10:
+        start_ts = start_ts.normalize()
+    if len(str(end).strip()) == 10:
+        end_ts = end_ts.normalize() + pd.Timedelta(days=1) - pd.Timedelta(nanoseconds=1)
+    if end_ts < start_ts:
+        raise ValueError("history_end_before_start")
+
+    stamps = pd.to_datetime(frame["timestamp"], utc=True, errors="coerce").dropna()
+    if stamps.empty:
+        raise ValueError("historical_window_has_no_valid_timestamps")
+
+    expected_first = start_ts.floor(f"{amount}{match.group(2)}")
+    expected_last = end_ts.normalize() + pd.Timedelta(days=1) - delta
+    actual_first = stamps.min()
+    actual_last = stamps.max()
+
+    if actual_first > expected_first + delta:
+        raise ValueError(
+            f"historical_window_start_missing: expected <= {expected_first + delta}, got {actual_first}"
+        )
+    if actual_last < expected_last:
+        raise ValueError(
+            f"historical_window_stale: expected last bar >= {expected_last}, got {actual_last}"
+        )
+
+    return {
+        "expected_first_timestamp": expected_first.isoformat(),
+        "expected_last_timestamp": expected_last.isoformat(),
+        "actual_first_timestamp": actual_first.isoformat(),
+        "actual_last_timestamp": actual_last.isoformat(),
+    }
+
+
 def merge_archives(paths,out_path=None):
     frames=[_normalize_vision_csv(Path(p).read_bytes()) for p in paths]
     if not frames:return pd.DataFrame()
