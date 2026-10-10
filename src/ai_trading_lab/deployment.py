@@ -19,6 +19,7 @@ def model_semantics_fingerprint(settings) -> str:
         # Existing bundles must be retrained rather than silently reused.
         "label_target_semantics": "direction_from_next_open_to_next_open_horizon_return_v3",
         "trade_window_target_semantics": "three_class_gap_first_barrier_event_after_min_duration_v2",
+        "trade_window_feature_imputation_semantics": "training_median_fill_v1",
         "probability_calibration_semantics": PROBABILITY_CALIBRATION_SEMANTICS,
         "meta_policy_semantics": "raw_oos_probability_and_unadjusted_return_bounds_v2",
         "timeframe": str(getattr(settings, "timeframe", "")),
