@@ -161,7 +161,11 @@ def _live_policy_holdout_evidence_checks(settings, bundle: str | Path, symbol: s
             dsr = float(evidence.get("deflated_sharpe_ratio", float("nan")))
         except (TypeError, ValueError, OverflowError):
             dsr = float("nan")
-        checks["live_policy_dsr"] = math.isfinite(dsr) and dsr >= float(getattr(settings, "live_policy_min_dsr", 0.80))
+        checks["live_policy_dsr"] = (
+            bool(evidence.get("deflated_sharpe_ratio_available", False))
+            and math.isfinite(dsr)
+            and dsr >= float(getattr(settings, "live_policy_min_dsr", 0.80))
+        )
 
         pbo = evidence.get("probability_of_backtest_overfitting", {})
         if not isinstance(pbo, dict):
