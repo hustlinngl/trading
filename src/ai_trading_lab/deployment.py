@@ -220,6 +220,7 @@ def _deployment_evidence_is_current(settings, bundle: str | Path, symbol: str, m
             or str(base.get("model_semantics_fingerprint")) != str(meta.get("model_semantics_fingerprint"))
             or str(base.get("deployment_semantics_fingerprint")) != str(meta.get("deployment_semantics_fingerprint"))
             or not base.get("validation_train_data_fingerprint")
+            or str(meta.get("training_data_fingerprint", "")) != str(base.get("validation_train_data_fingerprint", ""))
             or not base.get("validation_holdout_data_fingerprint")
             or str(base.get("validation_holdout_start")) > str(base.get("validation_holdout_end"))
         ):
@@ -482,6 +483,7 @@ def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
             and str(base.get("model_semantics_fingerprint"))==str(meta.get("model_semantics_fingerprint"))
             and str(base.get("deployment_semantics_fingerprint"))==str(meta.get("deployment_semantics_fingerprint"))
             and bool(base.get("validation_train_data_fingerprint"))
+            and str(meta.get("training_data_fingerprint", ""))==str(base.get("validation_train_data_fingerprint", ""))
             and bool(base.get("validation_holdout_data_fingerprint"))
             and str(base.get("validation_holdout_start")) <= str(base.get("validation_holdout_end"))
         ),
