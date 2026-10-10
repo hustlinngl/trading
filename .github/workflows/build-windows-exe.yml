@@ -46,6 +46,7 @@ jobs:
           import pandas as pd
           from ai_trading_lab.binance_vision import (
               download_range, merge_archives, rolling_closed_history_window,
+              validate_history_window,
           )
 
           # Use complete monthly archives for the two-year window and daily archives
@@ -102,6 +103,13 @@ jobs:
                       f"Insufficient Binance Vision history for {symbol}: {len(frame)} bars"
                   )
               frame = frame.sort_values("timestamp")
+              coverage = validate_history_window(frame, start, end, interval="15m")
+              print(
+                  "bundled-history-coverage",
+                  symbol,
+                  "first", coverage["actual_first_timestamp"],
+                  "last", coverage["actual_last_timestamp"],
+              )
               frame = frame[["timestamp", "open", "high", "low", "close", "volume"]].copy()
               path = out / f"{symbol.replace('/', '_')}_15m.csv"
               frame.to_csv(
