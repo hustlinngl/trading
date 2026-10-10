@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.9.42
+- Fixed signal-history timestamp handoff so historical outcomes resolve against the original market-data candle, including legacy journal entries.
 - Corrected historical signal net returns to include configured round-trip market impact and elapsed short-borrow costs.
 - Marked outcomes as ambiguous with an unknown return when OHLC data cannot determine barrier ordering; invalid cost inputs fail closed.
 - Labeled the dashboard history return as an estimate rather than a realized exchange return, with a regression guard.
