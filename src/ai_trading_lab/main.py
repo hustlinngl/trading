@@ -78,10 +78,15 @@ def _promote_asset_bundle(asset_dir: str | Path, champion_dir: str | Path = "mod
             target.unlink()
 
 
-def train_base_asset(df, settings, *, promote_champion: bool = False):
-    """Train and persist one asset's base bundle in the canonical location."""
+def train_base_asset(df, settings, *, promote_champion: bool = False, data_provenance_df=None):
+    """Train and persist one asset's base bundle in the canonical location.
+
+    data_provenance_df may include a later untouched validation tail. The bundle
+    records that corpus fingerprint separately from the rows actually used to fit.
+    """
     eng = AdaptiveEngine(settings)
     art = eng.fit(df)
+    provenance_df = data_provenance_df if data_provenance_df is not None else df
     asset_dir = asset_model_dir(settings.symbol)
     asset_dir.mkdir(parents=True, exist_ok=True)
     eng.save(asset_dir)
@@ -89,7 +94,11 @@ def train_base_asset(df, settings, *, promote_champion: bool = False):
         "symbol": settings.symbol, "rows": int(len(df)),
         "start": str(df.index.min()), "end": str(df.index.max()),
         "timeframe": str(settings.timeframe),
-        "data_fingerprint": strong_dataset_fingerprint(df),
+        "data_fingerprint": strong_dataset_fingerprint(provenance_df),
+        "training_data_fingerprint": strong_dataset_fingerprint(df),
+        "provenance_rows": int(len(provenance_df)),
+        "provenance_start": str(provenance_df.index.min()),
+        "provenance_end": str(provenance_df.index.max()),
         "model_semantics_fingerprint": model_semantics_fingerprint(settings),
         "deployment_semantics_fingerprint": deployment_semantics_fingerprint(settings),
         "trained_at": datetime.now(timezone.utc).isoformat(),
@@ -143,7 +152,24 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
         raise ValueError("Not enough rows for requested train/holdout split")
     train_df, test_df = df.iloc[:split].copy(), df.iloc[split:].copy()
     eng = AdaptiveEngine(settings)
-    eng.fit(train_df)
+    # Reuse the already-fitted train-only bundle during complete training. For a
+    # standalone holdout command, fit an isolated train-only engine as before.
+    bundle_dir = asset_model_dir(settings.symbol)
+    meta_path = bundle_dir / "base_training_meta.json"
+    loaded_train_bundle = False
+    if meta_path.is_file() and (bundle_dir / "signal_model.joblib").is_file():
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            if (
+                str(meta.get("training_data_fingerprint", "")) == strong_dataset_fingerprint(train_df)
+                and str(meta.get("model_semantics_fingerprint", "")) == model_semantics_fingerprint(settings)
+            ):
+                eng.load(bundle_dir)
+                loaded_train_bundle = True
+        except (OSError, ValueError, KeyError, TypeError):
+            loaded_train_bundle = False
+    if not loaded_train_bundle:
+        eng.fit(train_df)
     from .features import make_oos_features
     feat = make_oos_features(
         train_df, test_df, settings.horizon_bars,
@@ -256,6 +282,10 @@ def _emit_training_progress(symbol: str, stage: str, *, asset_started_at=None, s
 def train_complete_asset(df, settings, *, holdout_frac: float, promote_champion: bool = True):
     """One-click training with observable fit, holdout, specialist and readiness stages."""
     symbol = str(settings.symbol)
+    specialist_split = int(len(df) * (1.0 - float(holdout_frac)))
+    if specialist_split <= 0 or specialist_split >= len(df):
+        raise ValueError("invalid_final_holdout_split")
+    training_df = df.iloc[:specialist_split].copy()
     asset_started_at = time.perf_counter()
     _emit_training_progress(
         symbol, "asset_training_started", asset_started_at=asset_started_at,
@@ -264,7 +294,7 @@ def train_complete_asset(df, settings, *, holdout_frac: float, promote_champion:
 
     stage_started_at = time.perf_counter()
     _emit_training_progress(symbol, "base_bundle_fit_started", asset_started_at=asset_started_at, rows=len(df))
-    asset_dir, _ = train_base_asset(df, settings)
+    asset_dir, _ = train_base_asset(training_df, settings, data_provenance_df=df)
     _emit_training_progress(
         symbol, "base_bundle_fit_completed", asset_started_at=asset_started_at,
         stage_started_at=stage_started_at, bundle=str(asset_dir),
@@ -278,10 +308,8 @@ def train_complete_asset(df, settings, *, holdout_frac: float, promote_champion:
     # Reserve the final temporal holdout exclusively for the combined live gate.
     # The specialist's own purged validation happens entirely inside the earlier
     # training segment, avoiding reuse of its readiness holdout as final evidence.
-    specialist_split = int(len(df) * (1.0 - float(holdout_frac)))
-    specialist_training_df = df.iloc[:specialist_split].copy()
     asset_model, duration_report = train_duration_asset(
-        specialist_training_df,
+        training_df,
         settings,
         holdout_frac=holdout_frac,
         copy_legacy=promote_champion,
