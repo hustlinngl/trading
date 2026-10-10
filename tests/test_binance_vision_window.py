@@ -43,3 +43,20 @@ def test_rolling_window_normalizes_naive_clock_as_utc_and_validates_months():
 
     with pytest.raises(ValueError, match="months must be >= 1"):
         rolling_closed_history_window(now=pd.Timestamp("2026-10-10T00:00:00Z"), months=0)
+
+
+
+def test_windows_build_uses_rolling_history_and_recent_daily_archives():
+    from pathlib import Path
+
+    workflow = Path(".github/workflows/build-windows-exe.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'rolling_closed_history_window(months=24)' in workflow
+    assert 'if recent_start <= end:' in workflow
+    assert 'exact=True' in workflow
+    assert 'logs/bundled_history_window.json' in workflow
+    assert 'Historical OHLCV window (UTC)' in workflow
+    assert 'start = "2024-10-01"' not in workflow
+    assert 'end = "2026-10-01"' not in workflow
