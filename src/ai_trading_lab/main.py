@@ -113,6 +113,8 @@ def train_duration_asset(df, settings, *, holdout_frac: float, copy_legacy: bool
     asset_dir.mkdir(parents=True, exist_ok=True)
     asset_model = asset_dir / 'trade_window_specialist.joblib'
     report = train_trade_window_backbone(df, settings, holdout_frac=holdout_frac, save_path=asset_model)
+    report["training_data_start"] = str(df.index.min()) if len(df) else None
+    report["training_data_end"] = str(df.index.max()) if len(df) else None
     (asset_dir / "trade_window_training_report.json").write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
     Path("logs").mkdir(exist_ok=True)
     Path("logs/trade_window_training_report.json").write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
@@ -273,8 +275,13 @@ def train_complete_asset(df, settings, *, holdout_frac: float, promote_champion:
         symbol, "trade_window_fit_started", asset_started_at=asset_started_at,
         rows=len(df),
     )
+    # Reserve the final temporal holdout exclusively for the combined live gate.
+    # The specialist's own purged validation happens entirely inside the earlier
+    # training segment, avoiding reuse of its readiness holdout as final evidence.
+    specialist_split = int(len(df) * (1.0 - float(holdout_frac)))
+    specialist_training_df = df.iloc[:specialist_split].copy()
     asset_model, duration_report = train_duration_asset(
-        df,
+        specialist_training_df,
         settings,
         holdout_frac=holdout_frac,
         copy_legacy=promote_champion,
