@@ -40,8 +40,8 @@ Live order placement is not implemented as an autonomous capability. The default
 ## Common commands
 
 ```bash
-pip install -e .
-# Optional research stack: pip install -e ".[full]"
+pip install -r requirements.txt
+# Optional experimental/research extras: pip install -e ".[full]"
 python -m ai_trading_lab.main doctor
 python -m ai_trading_lab.main demo
 python -m ai_trading_lab.main benchmark --benchmark-bars 1200
