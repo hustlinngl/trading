@@ -60,3 +60,37 @@ def test_windows_build_uses_rolling_history_and_recent_daily_archives():
     assert 'Historical OHLCV window (UTC)' in workflow
     assert 'start = "2024-10-01"' not in workflow
     assert 'end = "2026-10-01"' not in workflow
+
+
+
+def test_download_range_exact_uses_daily_archives_without_invalid_timestamp_kwargs(monkeypatch, tmp_path):
+    import ai_trading_lab.binance_vision as vision
+
+    requested_days = []
+
+    def fake_daily(symbol, interval, day, market, out_dir, timeout, verify_checksum):
+        requested_days.append(day)
+        return f"{symbol}-{interval}-{day.isoformat()}.zip"
+
+    def unexpected_monthly(*args, **kwargs):
+        raise AssertionError("partial-month request must use daily archives")
+
+    monkeypatch.setattr(vision, "download_daily", fake_daily)
+    monkeypatch.setattr(vision, "download_month", unexpected_monthly)
+
+    paths = vision.download_range(
+        "BTC/USDT",
+        "15m",
+        "2026-10-01",
+        "2026-10-03",
+        out_dir=tmp_path,
+        verify_checksum=False,
+        exact=True,
+    )
+
+    assert requested_days == [
+        pd.Timestamp("2026-10-01").date(),
+        pd.Timestamp("2026-10-02").date(),
+        pd.Timestamp("2026-10-03").date(),
+    ]
+    assert len(paths) == 3

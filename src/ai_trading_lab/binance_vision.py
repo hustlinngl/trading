@@ -101,7 +101,7 @@ def download_range(symbol,interval,start,end,market='spot',out_dir='data/raw/bin
         except FileNotFoundError: continue
     if exact:
         for y,m in sorted(boundary_months):
-            first=max(start_ts.date(),date(y,m,1)); last=min(end_ts.date(),(pd.Timestamp(y=y,m=m,day=1)+pd.offsets.MonthEnd(0)).date())
+            first=max(start_ts.date(),date(y,m,1)); last=min(end_ts.date(),(pd.Timestamp(year=y, month=m, day=1)+pd.offsets.MonthEnd(0)).date())
             d=first
             while d<=last:
                 try: out.append(download_daily(symbol,interval,d,market,out_dir,timeout,verify_checksum))
