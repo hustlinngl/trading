@@ -11,7 +11,7 @@ from .config import load_settings
 from .data import cache_ohlcv, exchange_client, fetch_ohlcv, load_cached, timeframe_offset
 from .evaluation import directional_validation_diagnostics, run_configured_backtest
 from .policy import make_actions
-from .engine import AdaptiveEngine
+from .engine import AdaptiveEngine, execution_aligned_targets
 from .research import walk_forward, strategy_discovery
 from .paper import one_iteration
 from .autolearn import auto_update
@@ -135,7 +135,6 @@ def read_asset_dataframe(meta: dict):
 
 def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     import pandas as pd
-    from .features import make_features
 
     split = int(len(df) * (1.0 - holdout_frac))
     if split < max(500, settings.min_train_rows) or len(df) - split < 100:
@@ -153,13 +152,13 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     # is intentionally separate from the policy's predicted-vs-predicted checks.
     holdout_predictions = eng.model.predict(feat)
     labelled_market = pd.concat([train_df, test_df])
-    # Compare p_up to the same direction-neutral next-open-to-next-open
-    # horizon return used as the base-model target, not to the asymmetric
-    # LONG-oriented triple-barrier payoff.
-    _, _, realized_returns = make_features(
+    # Score probability against the exact executable barrier/time-stop
+    # returns used to train the base model, including ambiguous-OHLC exclusions.
+    _, realized_returns, _ = execution_aligned_targets(
         labelled_market,
         settings.horizon_bars,
-        external_feature_lag_bars=getattr(settings, "external_feature_lag_bars", 1),
+        settings.pt_atr,
+        settings.sl_atr,
     )
     realized_returns = realized_returns.reindex(test_df.index)
     realized_directional_validation = directional_validation_diagnostics(
