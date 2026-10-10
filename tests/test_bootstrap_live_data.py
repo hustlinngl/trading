@@ -28,6 +28,16 @@ def _history_frame(rows=120):
     )
 
 
+
+def test_main_keeps_kraken_ohlcv_adapter_separate_from_exchange_ohlcv():
+    import inspect
+    import ai_trading_lab.main as main_module
+
+    source = inspect.getsource(main_module.main)
+    assert "from .kraken_data import fetch_ohlcv as fetch_kraken_ohlcv" in source
+    assert "df, provenance = fetch_kraken_ohlcv(" in source
+    assert "from .kraken_data import fetch_ohlcv, fingerprint_frame, save_provenance" not in source
+
 def test_bootstrap_live_data_uses_worker_clients_and_atomic_csvs(monkeypatch, tmp_path, capsys):
     import ai_trading_lab.main as main_module
 
