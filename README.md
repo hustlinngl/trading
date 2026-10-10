@@ -17,6 +17,10 @@ This repository is a research-first adaptive trading platform for real market da
 - Single-file `signal_dashboard.py` signal terminal with automatic public-data refresh, provenance-aware bundle checks and prequential signal journal.
 - Alpha visual foundation with Sakura Tactical glow, anime operator, animated navigation, decision trace, signal timeline, decision inspector and lightweight ambient effects.
 
+## Project map and maintenance
+
+The codebase map, data/artifact boundaries, validation contract, maintainer commands and documentation index live in [`docs/PROJECT_MAP.md`](docs/PROJECT_MAP.md). Start with [Windows setup](SETUP_WINDOWS.md) for users or [the Windows build contract](BUILD_WINDOWS_EXE.md) for packaging. Generated market data, models and runtime journals are deliberately excluded from Git.
+
 ## Single signal terminal
 
 The intended pre-alpha user experience is now one program:
