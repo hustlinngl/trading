@@ -126,7 +126,7 @@ def test_refresh_deployment_manifest_requires_matching_evidence(tmp_path):
         (bundle / name).write_bytes(name.encode())
     (bundle / "trade_window_specialist.joblib").write_bytes(b"window")
     (bundle / "base_training_meta.json").write_text(
-        json.dumps({"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem}),
+        json.dumps({"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"training_data_fingerprint":"train-fp","model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem}),
         encoding="utf-8",
     )
     base_stats = {
