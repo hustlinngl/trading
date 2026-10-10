@@ -104,49 +104,100 @@ class SignalModel:
                 clf.fit(Xcore, ycore_c)
             for reg in self.regs:
                 reg.fit(Xcore, ycore_r)
-            probs_cal = np.column_stack([m.predict_proba(Xcal)[:, 1] for m in self.clfs])
-            rets_cal = np.column_stack([m.predict(Xcal) for m in self.regs])
+            # Keep the later calibration tail untouched for meta-policy training.
+            # Model weights, probability calibration, and conformal residuals are
+            # estimated only on the earlier calibration slice; using the same rows
+            # for both selection and meta labels would leak holdout outcomes.
+            n_cal_fit = max(32, int(len(Xcal_raw) * 0.60))
+            n_cal_fit = min(n_cal_fit, max(1, len(Xcal_raw) - 1))
+            Xcal_fit_raw = Xcal_raw.iloc[:n_cal_fit]
+            Xmeta_raw = Xcal_raw.iloc[n_cal_fit:]
+            ycal_fit = ycal.iloc[:n_cal_fit]
+            ycal_fit_r = ycal_r.iloc[:n_cal_fit]
+
+            Xcal_fit = Xcal_fit_raw.fillna(self.fill_values).ffill().fillna(0.0)
+            Xmeta = Xmeta_raw.fillna(self.fill_values).ffill().fillna(0.0)
+            probs_fit = np.column_stack([m.predict_proba(Xcal_fit)[:, 1] for m in self.clfs])
+            rets_fit = np.column_stack([m.predict(Xcal_fit) for m in self.regs])
+            probs_meta = np.column_stack([m.predict_proba(Xmeta)[:, 1] for m in self.clfs])
+            rets_meta = np.column_stack([m.predict(Xmeta) for m in self.regs])
+
             uniform = np.ones(len(self.clfs), dtype=float) / len(self.clfs)
-            briers = np.array([brier_score_loss(ycal, probs_cal[:, j]) for j in range(probs_cal.shape[1])], dtype=float)
-            rmses = np.array([mean_squared_error(ycal_r, rets_cal[:, j]) ** 0.5 for j in range(rets_cal.shape[1])], dtype=float)
-            inv_b = 1.0 / np.maximum(briers, 1e-6); inv_r = 1.0 / np.maximum(rmses, 1e-8)
-            learned_cls = inv_b / inv_b.sum(); learned_reg = inv_r / inv_r.sum()
+            briers = np.array(
+                [brier_score_loss(ycal_fit, probs_fit[:, j]) for j in range(probs_fit.shape[1])],
+                dtype=float,
+            )
+            rmses = np.array(
+                [mean_squared_error(ycal_fit_r, rets_fit[:, j]) ** 0.5 for j in range(rets_fit.shape[1])],
+                dtype=float,
+            )
+            inv_b = 1.0 / np.maximum(briers, 1e-6)
+            inv_r = 1.0 / np.maximum(rmses, 1e-8)
+            learned_cls = inv_b / inv_b.sum()
+            learned_reg = inv_r / inv_r.sum()
             self.weights_cls = 0.5 * uniform + 0.5 * learned_cls
             self.weights_reg = 0.5 * uniform + 0.5 * learned_reg
             self.weights = uniform
-            raw_p = probs_cal @ self.weights_cls
-            calibration_frame = pd.DataFrame({'p_up_raw': raw_p}, index=Xcal.index)
+
+            raw_p_fit = probs_fit @ self.weights_cls
+            calibration_frame = pd.DataFrame({'p_up_raw': raw_p_fit}, index=Xcal_fit.index)
             self.calibrator_fallback = None
-            if ycal.nunique() < 2:
+            if ycal_fit.nunique() < 2:
                 self.calibrator = None
-            elif len(Xcal) < 160 or np.unique(raw_p).size < 12:
-                self.calibrator = LogisticRegression(C=1.0, solver='lbfgs', random_state=self.random_state).fit(calibration_frame, ycal)
+            elif len(Xcal_fit) < 160 or np.unique(raw_p_fit).size < 12:
+                self.calibrator = LogisticRegression(
+                    C=1.0, solver='lbfgs', random_state=self.random_state
+                ).fit(calibration_frame, ycal_fit)
             else:
                 # Isotonic calibration is reliable only within the observed score
-                # range. Full-data refitting can move deployment scores outside
-                # that range; endpoint clipping would then turn extrapolated scores
-                # into constant probabilities. Keep a Platt model, trained on the
-                # same strictly OOS calibration scores, for extrapolation only.
-                self.calibrator = IsotonicRegression(out_of_bounds='clip').fit(raw_p, ycal)
+                # range. The logistic fallback extrapolates outside that range.
+                self.calibrator = IsotonicRegression(out_of_bounds='clip').fit(raw_p_fit, ycal_fit)
                 self.calibrator_fallback = LogisticRegression(
                     C=1.0, solver='lbfgs', random_state=self.random_state
-                ).fit(calibration_frame, ycal)
-            raw_er = rets_cal @ self.weights_reg
-            residuals = np.abs(ycal_r.to_numpy(float) - raw_er)
-            scale_col = 'atr_pct' if 'atr_pct' in Xcal.columns else ('vol_24' if 'vol_24' in Xcal.columns else None)
+                ).fit(calibration_frame, ycal_fit)
+
+            raw_er_fit = rets_fit @ self.weights_reg
+            residuals = np.abs(ycal_fit_r.to_numpy(float) - raw_er_fit)
+            scale_col = (
+                'atr_pct' if 'atr_pct' in Xcal_fit.columns
+                else ('vol_24' if 'vol_24' in Xcal_fit.columns else None)
+            )
             self.conformal_scale_col = scale_col
             if len(residuals):
                 self.conformal_abs_residuals_ = residuals.astype(float)
-                self.conformal_abs_error_ = float(np.quantile(residuals, self.conformal_level, method='higher'))
+                self.conformal_abs_error_ = float(
+                    np.quantile(residuals, self.conformal_level, method='higher')
+                )
                 if scale_col is not None:
-                    scale = np.maximum(np.abs(Xcal[scale_col].to_numpy(float)), 1e-6)
+                    scale = np.maximum(
+                        np.abs(Xcal_fit[scale_col].to_numpy(float)), 1e-6
+                    )
                     scaled = residuals / scale
                     self.conformal_scaled_residuals_ = scaled.astype(float)
-                    self.conformal_scaled_error_ = float(np.quantile(scaled, self.conformal_level, method='higher'))
+                    self.conformal_scaled_error_ = float(
+                        np.quantile(scaled, self.conformal_level, method='higher')
+                    )
                 else:
                     self.conformal_scaled_residuals_ = None
                     self.conformal_scaled_error_ = 0.0
-            self.calibration_oos_ = pd.DataFrame({'p_up': raw_p, 'expected_return': raw_er, 'model_disagreement': probs_cal.std(axis=1), 'return_disagreement': rets_cal.std(axis=1)}, index=Xcal.index)
+
+            # Meta-policy rows are chronologically later than, and independent of,
+            # every row used to choose ensemble weights, fit the calibrator, or set
+            # conformal errors. "p_up" carries the calibrated probability used by
+            # the execution policy; "p_up_raw" is the score used as a meta feature.
+            raw_p_meta = probs_meta @ self.weights_cls
+            calibrated_p_meta = self._calibrated_probabilities(raw_p_meta)
+            raw_er_meta = rets_meta @ self.weights_reg
+            self.calibration_oos_ = pd.DataFrame(
+                {
+                    'p_up': calibrated_p_meta,
+                    'p_up_raw': raw_p_meta,
+                    'expected_return': raw_er_meta,
+                    'model_disagreement': probs_meta.std(axis=1),
+                    'return_disagreement': rets_meta.std(axis=1),
+                },
+                index=Xmeta.index,
+            )
             # Calibration remains strictly OOS. Once calibration evidence is frozen,
             # refit the production learners on the full chronological training dataset so
             # deployment uses every available labeled row without contaminating validation.
