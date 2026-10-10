@@ -71,6 +71,7 @@ def test_combined_gate_rejects_missing_live_fields():
 
 def test_holdout_builder_persists_combined_gate_provenance(monkeypatch, tmp_path):
     settings = _settings()
+    settings.research_ledger_path = str(tmp_path / "research_ledger.json")
     full = _market()
     train = full.iloc[:90].copy()
     holdout = full.iloc[90:].copy()
