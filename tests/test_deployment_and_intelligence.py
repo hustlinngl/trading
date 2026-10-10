@@ -392,7 +392,7 @@ def test_train_complete_asset_can_skip_global_champion_promotion(monkeypatch, tm
     monkeypatch.setattr(
         main_module,
         "train_base_asset",
-        lambda df, ss: (tmp_path / "bundle", object()),
+        lambda df, ss, **kwargs: (tmp_path / "bundle", object()),
     )
     monkeypatch.setattr(
         main_module,
