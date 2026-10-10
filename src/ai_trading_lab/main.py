@@ -199,6 +199,35 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     asset_dir = asset_model_dir(settings.symbol)
     asset_dir.mkdir(parents=True, exist_ok=True)
     (asset_dir / "base_holdout_report.json").write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+
+    # Build combined-policy evidence only when the matching specialist artifact exists.
+    # The base engine above is fitted exclusively on train_df; specialist training
+    # uses the same purged chronological split, so holdout labels never enter fitting.
+    specialist_path = asset_dir / "trade_window_specialist.joblib"
+    if specialist_path.is_file():
+        try:
+            from .live_policy_validation import build_live_policy_holdout_report
+            live_predictions = eng.predict_frame(feat, strict=True)
+            build_live_policy_holdout_report(
+                full_df=df,
+                train_df=train_df,
+                holdout_df=bt,
+                holdout_predictions=live_predictions,
+                settings=settings,
+                specialist_path=specialist_path,
+                output_path=asset_dir / "live_policy_holdout_report.json",
+            )
+        except Exception as exc:
+            # Fail closed: an absent/invalid evidence report blocks deployment.
+            # Keep training diagnostics available instead of fabricating a passing report.
+            error_path = asset_dir / "live_policy_holdout_error.json"
+            error_path.write_text(json.dumps({
+                "error": f"{type(exc).__name__}: {exc}",
+                "symbol": str(settings.symbol),
+                "timeframe": str(settings.timeframe),
+                "holdout_start": str(test_df.index.min()),
+                "holdout_end": str(test_df.index.max()),
+            }, indent=2), encoding="utf-8")
     report["deployment"] = refresh_deployment_manifest(settings)
     return report
 
@@ -237,22 +266,6 @@ def train_complete_asset(df, settings, *, holdout_frac: float, promote_champion:
 
     stage_started_at = time.perf_counter()
     _emit_training_progress(
-        symbol, "base_holdout_validation_started", asset_started_at=asset_started_at,
-        holdout_frac=float(holdout_frac),
-    )
-    base_holdout = test_base_holdout(df, settings, holdout_frac)
-    holdout_stats = base_holdout.get("holdout", {}) if isinstance(base_holdout, dict) else {}
-    _emit_training_progress(
-        symbol, "base_holdout_validation_completed", asset_started_at=asset_started_at,
-        stage_started_at=stage_started_at,
-        holdout_rows=base_holdout.get("holdout_rows") if isinstance(base_holdout, dict) else None,
-        holdout_trades=holdout_stats.get("trades_taken", holdout_stats.get("trades")),
-    )
-    Path("logs").mkdir(exist_ok=True)
-    Path("logs/test_report.json").write_text(json.dumps(base_holdout, indent=2, default=str), encoding="utf-8")
-
-    stage_started_at = time.perf_counter()
-    _emit_training_progress(
         symbol, "trade_window_fit_started", asset_started_at=asset_started_at,
         rows=len(df),
     )
@@ -269,6 +282,25 @@ def train_complete_asset(df, settings, *, holdout_frac: float, promote_champion:
         readiness_reason=duration_report.get("reason"),
         artifact=str(asset_model),
     )
+
+    # Generate the base and combined-live-policy holdouts only after both model
+    # paths exist, allowing the evidence builder to apply the actual specialist gate.
+    stage_started_at = time.perf_counter()
+    _emit_training_progress(
+        symbol, "base_holdout_validation_started", asset_started_at=asset_started_at,
+        holdout_frac=float(holdout_frac),
+    )
+    base_holdout = test_base_holdout(df, settings, holdout_frac)
+    holdout_stats = base_holdout.get("holdout", {}) if isinstance(base_holdout, dict) else {}
+    _emit_training_progress(
+        symbol, "base_holdout_validation_completed", asset_started_at=asset_started_at,
+        stage_started_at=stage_started_at,
+        holdout_rows=base_holdout.get("holdout_rows") if isinstance(base_holdout, dict) else None,
+        holdout_trades=holdout_stats.get("trades_taken", holdout_stats.get("trades")),
+        live_policy_evidence=(asset_dir / "live_policy_holdout_report.json").is_file(),
+    )
+    Path("logs").mkdir(exist_ok=True)
+    Path("logs/test_report.json").write_text(json.dumps(base_holdout, indent=2, default=str), encoding="utf-8")
 
     stage_started_at = time.perf_counter()
     _emit_training_progress(symbol, "deployment_readiness_started", asset_started_at=asset_started_at)
