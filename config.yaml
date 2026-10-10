@@ -48,6 +48,9 @@ risk:
   require_funding_data_for_derivatives: true
   backtest_market_type: spot
 research:
+  # These statistical thresholds are requirements, not tuning targets.
+  live_policy_min_dsr: 0.80
+  live_policy_max_pbo: 0.20
   walk_forward_train_bars: 3000
   walk_forward_test_bars: 500
   step_bars: 500
