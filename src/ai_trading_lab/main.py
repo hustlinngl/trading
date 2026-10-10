@@ -200,6 +200,10 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     asset_dir.mkdir(parents=True, exist_ok=True)
     (asset_dir / "base_holdout_report.json").write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
 
+    # Invalidate any previous evidence before attempting a new run. If generation
+    # fails, a stale report must never satisfy the deployment manifest.
+    live_report_path = asset_dir / "live_policy_holdout_report.json"
+    live_report_path.unlink(missing_ok=True)
     # Build combined-policy evidence only when the matching specialist artifact exists.
     # The base engine above is fitted exclusively on train_df; specialist training
     # uses the same purged chronological split, so holdout labels never enter fitting.
