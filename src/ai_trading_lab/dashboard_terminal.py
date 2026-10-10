@@ -1877,14 +1877,21 @@ function renderFocus(data){
   }
   const picks=(data.signals||[]).filter(x=>x.signal==="LONG"||x.signal==="SHORT").slice(0,5);
   if(!picks.length){
-    box.innerHTML='<div class="top5-empty"><h2 style="margin:0">Nessun segnale</h2></div>';
+    const summary=data.summary||{};
+    const modelBacked=Number(summary.model_backed_assets||0);
+    const eligible=summary.model_eligible_assets!=null?Number(summary.model_eligible_assets):(summary.compatible_bundles!=null?Number(summary.compatible_bundles):null);
+    const noValidatedModels=modelBacked>0&&eligible===0;
+    const message=noValidatedModels
+      ?"I modelli disponibili non superano i controlli di validazione o compatibilità. Nessun segnale viene pubblicato finché non esiste un bundle idoneo."
+      :"Nessun segnale LONG/SHORT supera i controlli in questo momento.";
+    box.innerHTML='<div class="top5-empty"><h2 style="margin:0">Nessun segnale</h2><p class="small" style="margin:10px 0 0">'+esc(message)+'</p></div>';
     return;
   }
   const coverage=(data.summary&&data.summary.universe_total!=null)?Number(data.summary.universe_total):null;
-  const covered=(data.summary&&data.summary.model_backed_assets!=null)?Number(data.summary.model_backed_assets):null;
+  const eligible=(data.summary&&data.summary.model_eligible_assets!=null)?Number(data.summary.model_eligible_assets):((data.summary&&data.summary.compatible_bundles!=null)?Number(data.summary.compatible_bundles):null);
   const coverageNode=$("coverageSummary");
   if(coverageNode){
-    coverageNode.textContent=coverage==null?"—":coverage+" markets · "+(covered==null?"—":covered+" model-ready");
+    coverageNode.textContent=coverage==null?"—":coverage+" markets · "+(eligible==null?"—":eligible+" validated");
   }
   box.innerHTML=picks.map((r,i)=>{
     const confidenceNumber=Number(r.confidence);
@@ -2274,10 +2281,10 @@ function render(data){
   renderRadar(signals);
   renderLiveData(data);
   const coverage=(data.summary&&data.summary.universe_total!=null)?Number(data.summary.universe_total):null;
-  const covered=(data.summary&&data.summary.model_backed_assets!=null)?Number(data.summary.model_backed_assets):null;
+  const eligible=(data.summary&&data.summary.model_eligible_assets!=null)?Number(data.summary.model_eligible_assets):((data.summary&&data.summary.compatible_bundles!=null)?Number(data.summary.compatible_bundles):null);
   const coverageNode=$("coverageSummary");
   if(coverageNode){
-    coverageNode.textContent=coverage==null?"—":coverage+" markets · "+(covered==null?"—":covered+" model-ready");
+    coverageNode.textContent=coverage==null?"—":coverage+" markets · "+(eligible==null?"—":eligible+" validated");
   }
   const notes=(data.notes||[]).join(" · ");
   $("footer").textContent=notes+" · refresh "+data.refresh_seconds+"s · scan "+data.scan_seconds+"s";
