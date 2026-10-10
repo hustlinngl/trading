@@ -392,7 +392,7 @@ def test_train_complete_asset_can_skip_global_champion_promotion(monkeypatch, tm
     import json
     events = [
         json.loads(line)
-        for line in capsys.readouterr().out.splitlines()
+        for line in capsys.readouterr().err.splitlines()
         if line.strip()
     ]
     stages = [event["stage"] for event in events]
