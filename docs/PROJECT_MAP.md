@@ -9,6 +9,7 @@ This is the canonical index for people maintaining the Adaptive AI Signal Termin
 - **Public signal contract:** a signal is eligible only when data quality/freshness, symbol-specific model provenance, deployment evidence, the base policy and the required 3–24h specialist all agree. Otherwise return `WAIT` / no public signal.
 - **Market-data split:** closed OHLCV bars drive model decisions. Realtime ticker/quotes are display-only.
 - **Realtime quotes:** a bounded eight-second cache reduces repeated ticker requests; a valid bid/ask midpoint is preferred for display while the last trade remains separately available. Quote caching never participates in model decisions.
+- **Market navigation snapshot:** the last successful authoritative exchange universe is persisted atomically for up to 30 days so the market selector stays useful during outages. It restores navigation only; the live scan still uses fresh exchange discovery or the normal local fallback and never creates signals from the saved list.
 - **Outcome reporting:** signal journal returns are OHLC-derived estimates after configured costs, not actual exchange fills or account PnL. Intrabar ambiguity must stay `AMBIGUOUS` with unknown return.
 - **Research claim:** software tests and packaged startup success do not establish profitable market edge. Never relax readiness gates just to populate the Top 5.
 
