@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import load_settings
-from .data import cache_ohlcv, exchange_client, fetch_ohlcv, load_cached
+from .data import cache_ohlcv, exchange_client, fetch_ohlcv, load_cached, timeframe_offset
 from .evaluation import directional_validation_diagnostics, run_configured_backtest
 from .policy import make_actions
 from .engine import AdaptiveEngine
@@ -353,6 +353,7 @@ def main():
     parser.add_argument('--all-symbols', action='store_true', help='Discover every active exchange market eligible for OHLCV bootstrap')
     parser.add_argument('--market-types', default=None, help='Comma-separated market types for --all-symbols (default: spot,swap,future)')
     parser.add_argument('--live-bars', type=int, default=None, help='Closed OHLCV bars to cache for the live dashboard')
+    parser.add_argument('--workers', type=int, default=None, help='Bounded parallel public-data workers for bootstrap-live-data (default 4, max 8)')
     parser.add_argument('--benchmark-bars', type=int, default=3000, help='Bars used by the diagnostic benchmark suite')
     args = parser.parse_args()
     s = load_settings(args.config)
@@ -438,25 +439,25 @@ def main():
         print(json.dumps(result, indent=2, default=str)); return
 
     if args.command == 'bootstrap-live-data':
+        import threading
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         import pandas as pd
+
         requested_symbols = [
             x.strip() for x in args.symbols.split(',') if x.strip()
         ] if args.symbols else []
-
-        bars = max(
-            80,
-            int(args.live_bars or getattr(s, 'live_lookback_bars', 600))
-        )
+        bars = max(80, int(args.live_bars or getattr(s, 'live_lookback_bars', 600)))
         out_dir = Path('data') / 'historical'
         out_dir.mkdir(parents=True, exist_ok=True)
-        ex = exchange_client(
-            getattr(s, 'exchange', 'binance'),
-            sandbox=False
-        )
 
+        # Discovery uses one client. Each concurrent worker creates its own CCXT
+        # client because exchange instances are not assumed thread-safe.
+        discovery_exchange = exchange_client(
+            getattr(s, 'exchange', 'binance'), sandbox=False
+        )
         if args.all_symbols or not requested_symbols:
             allowed_types = {
-                x.strip()
+                x.strip().lower()
                 for x in (
                     args.market_types.split(',')
                     if args.market_types
@@ -465,94 +466,122 @@ def main():
                 if x.strip()
             }
             discovered = []
-            markets = getattr(ex, 'markets', {}) or {}
+            markets = getattr(discovery_exchange, 'markets', {}) or {}
             for market in markets.values():
                 if not isinstance(market, dict) or market.get('active') is False:
                     continue
                 symbol = str(market.get('symbol') or '').strip()
                 if not symbol:
                     continue
-                mtype = str(
+                market_type = str(
                     market.get('type')
                     or ('swap' if market.get('swap')
                         else 'future' if market.get('future')
                         else 'spot')
-                )
-                if allowed_types and mtype not in allowed_types:
+                ).strip().lower()
+                if allowed_types and market_type not in allowed_types:
                     continue
-                if mtype in {'swap', 'future'} and not bool(market.get('contract')):
+                if market_type in {'swap', 'future'} and not bool(market.get('contract')):
                     continue
-                if isinstance(getattr(ex, 'has', None), dict):
-                    # CCXT's global capability is the safest portable check.
-                    if ex.has.get('fetchOHLCV') is False:
-                        continue
+                capabilities = getattr(discovery_exchange, 'has', None)
+                if isinstance(capabilities, dict) and capabilities.get('fetchOHLCV') is False:
+                    continue
                 discovered.append(symbol)
-            symbols = list(dict.fromkeys(discovered))
+            symbols = sorted(dict.fromkeys(discovered))
         else:
             symbols = list(dict.fromkeys(requested_symbols))
 
-        results = []
-        failures = []
         total = len(symbols)
-        print(
-            json.dumps({
-                'stage': 'discover',
-                'exchange': getattr(s, 'exchange', 'binance'),
-                'symbols': total,
-                'bars_per_symbol': bars,
-                'market_types': (
-                    [x.strip() for x in args.market_types.split(',') if x.strip()]
-                    if args.market_types else ['spot', 'swap', 'future']
-                ),
-            }),
-            flush=True,
-        )
+        configured_workers = max(1, int(getattr(s, 'max_parallel_downloads', 4)))
+        requested_workers = args.workers if args.workers is not None else min(4, configured_workers)
+        workers = max(1, min(8, int(requested_workers)))
+        if total:
+            workers = min(workers, total)
 
-        tf_offset = None
         try:
-            tf_offset = pd.tseries.frequencies.to_offset(
-                str(getattr(s, 'timeframe', '15m'))
-                .replace('m', 'min') if str(getattr(s, 'timeframe', '15m')).endswith('m')
-                else str(getattr(s, 'timeframe', '15m'))
-            )
+            tf_delta = pd.Timedelta(timeframe_offset(str(getattr(s, 'timeframe', '15m'))))
+            if not tf_delta > pd.Timedelta(0):
+                raise ValueError('non-positive timeframe')
         except Exception:
-            tf_offset = pd.Timedelta(minutes=15)
+            tf_delta = pd.Timedelta(minutes=15)
+        max_age = max(pd.Timedelta(minutes=30), tf_delta * 2.5)
 
-        for index, symbol in enumerate(symbols, start=1):
+        print(json.dumps({
+            'stage': 'discover',
+            'exchange': getattr(s, 'exchange', 'binance'),
+            'symbols': total,
+            'bars_per_symbol': bars,
+            'workers': workers,
+            'market_types': (
+                [x.strip() for x in args.market_types.split(',') if x.strip()]
+                if args.market_types else ['spot', 'swap', 'future']
+            ),
+            'output_dir': str(out_dir),
+        }), flush=True)
+
+        worker_local = threading.local()
+
+        def worker_exchange():
+            instance = getattr(worker_local, 'exchange', None)
+            if instance is None:
+                instance = exchange_client(
+                    getattr(s, 'exchange', 'binance'), sandbox=False
+                )
+                worker_local.exchange = instance
+            return instance
+
+        def bootstrap_one(symbol):
             path = out_dir / (
                 f"{symbol.replace('/', '_').replace(':', '_')}_{s.timeframe}.csv"
             )
+            tmp = path.with_suffix(path.suffix + '.tmp')
             try:
-                # Resume safely: don't redownload a sufficiently complete fresh file.
+                # Resume only from a sufficiently complete, ordered, fresh timestamp
+                # series. File mtime is not trusted because caches can be copied.
                 if path.exists():
                     try:
                         cached = pd.read_csv(path, usecols=['timestamp'])
-                        if len(cached) >= bars and len(cached):
-                            last_raw = pd.to_datetime(cached['timestamp'].iloc[-1], utc=True)
-                            age = pd.Timestamp.now(tz='UTC') - last_raw
-                            max_age = max(pd.Timedelta(minutes=30), tf_offset * 2.5)
-                            if age <= max_age:
-                                results.append({
+                        cached['timestamp'] = pd.to_datetime(
+                            cached['timestamp'], utc=True, errors='coerce'
+                        )
+                        cached = cached.dropna(subset=['timestamp'])
+                        timestamps = cached['timestamp']
+                        if (
+                            len(cached) >= bars
+                            and not timestamps.empty
+                            and timestamps.is_monotonic_increasing
+                            and not timestamps.duplicated().any()
+                        ):
+                            last_stamp = timestamps.iloc[-1]
+                            age = pd.Timestamp.now(tz='UTC') - last_stamp
+                            if pd.Timedelta(0) <= age <= max_age:
+                                return {
                                     'symbol': symbol,
                                     'timeframe': s.timeframe,
                                     'bars': int(len(cached)),
                                     'output': str(path),
                                     'source': 'cache',
-                                })
-                                print(f'[{index}/{total}] {symbol} cache', flush=True)
-                                continue
+                                    'end': last_stamp.isoformat(),
+                                }
                     except Exception:
+                        # Corrupt/stale files are refreshed below; failures are recorded
+                        # only if the new download also fails.
                         pass
 
                 frame = fetch_ohlcv(
-                    ex,
+                    worker_exchange(),
                     symbol,
                     s.timeframe,
                     limit=bars,
                     include_unclosed=False,
                 )
-                frame.to_csv(path, index_label='timestamp')
-                results.append({
+                if frame is None or frame.empty:
+                    raise RuntimeError('empty_ohlcv')
+                # Same-directory replace is atomic on supported filesystems, so a
+                # terminated process cannot leave a half-written final CSV.
+                frame.to_csv(tmp, index_label='timestamp')
+                tmp.replace(path)
+                return {
                     'symbol': symbol,
                     'timeframe': s.timeframe,
                     'bars': int(len(frame)),
@@ -560,30 +589,63 @@ def main():
                     'end': str(frame.index.max()) if len(frame) else None,
                     'output': str(path),
                     'source': 'network',
-                })
-                print(f'[{index}/{total}] {symbol} {len(frame)} bars', flush=True)
+                }
             except Exception as exc:
-                failures.append({
+                try:
+                    tmp.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                return {
                     'symbol': symbol,
                     'error': f'{type(exc).__name__}:{exc}',
-                })
-                print(f'[{index}/{total}] {symbol} ERROR {exc}', flush=True)
+                }
 
+        results = []
+        failures = []
+        completed = 0
+        # Workers own exchange clients; the caller records results deterministically.
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix='bootstrap') as pool:
+            futures = {pool.submit(bootstrap_one, symbol): symbol for symbol in symbols}
+            for future in as_completed(futures):
+                symbol = futures[future]
+                try:
+                    item = future.result()
+                except Exception as exc:
+                    item = {'symbol': symbol, 'error': f'{type(exc).__name__}:{exc}'}
+                completed += 1
+                if item.get('error'):
+                    failures.append(item)
+                    print(f'[{completed}/{total}] {symbol} ERROR {item["error"]}', flush=True)
+                else:
+                    results.append(item)
+                    print(
+                        f'[{completed}/{total}] {symbol} {item.get("bars", 0)} bars {item.get("source", "network")}',
+                        flush=True,
+                    )
+
+        results.sort(key=lambda row: str(row.get('symbol', '')))
+        failures.sort(key=lambda row: str(row.get('symbol', '')))
         summary = {
             'exchange': getattr(s, 'exchange', 'binance'),
             'timeframe': s.timeframe,
             'requested_symbols': total,
+            'workers': workers,
             'completed': len(results),
             'failed': len(failures),
             'results': results,
             'failures': failures,
             'output_dir': str(out_dir),
+            'generated_at': datetime.now(timezone.utc).isoformat(),
         }
-        Path('logs').mkdir(exist_ok=True)
-        Path('logs/bootstrap_live_data.json').write_text(
+        logs_dir = Path('logs')
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        report_path = logs_dir / 'bootstrap_live_data.json'
+        report_tmp = report_path.with_suffix(report_path.suffix + '.tmp')
+        report_tmp.write_text(
             json.dumps(summary, indent=2, default=str),
             encoding='utf-8',
         )
+        report_tmp.replace(report_path)
         print(json.dumps(summary, indent=2, default=str))
         return
 
