@@ -96,3 +96,17 @@ def test_outcome_tracker_fails_closed_when_time_stop_open_is_not_available():
     # Timestamp at 14 -> entry at 15, and max_bars=3 requires open[18].
     result = _resolve(frame, max_bars=3)
     assert result is None
+
+
+def test_outcome_tracker_resolves_an_early_barrier_before_full_horizon_is_available():
+    frame = _market(rows=17)
+    # A new outcome is already determined at bar 16, even though the time-stop
+    # open for an eight-bar horizon is not yet present in this partial history.
+    frame.loc[frame.index[16], ["open", "high", "low", "close"]] = [
+        100.4, 100.5, 99.5, 100.0
+    ]
+
+    result = _resolve(frame, max_bars=8)
+
+    assert result is not None
+    assert result["outcome"] == "WIN"
