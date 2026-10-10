@@ -20,7 +20,11 @@ def _market(rows: int = 48) -> pd.DataFrame:
     )
 
 
-def _resolve(frame: pd.DataFrame, *, max_bars: int, min_bars: int = 1, side: str = "LONG"):
+def _resolve(
+    frame: pd.DataFrame, *, max_bars: int, min_bars: int = 1, side: str = "LONG",
+    impact_bps_per_sqrt: float = 0.0, max_participation_pct: float = 0.10,
+    short_borrow_bps_per_bar: float = 0.0,
+):
     return _resolve_result(
         frame,
         {
@@ -34,6 +38,9 @@ def _resolve(frame: pd.DataFrame, *, max_bars: int, min_bars: int = 1, side: str
         fee_bps=1.0,
         slippage_bps=2.0,
         max_bars=max_bars,
+        impact_bps_per_sqrt=impact_bps_per_sqrt,
+        max_participation_pct=max_participation_pct,
+        short_borrow_bps_per_bar=short_borrow_bps_per_bar,
     )
 
 
@@ -110,3 +117,55 @@ def test_outcome_tracker_resolves_an_early_barrier_before_full_horizon_is_availa
 
     assert result is not None
     assert result["outcome"] == "WIN"
+
+
+
+def test_outcome_tracker_subtracts_configured_round_trip_impact_cost():
+    frame = _market()
+    frame.loc[frame.index[16], ["open", "high", "low", "close"]] = [
+        100.4, 100.5, 99.5, 100.0
+    ]
+
+    result = _resolve(
+        frame, max_bars=8, impact_bps_per_sqrt=10.0, max_participation_pct=0.25
+    )
+
+    assert result is not None
+    assert result["outcome"] == "WIN"
+    # 2*(1 fee + 2 slippage + 10*sqrt(0.25) impact) = 26 bps.
+    assert np.isclose(result["estimated_cost_bps"], 26.0)
+    assert np.isclose(result["realized_return"], 0.004 - 0.0026)
+
+
+def test_outcome_tracker_subtracts_short_borrow_for_elapsed_bars():
+    frame = _market()
+    # The lower barrier is gapped through at the second holding candle (one full
+    # elapsed interval after entry); shorts win when price falls through lower.
+    frame.loc[frame.index[16], ["open", "high", "low", "close"]] = [
+        99.6, 100.6, 99.5, 100.0
+    ]
+
+    result = _resolve(
+        frame, max_bars=8, side="SHORT", short_borrow_bps_per_bar=4.0
+    )
+
+    assert result is not None
+    assert result["outcome"] == "WIN"
+    assert np.isclose(result["estimated_cost_bps"], 10.0)
+    assert np.isclose(
+        result["realized_return"], (100.0 / 99.6 - 1.0) - 0.0010
+    )
+
+
+def test_outcome_tracker_does_not_report_fake_zero_return_for_ambiguous_barrier():
+    frame = _market()
+    frame.loc[frame.index[16], ["open", "high", "low", "close"]] = [
+        100.0, 100.6, 99.5, 100.0
+    ]
+
+    result = _resolve(frame, max_bars=8)
+
+    assert result is not None
+    assert result["outcome"] == "AMBIGUOUS"
+    assert result["realized_return"] is None
+    assert np.isclose(result["estimated_cost_bps"], 6.0)
