@@ -202,6 +202,29 @@ def build_live_policy_holdout_report(
 
     base_report_path = Path(output_path).with_name("base_holdout_report.json")
     base_report = json.loads(base_report_path.read_text(encoding="utf-8"))
+    # Reuse the same overlap-aware governance ledger as research/tuning. A changed
+    # full-data fingerprint does not make an overlapping holdout pristine again.
+    from .research_ledger import register_holdout_access
+    ledger_path = Path(getattr(settings, "research_ledger_path", "data/research_ledger.json"))
+    scope = (
+        f"{getattr(settings, 'symbol', 'UNKNOWN')}|"
+        f"{getattr(settings, 'timeframe', 'UNKNOWN')}|"
+        f"{getattr(settings, 'model_name', 'adaptive_signal')}"
+    )
+    holdout_access = register_holdout_access(
+        ledger_path,
+        dataset_fingerprint=strong_dataset_fingerprint(full_fingerprint_df),
+        holdout_start=str(holdout_df.index.min()),
+        holdout_end=str(holdout_df.index.max()),
+        holdout_frac=float(len(holdout_df) / max(1, len(full_df))),
+        purpose="combined_live_policy_holdout_validation",
+        scope=scope,
+        metadata={
+            "symbol": str(settings.symbol),
+            "timeframe": str(settings.timeframe),
+            "holdout_fingerprint": strong_dataset_fingerprint(holdout_fingerprint_df),
+        },
+    )
     report = {
         "schema_version": 1,
         "symbol": str(settings.symbol),
@@ -216,7 +239,9 @@ def build_live_policy_holdout_report(
         "live_signal_gate_applied": True,
         "specialist_gate_applied": bool(getattr(settings, "trade_window_required_for_signal", True)),
         "holdout_governance": {
-            "pristine": True,
+            "pristine": bool(holdout_access.get("pristine", False)),
+            "holdout_access_key": holdout_access.get("holdout_key"),
+            "overlapping_prior_runs": holdout_access.get("overlapping_prior_runs", []),
             "temporal_order_verified": True,
             "thresholds_selected_on_holdout": False,
             "execution_costs_included": True,
