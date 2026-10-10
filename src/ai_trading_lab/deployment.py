@@ -17,7 +17,7 @@ def model_semantics_fingerprint(settings) -> str:
     fields = {
         # Bump when target, calibration, or meta train/serve semantics change.
         # Existing bundles must be retrained rather than silently reused.
-        "label_target_semantics": "direction_from_executable_next_open_realized_return_v2",
+        "label_target_semantics": "direction_from_next_open_to_next_open_horizon_return_v3",
         "probability_calibration_semantics": PROBABILITY_CALIBRATION_SEMANTICS,
         "meta_policy_semantics": "raw_oos_probability_and_unadjusted_return_bounds_v2",
         "timeframe": str(getattr(settings, "timeframe", "")),
