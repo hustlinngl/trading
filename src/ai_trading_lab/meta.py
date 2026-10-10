@@ -15,9 +15,18 @@ class MetaPolicy:
     @staticmethod
     def frame(pred,features,regimes,analog,regime_persistence=None,regime_probs=None):
         out=pd.DataFrame(index=pred.index)
-        for c in ['p_up','expected_return','model_disagreement','return_disagreement']: out[c]=pred[c]
-        out['expected_return_lcb']=pred['expected_return_lcb'] if 'expected_return_lcb' in pred else pred['expected_return']
-        out['expected_return_ucb']=pred['expected_return_ucb'] if 'expected_return_ucb' in pred else pred['expected_return']
+        # The meta policy is trained on out-of-sample ensemble scores, before the
+        # probability calibrator is applied. Prefer that same raw score at inference;
+        # the calibrated probability remains available to the execution policy.
+        probability_col = 'p_up_raw' if 'p_up_raw' in pred else 'p_up'
+        out['p_up'] = pred[probability_col]
+        for c in ['expected_return','model_disagreement','return_disagreement']: out[c]=pred[c]
+        # The meta-training OOS frame intentionally has no calibrated return bounds.
+        # Keep these compatibility columns neutral at inference too, rather than
+        # feeding deployment-only conformal intervals into features trained as copies
+        # of expected_return. Return uncertainty is still used by the execution policy.
+        out['expected_return_lcb'] = pred['expected_return']
+        out['expected_return_ucb'] = pred['expected_return']
         out['analog_edge']=analog['edge']; out['analog_agreement']=analog['agreement']; out['analog_dispersion']=analog['dispersion']
         out['regime_trend_up']=(regimes=='trend_up').astype(float); out['regime_high_vol_up']=(regimes=='high_vol_up').astype(float); out['regime_high_vol_down']=(regimes=='high_vol_down').astype(float); out['regime_range']=(regimes=='range_or_down').astype(float); out['regime_transition']=(regimes=='transition').astype(float)
         out['regime_persistence']=pd.Series(regime_persistence,index=out.index).astype(float) if regime_persistence is not None else 0.0
