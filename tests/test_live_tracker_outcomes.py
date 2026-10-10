@@ -132,9 +132,9 @@ def test_outcome_tracker_subtracts_configured_round_trip_impact_cost():
 
     assert result is not None
     assert result["outcome"] == "WIN"
-    # 2*(1 fee + 2 slippage + 10*sqrt(0.25) impact) = 26 bps.
-    assert np.isclose(result["estimated_cost_bps"], 26.0)
-    assert np.isclose(result["realized_return"], 0.004 - 0.0026)
+    # 2*(1 fee + 2 slippage + 10*sqrt(0.25) impact) = 16 bps.
+    assert np.isclose(result["estimated_cost_bps"], 16.0)
+    assert np.isclose(result["realized_return"], 0.004 - 0.0016)
 
 
 def test_outcome_tracker_subtracts_short_borrow_for_elapsed_bars():
