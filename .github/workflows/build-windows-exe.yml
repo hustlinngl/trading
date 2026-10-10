@@ -42,17 +42,29 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import json
           import pandas as pd
-          from ai_trading_lab.binance_vision import download_range, merge_archives
+          from ai_trading_lab.binance_vision import (
+              download_range, merge_archives, rolling_closed_history_window,
+          )
 
-          # Broader bundled history: fifteen liquid/core assets, two full years of closed 15m candles.
+          # Use complete monthly archives for the two-year window and daily archives
+          # for the latest closed candles in the current UTC month.
           symbols = [
               "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT",
               "ADA/USDT", "DOGE/USDT", "AVAX/USDT", "LINK/USDT", "DOT/USDT",
               "LTC/USDT", "BCH/USDT", "ATOM/USDT", "UNI/USDT", "ETC/USDT",
           ]
-          start = "2024-10-01"
-          end = "2026-10-01"
+          window = rolling_closed_history_window(months=24)
+          start = window["start"]
+          monthly_end = window["monthly_end"]
+          recent_start = window["recent_start"]
+          end = window["end"]
+          print("bundled-history-window-utc", start, end, "monthly-through", monthly_end)
+          Path("logs").mkdir(parents=True, exist_ok=True)
+          Path("logs/bundled_history_window.json").write_text(
+              json.dumps(window, indent=2), encoding="utf-8"
+          )
 
           from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -64,13 +76,26 @@ jobs:
                   symbol,
                   "15m",
                   start,
-                  end,
+                  monthly_end,
                   market="spot",
                   out_dir="data/raw/binance",
                   timeout=90,
                   verify_checksum=True,
                   exact=False,
               )
+              if recent_start <= end:
+                  archives.extend(download_range(
+                      symbol,
+                      "15m",
+                      recent_start,
+                      end,
+                      market="spot",
+                      out_dir="data/raw/binance",
+                      timeout=90,
+                      verify_checksum=True,
+                      exact=True,
+                  ))
+              archives = list(dict.fromkeys(archives))
               frame = merge_archives(archives)
               if frame.empty or len(frame) < 5000:
                   raise RuntimeError(
@@ -107,6 +132,8 @@ jobs:
           import json
           from pathlib import Path
           report = json.loads(Path("logs/train_complete_all_report.json").read_text(encoding="utf-8"))
+          window_path = Path("logs/bundled_history_window.json")
+          history_window = json.loads(window_path.read_text(encoding="utf-8")) if window_path.exists() else {}
           expected = {"BTC/USDT","ETH/USDT","BNB/USDT","SOL/USDT","XRP/USDT","ADA/USDT","DOGE/USDT","AVAX/USDT","LINK/USDT","DOT/USDT","LTC/USDT","BCH/USDT","ATOM/USDT","UNI/USDT","ETC/USDT"}
           trained = {str(row.get("symbol")) for row in report if row.get("status") == "trained"}
           missing = sorted(expected - trained)
@@ -119,6 +146,11 @@ jobs:
           readiness_lines = [
               "Sakura Signal Terminal — model readiness",
               f"Package mode: {mode}",
+              "Historical OHLCV window (UTC): " + (
+                  f"{history_window.get('start')} through {history_window.get('end')}"
+                  if history_window.get("start") and history_window.get("end")
+                  else "unknown"
+              ),
               f"Expected assets: {len(expected)}",
               f"Trained assets: {len(trained)}",
               f"Deployment-ready assets: {len(ready)}",
