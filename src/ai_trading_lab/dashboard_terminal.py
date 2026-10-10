@@ -127,6 +127,11 @@ class SignalTerminal:
         self._cached_at = 0.0
         self._exchange = None
         self._exchange_error = None
+        # Reuse recent public quotes across concurrent dashboard/API refreshes.
+        # This cache is display-only; model decisions still use the closed-candle path.
+        self._quote_cache: dict[str, tuple[float, dict]] = {}
+        self._quote_cache_ttl = 8.0
+        self._quote_cache_lock = threading.Lock()
         self._assessment_cache = {}
         stream_symbols = tuple(getattr(settings, "live_symbols", ()) or ())
         self._live_tracker = LiveTracker(
@@ -372,56 +377,127 @@ class SignalTerminal:
     def _ticker_row(symbol: str, ticker: dict) -> dict:
         def as_float(key: str):
             value = ticker.get(key)
-            return float(value) if value is not None else None
+            if value is None:
+                return None
+            try:
+                number = float(value)
+            except (TypeError, ValueError, OverflowError):
+                return None
+            return number if math.isfinite(number) else None
 
+        last = as_float("last")
+        bid = as_float("bid")
+        ask = as_float("ask")
+        # A valid, non-crossed bid/ask gives a more stable display price than
+        # the last trade. Keep the last trade separately for inspection/fallback.
+        midpoint = None
+        if bid is not None and ask is not None and 0.0 < bid <= ask:
+            midpoint = (bid + ask) / 2.0
         return {
             "symbol": symbol,
-            "price": as_float("last"),
-            "bid": as_float("bid"),
-            "ask": as_float("ask"),
+            "price": midpoint if midpoint is not None else last,
+            "last_price": last,
+            "bid": bid,
+            "ask": ask,
             "timestamp": ticker.get("timestamp"),
-            "quote_volume": ticker.get("quoteVolume"),
+            "quote_volume": as_float("quoteVolume"),
         }
 
-    def _quotes(self, symbols: list[str]) -> dict:
-        """Best-effort realtime ticker overlay; failure never blocks signals."""
-        result = {}
-        try:
-            exchange = self._get_exchange()
-        except Exception as exc:
-            return {"_error": f"{type(exc).__name__}:{exc}"}
+    def _cached_quote(self, symbol: str) -> dict | None:
+        now = time.monotonic()
+        with self._quote_cache_lock:
+            entry = self._quote_cache.get(str(symbol))
+            if entry is None:
+                return None
+            stored_at, payload = entry
+            if now - stored_at > float(self._quote_cache_ttl):
+                self._quote_cache.pop(str(symbol), None)
+                return None
+            return dict(payload)
 
-        missing = list(dict.fromkeys(symbols))
+    def _remember_quote(self, symbol: str, payload: dict) -> None:
+        if not isinstance(payload, dict) or payload.get("error"):
+            return
+        if not any(payload.get(key) is not None for key in ("price", "last_price", "bid", "ask")):
+            return
+        now = time.monotonic()
+        key = str(symbol)
+        with self._quote_cache_lock:
+            # Prune expired rows first and bound memory if users browse many markets.
+            expired = [
+                cached_key
+                for cached_key, (stored_at, _) in self._quote_cache.items()
+                if now - stored_at > float(self._quote_cache_ttl)
+            ]
+            for cached_key in expired:
+                self._quote_cache.pop(cached_key, None)
+            if key not in self._quote_cache and len(self._quote_cache) >= 2048:
+                oldest = min(self._quote_cache, key=lambda cached_key: self._quote_cache[cached_key][0])
+                self._quote_cache.pop(oldest, None)
+            self._quote_cache[key] = (now, dict(payload))
+
+    def _quotes(self, symbols: list[str]) -> dict:
+        """Return recent cached quotes first, then refresh only expired/missing symbols."""
+        requested = list(dict.fromkeys(str(symbol) for symbol in symbols if str(symbol).strip()))
+        result = {}
+        missing = []
+        for symbol in requested:
+            cached = self._cached_quote(symbol)
+            if cached is None:
+                missing.append(symbol)
+            else:
+                result[symbol] = cached
+        if not missing:
+            return result
+
+        exchange = self._get_exchange()
+        if exchange is None:
+            error = self._exchange_error or "exchange_unavailable"
+            for symbol in missing:
+                result[symbol] = {"symbol": symbol, "error": error}
+            return result
+
         bulk = getattr(exchange, "fetch_tickers", None)
-        if missing and callable(bulk):
+        if callable(bulk):
             try:
-                # Large universes are cheaper and safer to fetch as the exchange-wide ticker map
-                # when the adapter supports that form (Binance does); small lists stay targeted.
+                # Large universes are cheaper and safer to fetch as one exchange-wide
+                # ticker map when supported; small lists stay targeted.
                 tickers = bulk() if len(missing) > 100 else bulk(missing)
                 if isinstance(tickers, dict):
                     for symbol in missing:
                         ticker = tickers.get(symbol)
                         if isinstance(ticker, dict):
-                            result[symbol] = self._ticker_row(symbol, ticker)
+                            payload = self._ticker_row(symbol, ticker)
+                            result[symbol] = payload
+                            self._remember_quote(symbol, payload)
                     missing = [symbol for symbol in missing if symbol not in result]
             except Exception:
                 pass
 
         for symbol in missing:
             try:
-                result[symbol] = self._ticker_row(symbol, exchange.fetch_ticker(symbol))
+                payload = self._ticker_row(symbol, exchange.fetch_ticker(symbol))
+                result[symbol] = payload
+                self._remember_quote(symbol, payload)
             except Exception as exc:
                 result[symbol] = {"symbol": symbol, "error": f"{type(exc).__name__}:{exc}"}
         return result
 
     def _quote(self, symbol: str) -> dict:
+        key = str(symbol).strip()
+        cached = self._cached_quote(key)
+        if cached is not None:
+            return cached
         try:
             exchange = self._get_exchange()
-            payload = self._ticker_row(symbol, exchange.fetch_ticker(symbol))
+            if exchange is None:
+                raise RuntimeError(self._exchange_error or "exchange_unavailable")
+            payload = self._ticker_row(key, exchange.fetch_ticker(key))
             payload["generated_at"] = datetime.now(timezone.utc).isoformat()
+            self._remember_quote(key, payload)
             return payload
         except Exception as exc:
-            return {"symbol": symbol, "error": f"{type(exc).__name__}:{exc}"}
+            return {"symbol": key, "error": f"{type(exc).__name__}:{exc}"}
 
     @staticmethod
     def _history_slug(symbol: str, timeframe: str) -> str:
