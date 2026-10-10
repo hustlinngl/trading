@@ -494,11 +494,23 @@ def _resolve_result(
     if not np.isfinite(upper) or not np.isfinite(lower) or lower <= 0 or upper <= lower:
         return None
 
+    cost_parameters = np.asarray(
+        [
+            fee_bps,
+            slippage_bps,
+            impact_bps_per_sqrt,
+            max_participation_pct,
+            short_borrow_bps_per_bar,
+        ],
+        dtype=float,
+    )
+    if not np.isfinite(cost_parameters).all() or np.any(cost_parameters < 0.0):
+        return None
     participation = float(np.clip(float(max_participation_pct), 0.0, 1.0))
-    fee_bps = max(0.0, float(fee_bps))
-    slippage_bps = max(0.0, float(slippage_bps))
-    impact_bps_per_sqrt = max(0.0, float(impact_bps_per_sqrt))
-    short_borrow_bps_per_bar = max(0.0, float(short_borrow_bps_per_bar))
+    fee_bps = float(fee_bps)
+    slippage_bps = float(slippage_bps)
+    impact_bps_per_sqrt = float(impact_bps_per_sqrt)
+    short_borrow_bps_per_bar = float(short_borrow_bps_per_bar)
     round_trip_cost_bps = 2.0 * (
         fee_bps + slippage_bps + impact_bps_per_sqrt * np.sqrt(participation)
     )
