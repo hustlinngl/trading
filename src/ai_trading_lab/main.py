@@ -286,6 +286,9 @@ def train_complete_asset(df, settings, *, holdout_frac: float, promote_champion:
     if specialist_split <= 0 or specialist_split >= len(df):
         raise ValueError("invalid_final_holdout_split")
     training_df = df.iloc[:specialist_split].copy()
+    # Invalidate prior combined-gate evidence before changing any model artifact;
+    # interrupted training must never leave an old report eligible for promotion.
+    (asset_model_dir(symbol) / "live_policy_holdout_report.json").unlink(missing_ok=True)
     asset_started_at = time.perf_counter()
     _emit_training_progress(
         symbol, "asset_training_started", asset_started_at=asset_started_at,
