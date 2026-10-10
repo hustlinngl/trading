@@ -600,10 +600,11 @@ def _resolve_result(
     if not np.isfinite(exit_price) or exit_price <= 0:
         return None
 
+    # Keep time-stop and barrier exits on the same entry-notional return basis.
     gross = (
         exit_price / entry - 1.0
         if side == "LONG"
-        else entry / exit_price - 1.0
+        else (entry - exit_price) / entry
     )
     estimated_cost_bps = cost_bps_for(horizon)
     return {
