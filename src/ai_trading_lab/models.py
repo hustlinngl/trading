@@ -271,7 +271,7 @@ class SignalModel:
             margin_arr = np.full(len(raw), float(max(0.0, self.conformal_abs_error_)))
         raw['expected_return_lcb'] = raw['expected_return'] - margin_arr
         raw['expected_return_ucb'] = raw['expected_return'] + margin_arr
-        return raw[['p_up','expected_return','expected_return_lcb','expected_return_ucb','model_disagreement','return_disagreement']]
+        return raw[['p_up_raw','p_up','expected_return','expected_return_lcb','expected_return_ucb','model_disagreement','return_disagreement']]
 
     def evaluate(self, X: pd.DataFrame, y_cls: pd.Series, y_ret: pd.Series) -> ModelReport:
         mask = y_cls.notna() & y_ret.notna(); pred = self.predict(X.loc[mask])
