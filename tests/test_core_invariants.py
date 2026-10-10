@@ -12,7 +12,7 @@ from ai_trading_lab.master_tuner import _fold_cache_key
 from ai_trading_lab.risk import RiskEngine
 from ai_trading_lab.backtest import run_backtest
 from ai_trading_lab.engine import AdaptiveEngine
-from ai_trading_lab.features import make_oos_features
+from ai_trading_lab.features import make_features, make_oos_features
 from ai_trading_lab.labels import triple_barrier_labels
 
 
@@ -417,3 +417,28 @@ def test_backtest_executes_gap_through_take_profit_at_open_before_later_stop_tou
     assert not result.trades.empty
     assert result.trades.iloc[0]["exit_reason"] == "take_profit"
     assert np.isclose(result.trades.iloc[0]["exit"], 103.0)
+
+
+
+def test_base_return_target_uses_next_open_at_the_horizon_not_exit_close():
+    idx = pd.date_range("2026-01-01", periods=22, freq="15min", tz="UTC")
+    df = pd.DataFrame(
+        {
+            "open": np.full(22, 100.0),
+            "high": np.full(22, 100.1),
+            "low": np.full(22, 99.9),
+            "close": np.full(22, 100.0),
+            "volume": np.full(22, 100_000.0),
+        },
+        index=idx,
+    )
+    # A gap at the executable exit open is immediately available at the
+    # horizon boundary. The eventual close must not contaminate that target.
+    df.loc[idx[17], ["open", "high", "low", "close"]] = [102.0, 102.1, 99.9, 100.0]
+
+    features, direction, realized_return = make_features(df, horizon=2)
+
+    assert np.isclose(realized_return.loc[idx[14]], 0.02)
+    assert direction.loc[idx[14]] == 1.0
+    # For this row, the old close-based target would have been exactly zero.
+    assert not np.isclose(realized_return.loc[idx[14]], df.loc[idx[17], "close"] / df.loc[idx[15], "open"] - 1.0)

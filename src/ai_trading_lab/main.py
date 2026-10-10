@@ -133,7 +133,7 @@ def read_asset_dataframe(meta: dict):
 
 def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     import pandas as pd
-    from .labels import triple_barrier_labels
+    from .features import make_features
 
     split = int(len(df) * (1.0 - holdout_frac))
     if split < max(500, settings.min_train_rows) or len(df) - split < 100:
@@ -151,12 +151,15 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     # is intentionally separate from the policy's predicted-vs-predicted checks.
     holdout_predictions = eng.model.predict(feat)
     labelled_market = pd.concat([train_df, test_df])
-    realized_returns = triple_barrier_labels(
+    # Compare p_up to the same direction-neutral next-open-to-next-open
+    # horizon return used as the base-model target, not to the asymmetric
+    # LONG-oriented triple-barrier payoff.
+    _, _, realized_returns = make_features(
         labelled_market,
         settings.horizon_bars,
-        settings.pt_atr,
-        settings.sl_atr,
-    )["tb_return"].reindex(test_df.index)
+        external_feature_lag_bars=getattr(settings, "external_feature_lag_bars", 1),
+    )
+    realized_returns = realized_returns.reindex(test_df.index)
     realized_directional_validation = directional_validation_diagnostics(
         holdout_predictions["p_up"].reindex(test_df.index).to_numpy(),
         realized_returns.to_numpy(),

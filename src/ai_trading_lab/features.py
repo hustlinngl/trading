@@ -44,7 +44,7 @@ def make_features(df,horizon=8,external_feature_lag_bars=1):
     idx=x.index
     if isinstance(idx,pd.DatetimeIndex):
         x['hour_sin']=np.sin(2*np.pi*idx.hour/24); x['hour_cos']=np.cos(2*np.pi*idx.hour/24); x['dow_sin']=np.sin(2*np.pi*idx.dayofweek/7); x['dow_cos']=np.cos(2*np.pi*idx.dayofweek/7)
-    future_entry=x.open.shift(-1); future_exit=c.shift(-(int(horizon)+1)); future_ret=future_exit/future_entry-1; y=(future_ret>0).astype(float); y[future_ret.isna()]=np.nan
+    future_entry=x.open.shift(-1); future_exit=x.open.shift(-(int(horizon)+1)); future_ret=future_exit/future_entry-1; y=(future_ret>0).astype(float); y[future_ret.isna()]=np.nan
     return x.replace([np.inf,-np.inf],np.nan),y,future_ret
 def make_oos_features(history,future,horizon=8,warmup_bars=None,external_feature_lag_bars=1):
     warmup=int(warmup_bars or max(256,int(horizon)*4))
