@@ -204,3 +204,53 @@ def test_outcome_tracker_rejects_missing_or_invalid_timestamp_without_raising():
         {"timestamp": "not-a-timestamp", "signal": "LONG"},
     ):
         assert _resolve_result(frame, record, "15m", 1.25, 0.90, 1.0, 2.0, 8) is None
+
+
+
+def test_outcome_tracker_updates_legacy_journal_and_entry_metadata(monkeypatch, tmp_path):
+    import json
+    from types import SimpleNamespace
+
+    import ai_trading_lab.live_tracker as tracker
+
+    frame = _market()
+    frame.loc[frame.index[16], ["open", "high", "low", "close"]] = [
+        100.4, 100.5, 99.5, 100.0
+    ]
+    history_dir = tmp_path / "logs"
+    history_dir.mkdir()
+    history_path = history_dir / tracker.HISTORY_NAME
+    legacy_record = {
+        "symbol": "BTC/USDT",
+        "timestamp": frame.index[14].isoformat(),
+        "status": "SIGNAL",
+        "signal": "LONG",
+        "confidence": 0.9,
+        "expected_return": 0.01,
+    }
+    history_path.write_text(json.dumps(legacy_record) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(tracker, "fetch_ohlcv", lambda *args, **kwargs: frame)
+    settings = SimpleNamespace(
+        exchange="binance",
+        timeframe="15m",
+        live_lookback_bars=600,
+        trade_window_min_hours=0.25,
+        trade_window_max_hours=24.0,
+        trade_window_pt_atr=1.25,
+        trade_window_sl_atr=0.90,
+        fee_bps=1.0,
+        slippage_bps=2.0,
+        impact_bps_per_sqrt=0.0,
+        max_participation_pct=0.10,
+        short_borrow_bps_per_bar=0.0,
+    )
+
+    result = tracker.update_live_signal_outcomes(settings, tmp_path, exchange=object())
+    persisted = json.loads(history_path.read_text(encoding="utf-8").splitlines()[0])
+
+    assert result == {"updated": 1, "open": 0, "closed": 1}
+    assert persisted["outcome"] == "WIN"
+    assert persisted["entry_timestamp"] == str(frame.index[15])
+    assert persisted["entry_price"] == 100.0
+    assert "tracking_error" not in persisted
