@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.9.43
+- Made full-universe historical bootstrap bounded-parallel and resumable with per-worker exchange clients, atomic CSV replacement, freshness/order checks and a deterministic per-symbol report.
 - Added a visible Market cockpit universe freshness label (`LIVE`, `CACHED` or `LOCAL`) and used last-known market count for navigation coverage while keeping scan/eligible counts separate.
 - Persisted the last authoritative market universe for offline market-selector navigation, with a 30-day expiry, atomic writes and explicit stale/source metadata; saved markets never widen signal eligibility.
 - Added an 8-second bounded realtime quote cache to reduce repeated public ticker calls while keeping signal inference on closed candles.
