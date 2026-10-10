@@ -46,6 +46,14 @@ def test_dashboard_responsive_ui_and_chart_edge_case():
     assert 'fetch("/api/state?force="+(force?"1":"0")' in html
 
 
+def test_dashboard_labels_ohlc_outcome_return_as_estimated_not_realized():
+    import signal_dashboard as terminal_mod
+
+    html = terminal_mod.HTML
+    assert "<th>Netto stimato</th>" in html
+    assert "<th>Realizzato</th>" not in html
+
+
 def test_dashboard_js_dom_references_resolve():
     import re
     import signal_dashboard as terminal_mod
