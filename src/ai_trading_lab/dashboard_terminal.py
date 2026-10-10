@@ -1563,7 +1563,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Ora</th><th>Asset</th><th>Segnale</th><th>Conf.</th><th>Atteso</th><th>Esito</th><th>Realizzato</th><th>Holding</th></tr></thead>
+        <thead><tr><th>Ora</th><th>Asset</th><th>Segnale</th><th>Conf.</th><th>Atteso</th><th>Esito</th><th>Netto stimato</th><th>Holding</th></tr></thead>
         <tbody id="journalRows"></tbody>
       </table>
     </div>
