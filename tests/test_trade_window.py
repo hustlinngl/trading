@@ -42,6 +42,44 @@ def test_trade_window_retains_neutral_no_event_labels():
     assert labels["direction"].iloc[-4:].isna().all()
 
 
+def test_trade_window_records_barrier_exit_return_not_later_time_stop_return():
+    frame = _flat_market(rows=40)
+    decision = frame.index[14]
+    # For decision 14, entry is open[15], the upper barrier is crossed in bar 16,
+    # then price gaps down at the later time-stop open[18]. Realized PnL is the
+    # barrier exit (+0.25%), not the fictive time-stop return (-1%).
+    frame.loc[frame.index[16], ["open", "high", "low", "close"]] = [
+        100.0, 100.6, 99.9, 100.2
+    ]
+    frame.loc[frame.index[18], ["open", "high", "low", "close"]] = [
+        99.0, 99.1, 98.9, 99.0
+    ]
+
+    labels = _barrier_labels(frame, horizon_bars=3, min_bars=1, pt_atr=1.25, sl_atr=0.90)
+
+    # ATR is 0.2 on the decision bar: the take-profit is at 100.25.
+    assert labels.loc[decision, "direction"] == 1.0
+    assert labels.loc[decision, "execution_status"] == "take_profit"
+    assert labels.loc[decision, "exit_position"] == 16.0
+    assert labels.loc[decision, "holding_bars"] == 2.0
+    assert np.isclose(labels.loc[decision, "gross_return"], 0.0025)
+    assert np.isclose(frame.loc[frame.index[18], "open"] / frame.loc[frame.index[15], "open"] - 1.0, -0.01)
+
+
+def test_trade_window_ambiguous_barrier_collision_has_unknown_pnl():
+    frame = _flat_market(rows=40)
+    decision = frame.index[14]
+    frame.loc[frame.index[16], ["open", "high", "low", "close"]] = [
+        100.0, 100.6, 99.5, 100.0
+    ]
+
+    labels = _barrier_labels(frame, horizon_bars=3, min_bars=1, pt_atr=1.25, sl_atr=0.90)
+
+    assert labels.loc[decision, "direction"] == 0.0
+    assert labels.loc[decision, "execution_status"] == "ambiguous_intrabar"
+    assert np.isnan(labels.loc[decision, "gross_return"])
+
+
 def test_trade_window_opening_gap_is_classified_before_later_intrabar_collision():
     frame = _flat_market()
     # At decision bar 14, entry is open[15]. This candle gaps below the lower
@@ -60,12 +98,15 @@ def test_trade_window_time_stop_candle_is_not_misread_as_barrier_event():
     # horizon=3 enters on bar 15 and time-stops at open[18]. A huge high on the
     # exit candle must not create a LONG event because liquidation is at its open.
     frame.loc[frame.index[18], ["open", "high", "low", "close"]] = [
-        100.0, 110.0, 99.9, 100.0
+        100.5, 110.0, 100.4, 100.5
     ]
 
     labels = _barrier_labels(frame, horizon_bars=3, min_bars=1, pt_atr=1.25, sl_atr=0.90)
 
     assert labels.loc[frame.index[14], "direction"] == 0.0
+    assert labels.loc[frame.index[14], "execution_status"] == "time_stop"
+    assert labels.loc[frame.index[14], "exit_position"] == 18.0
+    assert np.isclose(labels.loc[frame.index[14], "gross_return"], 0.005)
 
 
 
