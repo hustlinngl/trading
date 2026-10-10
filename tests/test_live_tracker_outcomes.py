@@ -169,3 +169,9 @@ def test_outcome_tracker_does_not_report_fake_zero_return_for_ambiguous_barrier(
     assert result["outcome"] == "AMBIGUOUS"
     assert result["realized_return"] is None
     assert np.isclose(result["estimated_cost_bps"], 6.0)
+
+
+def test_outcome_tracker_rejects_non_finite_cost_assumptions():
+    frame = _market()
+    result = _resolve(frame, max_bars=3, impact_bps_per_sqrt=float("nan"))
+    assert result is None
