@@ -64,6 +64,20 @@ def test_dashboard_js_dom_references_resolve():
     assert refs <= ids
 
 
+def test_market_universe_freshness_status_is_visible_and_explains_cached_markets():
+    import signal_dashboard as terminal_mod
+
+    html = terminal_mod.HTML
+
+    assert 'id="universeStatus"' in html
+    assert 'MARKETS LIVE' in html
+    assert 'MARKETS CACHED' in html
+    assert 'MARKETS LOCAL' in html
+    assert 'marketData.universe_stale' in html
+    assert 'marketData.universe_snapshot_at' in html
+    assert "Solo navigazione; i segnali richiedono dati e modelli attuali." in html
+
+
 def test_dashboard_market_explorer_ui():
     import signal_dashboard as terminal_mod
 
@@ -189,6 +203,113 @@ def test_signal_terminal_publishes_market_data_without_model_signals(tmp_path, m
     assert state["market_data"]["quotes"]["BTC/USDT"]["price"] == 101.0
     assert state["market_data"]["quotes"]["ETH/USDT"]["ask"] == 5.1
 
+
+
+def test_market_universe_snapshot_round_trips_only_authoritative_discovery(tmp_path):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path)
+    live = {
+        "exchange_market_metadata": True,
+        "universe_mode": "all_active_markets",
+        "universe_total": 3,
+        "market_counts": {"spot": 3},
+    }
+
+    terminal._save_market_snapshot(
+        ["BTC/USDT", "ETH/USDT", "BTC/USDT", "bad-symbol", "SOL/USDT"],
+        live,
+    )
+    snapshot = terminal._load_market_snapshot()
+
+    assert snapshot["symbols"] == ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
+    assert snapshot["universe_total"] == 3
+    assert snapshot["market_counts"] == {"spot": 3}
+    assert snapshot["source"] == "all_active_markets"
+
+    # A fallback scan must never overwrite the last authoritative snapshot.
+    terminal._save_market_snapshot(
+        ["LOCAL/USDT"],
+        {"exchange_market_metadata": False, "universe_total": 1},
+    )
+    assert terminal._load_market_snapshot()["symbols"] == snapshot["symbols"]
+
+
+def test_market_universe_snapshot_rejects_expired_or_wrong_exchange(tmp_path):
+    import json
+    from datetime import datetime, timedelta, timezone
+
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path)
+    terminal._save_market_snapshot(
+        ["BTC/USDT"],
+        {"exchange_market_metadata": True, "universe_total": 1},
+    )
+    payload = json.loads(terminal._market_snapshot_path.read_text(encoding="utf-8"))
+    payload["generated_at"] = (datetime.now(timezone.utc) - timedelta(days=31)).isoformat()
+    terminal._market_snapshot_path.write_text(json.dumps(payload), encoding="utf-8")
+    assert terminal._load_market_snapshot() == {}
+
+    payload["generated_at"] = datetime.now(timezone.utc).isoformat()
+    payload["exchange"] = "other-exchange"
+    terminal._market_snapshot_path.write_text(json.dumps(payload), encoding="utf-8")
+    assert terminal._load_market_snapshot() == {}
+
+
+def test_offline_terminal_uses_saved_universe_for_navigation_not_scan_scope(tmp_path, monkeypatch):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    settings.live_symbols = ("BTC/USDT",)
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path, refresh_seconds=30)
+    terminal._save_market_snapshot(
+        ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT"],
+        {
+            "exchange_market_metadata": True,
+            "universe_mode": "all_active_markets",
+            "universe_total": 4,
+            "market_counts": {"spot": 4},
+        },
+    )
+    monkeypatch.setattr(terminal, "_get_exchange", lambda: None)
+    terminal._exchange_error = "offline"
+    monkeypatch.setattr(
+        terminal_mod,
+        "scan_top5",
+        lambda *args, **kwargs: ([], {
+            "universe_total": 1,
+            "universe_model_backed": 1,
+            "universe_model_eligible": 1,
+            "universe_evaluated": 1,
+            "universe_signals": 0,
+            "universe_waits": 1,
+            "assessment_failures": 0,
+            "market_symbols": ["BTC/USDT"],
+            "market_counts": {"spot": 1},
+            "exchange_market_metadata": False,
+            "universe_mode": "local_fallback_universe",
+        }),
+    )
+    monkeypatch.setattr(
+        terminal_mod,
+        "update_live_signal_outcomes",
+        lambda *args, **kwargs: {"updated": 0, "open": 0, "closed": 0},
+    )
+
+    state = terminal._terminal_state(force=True)
+
+    assert state["market_data"]["symbols"] == [
+        "BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT"
+    ]
+    assert state["market_data"]["universe_source"] == "persisted_snapshot"
+    assert state["market_data"]["universe_stale"] is True
+    assert state["market_data"]["universe_total"] == 4
+    assert state["market_data"]["quote_symbols"] == ["BTC/USDT"]
+    assert state["summary"]["universe_total"] == 1
+    assert state["signals"] == []
 
 
 def test_signal_terminal_quotes_visible_symbols_without_scanning_all_tickers(tmp_path, monkeypatch):
@@ -320,6 +441,7 @@ def test_bootstrap_command_is_available():
     assert "bootstrap-live-data" in source
     assert "--all-symbols" in source
     assert "--market-types" in source
+    assert "--workers" in source
 
 
 
@@ -463,6 +585,88 @@ def test_signal_terminal_bulk_ticker_path_and_browser_escape(tmp_path, monkeypat
     out = terminal._quotes(["BTC/USDT"])
     assert out["BTC/USDT"]["price"] == 321.0
     assert 'function esc(v){return String(v??"").replace(/[&<>"]/g,c=>c==="&"?"&amp;":c==="<"?"&lt;":c===">"?"&gt;":"&quot;");}' in terminal_mod.HTML
+
+
+def test_ticker_row_prefers_valid_bid_ask_midpoint_and_keeps_last_trade():
+    import signal_dashboard as terminal_mod
+
+    quote = terminal_mod.SignalTerminal._ticker_row(
+        "BTC/USDT",
+        {"last": 105.0, "bid": 99.0, "ask": 101.0, "quoteVolume": "1200"},
+    )
+
+    assert quote["price"] == 100.0
+    assert quote["last_price"] == 105.0
+    assert quote["bid"] == 99.0
+    assert quote["ask"] == 101.0
+    assert quote["quote_volume"] == 1200.0
+
+
+def test_ticker_row_uses_last_trade_when_book_is_crossed_or_invalid():
+    import signal_dashboard as terminal_mod
+
+    crossed = terminal_mod.SignalTerminal._ticker_row(
+        "BTC/USDT", {"last": 105.0, "bid": 106.0, "ask": 104.0}
+    )
+    malformed = terminal_mod.SignalTerminal._ticker_row(
+        "BTC/USDT", {"last": "105", "bid": "not-a-price", "ask": 110.0}
+    )
+
+    assert crossed["price"] == 105.0
+    assert malformed["price"] == 105.0
+    assert malformed["bid"] is None
+
+
+def test_signal_terminal_reuses_cached_quotes_within_ttl(tmp_path, monkeypatch):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    calls = {"single": 0, "bulk": 0}
+
+    class FakeExchange:
+        def fetch_ticker(self, symbol):
+            calls["single"] += 1
+            return {"last": 105.0, "bid": 99.0, "ask": 101.0, "timestamp": 1}
+
+        def fetch_tickers(self, symbols):
+            calls["bulk"] += 1
+            return {"BTC/USDT": {"last": 105.0, "bid": 99.0, "ask": 101.0, "timestamp": 1}}
+
+    monkeypatch.setattr(terminal_mod, "exchange_client", lambda *args, **kwargs: FakeExchange())
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path)
+    first = terminal._quote("BTC/USDT")
+    second = terminal._quote("BTC/USDT")
+    third = terminal._quotes(["BTC/USDT"])["BTC/USDT"]
+
+    assert first["price"] == second["price"] == third["price"] == 100.0
+    assert first["generated_at"] == second["generated_at"]
+    assert calls == {"single": 1, "bulk": 0}
+
+
+def test_signal_terminal_refreshes_expired_quote_cache(tmp_path, monkeypatch):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    calls = {"count": 0}
+
+    class FakeExchange:
+        def fetch_ticker(self, symbol):
+            calls["count"] += 1
+            return {"last": 100.0 + calls["count"], "bid": 99.0, "ask": 101.0}
+
+    monkeypatch.setattr(terminal_mod, "exchange_client", lambda *args, **kwargs: FakeExchange())
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path)
+    first = terminal._quote("BTC/USDT")
+    stored_at, payload = terminal._quote_cache["BTC/USDT"]
+    terminal._quote_cache["BTC/USDT"] = (
+        stored_at - terminal._quote_cache_ttl - 1.0,
+        payload,
+    )
+    second = terminal._quote("BTC/USDT")
+
+    assert first["last_price"] == 101.0
+    assert second["last_price"] == 102.0
+    assert calls["count"] == 2
 
 
 def test_signal_terminal_alpha_ui_keeps_visual_layer_separate_from_execution():

@@ -1,21 +1,25 @@
-ADAPTIVE AI SIGNAL TERMINAL 0.9.18
+ADAPTIVE AI SIGNAL TERMINAL 0.9.44
 ==================================
 
-1. Install Python 3.11+ 64-bit.
-2. Run: python -m pip install -e .
-3. Source launch: python signal_dashboard.py
-4. The browser opens the read-only signal terminal on localhost.
-5. The terminal scans the trained asset bundles and applies the same strict live/paper gates used by the engine.
-6. Use the Market cockpit to inspect historical OHLC data, realtime price, regimes and past signal markers.
-7. Use Signal journal to observe WIN/LOSS/TIMEOUT/AMBIGUOUS outcomes as later candles mature.
+QUICK START
+1. Use Python 3.11+ 64-bit for source mode.
+2. Install: python -m pip install -e ".[full]"
+3. Launch: python signal_dashboard.py
+4. Headless check: python signal_dashboard.py --once
+5. Test suite: python -m pytest -q
 
-Windows: run `SakuraSignalTerminal.exe` from the packaged release.
-Source headless check: python signal_dashboard.py --once
+USER EXPERIENCE
+- The browser opens the read-only local terminal.
+- Market cockpit shows closed-candle history, display-only realtime quotes, current decision and available evidence.
+- The Top 5 contains only signals that passed strict data, bundle, probability, edge and specialist gates.
+- The journal tracks later OHLC-derived WIN/LOSS/TIMEOUT/AMBIGUOUS outcomes and estimated net returns; these are not exchange execution records.
 
-Safety contract:
-- no order endpoint is exposed;
-- no exchange write API is used;
-- failed data/provenance/evidence gates remain WAIT;
-- realtime ticker is display-only; model decisions use the closed-candle path.
+SAFETY CONTRACT
+- No order endpoint or exchange-write API is exposed.
+- A stale-data, provenance, compatibility, uncertainty or readiness failure remains WAIT.
+- Realtime ticker data is display-only; model decisions use the closed-candle path.
+- An EXE build may be research-only if no asset passes deployment readiness.
+- Never commit API keys or private data; use environment variables.
 
-Never commit secrets; use environment variables or GitHub Actions Secrets.
+PROJECT MAP
+See docs/PROJECT_MAP.md for code ownership boundaries, data paths, test commands, release workflow and documentation index.

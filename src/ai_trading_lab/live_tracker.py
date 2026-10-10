@@ -541,10 +541,13 @@ def _resolve_result(
             outcome = "WIN" if side == "LONG" else "LOSS"
         else:
             outcome = "LOSS" if side == "LONG" else "WIN"
+        # Express both sides as simple returns on the same entry notional.
+        # Inverse-price returns (entry / exit - 1) systematically overstate
+        # short gains and do not match the event-driven backtest's PnL basis.
         gross = (
             fill_price / entry - 1.0
             if side == "LONG"
-            else entry / fill_price - 1.0
+            else (entry - fill_price) / entry
         )
         estimated_cost_bps = cost_bps_for(held)
         return {
@@ -597,10 +600,11 @@ def _resolve_result(
     if not np.isfinite(exit_price) or exit_price <= 0:
         return None
 
+    # Keep time-stop and barrier exits on the same entry-notional return basis.
     gross = (
         exit_price / entry - 1.0
         if side == "LONG"
-        else entry / exit_price - 1.0
+        else (entry - exit_price) / entry
     )
     estimated_cost_bps = cost_bps_for(horizon)
     return {

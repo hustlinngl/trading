@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import load_settings
-from .data import cache_ohlcv, exchange_client, fetch_ohlcv, load_cached
+from .data import cache_ohlcv, exchange_client, fetch_ohlcv, load_cached, timeframe_offset
 from .evaluation import directional_validation_diagnostics, run_configured_backtest
 from .policy import make_actions
-from .engine import AdaptiveEngine
+from .engine import AdaptiveEngine, execution_aligned_targets
 from .research import walk_forward, strategy_discovery
 from .paper import one_iteration
 from .autolearn import auto_update
@@ -133,7 +135,6 @@ def read_asset_dataframe(meta: dict):
 
 def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     import pandas as pd
-    from .features import make_features
 
     split = int(len(df) * (1.0 - holdout_frac))
     if split < max(500, settings.min_train_rows) or len(df) - split < 100:
@@ -151,13 +152,13 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     # is intentionally separate from the policy's predicted-vs-predicted checks.
     holdout_predictions = eng.model.predict(feat)
     labelled_market = pd.concat([train_df, test_df])
-    # Compare p_up to the same direction-neutral next-open-to-next-open
-    # horizon return used as the base-model target, not to the asymmetric
-    # LONG-oriented triple-barrier payoff.
-    _, _, realized_returns = make_features(
+    # Score probability against the exact executable barrier/time-stop
+    # returns used to train the base model, including ambiguous-OHLC exclusions.
+    _, realized_returns, _ = execution_aligned_targets(
         labelled_market,
         settings.horizon_bars,
-        external_feature_lag_bars=getattr(settings, "external_feature_lag_bars", 1),
+        settings.pt_atr,
+        settings.sl_atr,
     )
     realized_returns = realized_returns.reindex(test_df.index)
     realized_directional_validation = directional_validation_diagnostics(
@@ -202,21 +203,90 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     return report
 
 
+def _emit_training_progress(symbol: str, stage: str, *, asset_started_at=None, stage_started_at=None, **details) -> None:
+    """Emit line-buffered JSON progress events for long multi-asset training runs."""
+    event = {
+        "event": "training_progress",
+        "symbol": str(symbol),
+        "stage": str(stage),
+    }
+    if asset_started_at is not None:
+        event["asset_elapsed_seconds"] = round(max(0.0, time.perf_counter() - asset_started_at), 2)
+    if stage_started_at is not None:
+        event["stage_elapsed_seconds"] = round(max(0.0, time.perf_counter() - stage_started_at), 2)
+    event.update(details)
+    print(json.dumps(event, sort_keys=True, default=str), file=sys.stderr, flush=True)
+
+
 def train_complete_asset(df, settings, *, holdout_frac: float, promote_champion: bool = True):
-    """One-click training: fit, untouched holdout, duration validation, then manifest."""
+    """One-click training with observable fit, holdout, specialist and readiness stages."""
+    symbol = str(settings.symbol)
+    asset_started_at = time.perf_counter()
+    _emit_training_progress(
+        symbol, "asset_training_started", asset_started_at=asset_started_at,
+        rows=len(df), holdout_frac=float(holdout_frac),
+    )
+
+    stage_started_at = time.perf_counter()
+    _emit_training_progress(symbol, "base_bundle_fit_started", asset_started_at=asset_started_at, rows=len(df))
     asset_dir, _ = train_base_asset(df, settings)
+    _emit_training_progress(
+        symbol, "base_bundle_fit_completed", asset_started_at=asset_started_at,
+        stage_started_at=stage_started_at, bundle=str(asset_dir),
+    )
+
+    stage_started_at = time.perf_counter()
+    _emit_training_progress(
+        symbol, "base_holdout_validation_started", asset_started_at=asset_started_at,
+        holdout_frac=float(holdout_frac),
+    )
     base_holdout = test_base_holdout(df, settings, holdout_frac)
+    holdout_stats = base_holdout.get("holdout", {}) if isinstance(base_holdout, dict) else {}
+    _emit_training_progress(
+        symbol, "base_holdout_validation_completed", asset_started_at=asset_started_at,
+        stage_started_at=stage_started_at,
+        holdout_rows=base_holdout.get("holdout_rows") if isinstance(base_holdout, dict) else None,
+        holdout_trades=holdout_stats.get("trades_taken", holdout_stats.get("trades")),
+    )
     Path("logs").mkdir(exist_ok=True)
     Path("logs/test_report.json").write_text(json.dumps(base_holdout, indent=2, default=str), encoding="utf-8")
+
+    stage_started_at = time.perf_counter()
+    _emit_training_progress(
+        symbol, "trade_window_fit_started", asset_started_at=asset_started_at,
+        rows=len(df),
+    )
     asset_model, duration_report = train_duration_asset(
         df,
         settings,
         holdout_frac=holdout_frac,
         copy_legacy=promote_champion,
     )
+    _emit_training_progress(
+        symbol, "trade_window_fit_completed", asset_started_at=asset_started_at,
+        stage_started_at=stage_started_at,
+        production_ready=bool(duration_report.get("production_ready", False)),
+        readiness_reason=duration_report.get("reason"),
+        artifact=str(asset_model),
+    )
+
+    stage_started_at = time.perf_counter()
+    _emit_training_progress(symbol, "deployment_readiness_started", asset_started_at=asset_started_at)
     deployment = refresh_deployment_manifest(settings)
+    _emit_training_progress(
+        symbol, "deployment_readiness_completed", asset_started_at=asset_started_at,
+        stage_started_at=stage_started_at, production_ready=bool(deployment.get("ready")),
+        failed_checks=sorted(
+            name for name, ok in (deployment.get("checks", {}) or {}).items() if not bool(ok)
+        ),
+    )
     if deployment.get("ready") and promote_champion:
         _promote_asset_bundle(asset_dir)
+
+    _emit_training_progress(
+        symbol, "asset_training_completed", asset_started_at=asset_started_at,
+        production_ready=bool(deployment.get("ready")), bundle=str(asset_dir),
+    )
     return {
         "symbol": settings.symbol, "rows": len(df), "status": "trained",
         "bundle": str(asset_dir), "duration_bundle": str(asset_model),
@@ -225,7 +295,6 @@ def train_complete_asset(df, settings, *, holdout_frac: float, promote_champion:
         "base_holdout": base_holdout,
         "duration_report": duration_report,
     }
-
 
 def system_doctor(settings, root: str | Path = ".") -> dict:
     import importlib.util, platform
@@ -283,6 +352,7 @@ def main():
     parser.add_argument('--all-symbols', action='store_true', help='Discover every active exchange market eligible for OHLCV bootstrap')
     parser.add_argument('--market-types', default=None, help='Comma-separated market types for --all-symbols (default: spot,swap,future)')
     parser.add_argument('--live-bars', type=int, default=None, help='Closed OHLCV bars to cache for the live dashboard')
+    parser.add_argument('--workers', type=int, default=None, help='Bounded parallel public-data workers for bootstrap-live-data (default 4, max 8)')
     parser.add_argument('--benchmark-bars', type=int, default=3000, help='Bars used by the diagnostic benchmark suite')
     args = parser.parse_args()
     s = load_settings(args.config)
@@ -368,25 +438,25 @@ def main():
         print(json.dumps(result, indent=2, default=str)); return
 
     if args.command == 'bootstrap-live-data':
+        import threading
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         import pandas as pd
+
         requested_symbols = [
             x.strip() for x in args.symbols.split(',') if x.strip()
         ] if args.symbols else []
-
-        bars = max(
-            80,
-            int(args.live_bars or getattr(s, 'live_lookback_bars', 600))
-        )
+        bars = max(80, int(args.live_bars or getattr(s, 'live_lookback_bars', 600)))
         out_dir = Path('data') / 'historical'
         out_dir.mkdir(parents=True, exist_ok=True)
-        ex = exchange_client(
-            getattr(s, 'exchange', 'binance'),
-            sandbox=False
-        )
 
+        # Discovery uses one client. Each concurrent worker creates its own CCXT
+        # client because exchange instances are not assumed thread-safe.
+        discovery_exchange = exchange_client(
+            getattr(s, 'exchange', 'binance'), sandbox=False
+        )
         if args.all_symbols or not requested_symbols:
             allowed_types = {
-                x.strip()
+                x.strip().lower()
                 for x in (
                     args.market_types.split(',')
                     if args.market_types
@@ -395,94 +465,122 @@ def main():
                 if x.strip()
             }
             discovered = []
-            markets = getattr(ex, 'markets', {}) or {}
+            markets = getattr(discovery_exchange, 'markets', {}) or {}
             for market in markets.values():
                 if not isinstance(market, dict) or market.get('active') is False:
                     continue
                 symbol = str(market.get('symbol') or '').strip()
                 if not symbol:
                     continue
-                mtype = str(
+                market_type = str(
                     market.get('type')
                     or ('swap' if market.get('swap')
                         else 'future' if market.get('future')
                         else 'spot')
-                )
-                if allowed_types and mtype not in allowed_types:
+                ).strip().lower()
+                if allowed_types and market_type not in allowed_types:
                     continue
-                if mtype in {'swap', 'future'} and not bool(market.get('contract')):
+                if market_type in {'swap', 'future'} and not bool(market.get('contract')):
                     continue
-                if isinstance(getattr(ex, 'has', None), dict):
-                    # CCXT's global capability is the safest portable check.
-                    if ex.has.get('fetchOHLCV') is False:
-                        continue
+                capabilities = getattr(discovery_exchange, 'has', None)
+                if isinstance(capabilities, dict) and capabilities.get('fetchOHLCV') is False:
+                    continue
                 discovered.append(symbol)
-            symbols = list(dict.fromkeys(discovered))
+            symbols = sorted(dict.fromkeys(discovered))
         else:
             symbols = list(dict.fromkeys(requested_symbols))
 
-        results = []
-        failures = []
         total = len(symbols)
-        print(
-            json.dumps({
-                'stage': 'discover',
-                'exchange': getattr(s, 'exchange', 'binance'),
-                'symbols': total,
-                'bars_per_symbol': bars,
-                'market_types': (
-                    [x.strip() for x in args.market_types.split(',') if x.strip()]
-                    if args.market_types else ['spot', 'swap', 'future']
-                ),
-            }),
-            flush=True,
-        )
+        configured_workers = max(1, int(getattr(s, 'max_parallel_downloads', 4)))
+        requested_workers = args.workers if args.workers is not None else min(4, configured_workers)
+        workers = max(1, min(8, int(requested_workers)))
+        if total:
+            workers = min(workers, total)
 
-        tf_offset = None
         try:
-            tf_offset = pd.tseries.frequencies.to_offset(
-                str(getattr(s, 'timeframe', '15m'))
-                .replace('m', 'min') if str(getattr(s, 'timeframe', '15m')).endswith('m')
-                else str(getattr(s, 'timeframe', '15m'))
-            )
+            tf_delta = pd.Timedelta(timeframe_offset(str(getattr(s, 'timeframe', '15m'))))
+            if not tf_delta > pd.Timedelta(0):
+                raise ValueError('non-positive timeframe')
         except Exception:
-            tf_offset = pd.Timedelta(minutes=15)
+            tf_delta = pd.Timedelta(minutes=15)
+        max_age = max(pd.Timedelta(minutes=30), tf_delta * 2.5)
 
-        for index, symbol in enumerate(symbols, start=1):
+        print(json.dumps({
+            'stage': 'discover',
+            'exchange': getattr(s, 'exchange', 'binance'),
+            'symbols': total,
+            'bars_per_symbol': bars,
+            'workers': workers,
+            'market_types': (
+                [x.strip() for x in args.market_types.split(',') if x.strip()]
+                if args.market_types else ['spot', 'swap', 'future']
+            ),
+            'output_dir': str(out_dir),
+        }), flush=True)
+
+        worker_local = threading.local()
+
+        def worker_exchange():
+            instance = getattr(worker_local, 'exchange', None)
+            if instance is None:
+                instance = exchange_client(
+                    getattr(s, 'exchange', 'binance'), sandbox=False
+                )
+                worker_local.exchange = instance
+            return instance
+
+        def bootstrap_one(symbol):
             path = out_dir / (
                 f"{symbol.replace('/', '_').replace(':', '_')}_{s.timeframe}.csv"
             )
+            tmp = path.with_suffix(path.suffix + '.tmp')
             try:
-                # Resume safely: don't redownload a sufficiently complete fresh file.
+                # Resume only from a sufficiently complete, ordered, fresh timestamp
+                # series. File mtime is not trusted because caches can be copied.
                 if path.exists():
                     try:
                         cached = pd.read_csv(path, usecols=['timestamp'])
-                        if len(cached) >= bars and len(cached):
-                            last_raw = pd.to_datetime(cached['timestamp'].iloc[-1], utc=True)
-                            age = pd.Timestamp.now(tz='UTC') - last_raw
-                            max_age = max(pd.Timedelta(minutes=30), tf_offset * 2.5)
-                            if age <= max_age:
-                                results.append({
+                        cached['timestamp'] = pd.to_datetime(
+                            cached['timestamp'], utc=True, errors='coerce'
+                        )
+                        cached = cached.dropna(subset=['timestamp'])
+                        timestamps = cached['timestamp']
+                        if (
+                            len(cached) >= bars
+                            and not timestamps.empty
+                            and timestamps.is_monotonic_increasing
+                            and not timestamps.duplicated().any()
+                        ):
+                            last_stamp = timestamps.iloc[-1]
+                            age = pd.Timestamp.now(tz='UTC') - last_stamp
+                            if pd.Timedelta(0) <= age <= max_age:
+                                return {
                                     'symbol': symbol,
                                     'timeframe': s.timeframe,
                                     'bars': int(len(cached)),
                                     'output': str(path),
                                     'source': 'cache',
-                                })
-                                print(f'[{index}/{total}] {symbol} cache', flush=True)
-                                continue
+                                    'end': last_stamp.isoformat(),
+                                }
                     except Exception:
+                        # Corrupt/stale files are refreshed below; failures are recorded
+                        # only if the new download also fails.
                         pass
 
                 frame = fetch_ohlcv(
-                    ex,
+                    worker_exchange(),
                     symbol,
                     s.timeframe,
                     limit=bars,
                     include_unclosed=False,
                 )
-                frame.to_csv(path, index_label='timestamp')
-                results.append({
+                if frame is None or frame.empty:
+                    raise RuntimeError('empty_ohlcv')
+                # Same-directory replace is atomic on supported filesystems, so a
+                # terminated process cannot leave a half-written final CSV.
+                frame.to_csv(tmp, index_label='timestamp')
+                tmp.replace(path)
+                return {
                     'symbol': symbol,
                     'timeframe': s.timeframe,
                     'bars': int(len(frame)),
@@ -490,30 +588,63 @@ def main():
                     'end': str(frame.index.max()) if len(frame) else None,
                     'output': str(path),
                     'source': 'network',
-                })
-                print(f'[{index}/{total}] {symbol} {len(frame)} bars', flush=True)
+                }
             except Exception as exc:
-                failures.append({
+                try:
+                    tmp.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                return {
                     'symbol': symbol,
                     'error': f'{type(exc).__name__}:{exc}',
-                })
-                print(f'[{index}/{total}] {symbol} ERROR {exc}', flush=True)
+                }
 
+        results = []
+        failures = []
+        completed = 0
+        # Workers own exchange clients; the caller records results deterministically.
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix='bootstrap') as pool:
+            futures = {pool.submit(bootstrap_one, symbol): symbol for symbol in symbols}
+            for future in as_completed(futures):
+                symbol = futures[future]
+                try:
+                    item = future.result()
+                except Exception as exc:
+                    item = {'symbol': symbol, 'error': f'{type(exc).__name__}:{exc}'}
+                completed += 1
+                if item.get('error'):
+                    failures.append(item)
+                    print(f'[{completed}/{total}] {symbol} ERROR {item["error"]}', flush=True)
+                else:
+                    results.append(item)
+                    print(
+                        f'[{completed}/{total}] {symbol} {item.get("bars", 0)} bars {item.get("source", "network")}',
+                        flush=True,
+                    )
+
+        results.sort(key=lambda row: str(row.get('symbol', '')))
+        failures.sort(key=lambda row: str(row.get('symbol', '')))
         summary = {
             'exchange': getattr(s, 'exchange', 'binance'),
             'timeframe': s.timeframe,
             'requested_symbols': total,
+            'workers': workers,
             'completed': len(results),
             'failed': len(failures),
             'results': results,
             'failures': failures,
             'output_dir': str(out_dir),
+            'generated_at': datetime.now(timezone.utc).isoformat(),
         }
-        Path('logs').mkdir(exist_ok=True)
-        Path('logs/bootstrap_live_data.json').write_text(
+        logs_dir = Path('logs')
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        report_path = logs_dir / 'bootstrap_live_data.json'
+        report_tmp = report_path.with_suffix(report_path.suffix + '.tmp')
+        report_tmp.write_text(
             json.dumps(summary, indent=2, default=str),
             encoding='utf-8',
         )
+        report_tmp.replace(report_path)
         print(json.dumps(summary, indent=2, default=str))
         return
 
@@ -527,8 +658,8 @@ def main():
         return
 
     if args.command == 'real-history':
-        from .kraken_data import fetch_ohlcv, fingerprint_frame, save_provenance
-        df, provenance = fetch_ohlcv(s.symbol, s.timeframe, limit=args.limit)
+        from .kraken_data import fetch_ohlcv as fetch_kraken_ohlcv, fingerprint_frame, save_provenance
+        df, provenance = fetch_kraken_ohlcv(s.symbol, s.timeframe, limit=args.limit)
         out_dir = Path(args.data_dir) / 'kraken'
         out_dir.mkdir(parents=True, exist_ok=True)
         stem = f"{s.symbol.replace('/', '_')}_{s.timeframe}_kraken"
@@ -656,17 +787,25 @@ def main():
                     sources.setdefault(str(infer_symbol(path)), ('historical', str(path)))
                 except Exception:
                     continue
-        for sym, (source, path) in sources.items():
+        for asset_index, (sym, (source, path)) in enumerate(sources.items(), start=1):
             try:
                 ss = load_settings(args.config); ss.symbol = sym
                 data = read_asset_dataframe({'path': path})
                 validate_research_data(data, ss)
+                _emit_training_progress(
+                    sym, "asset_data_ready", asset_index=asset_index, asset_count=len(sources),
+                    source=source, rows=len(data), path=str(path),
+                )
                 out = train_complete_asset(
                     data, ss, holdout_frac=args.holdout_frac, promote_champion=False
                 )
                 out['source'] = source
                 reports.append(out)
             except Exception as exc:
+                _emit_training_progress(
+                    sym, "asset_training_failed", asset_index=asset_index, asset_count=len(sources),
+                    source=source, error=f'{type(exc).__name__}: {exc}',
+                )
                 reports.append({
                     'symbol': sym, 'source': source, 'status': 'error',
                     'error': f'{type(exc).__name__}: {exc}',

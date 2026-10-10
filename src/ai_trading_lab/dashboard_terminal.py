@@ -127,6 +127,15 @@ class SignalTerminal:
         self._cached_at = 0.0
         self._exchange = None
         self._exchange_error = None
+        # Reuse recent public quotes across concurrent dashboard/API refreshes.
+        # This cache is display-only; model decisions still use the closed-candle path.
+        self._quote_cache: dict[str, tuple[float, dict]] = {}
+        self._quote_cache_ttl = 8.0
+        self._quote_cache_lock = threading.Lock()
+        # Market discovery is persisted for navigation, never for signal eligibility.
+        self._market_snapshot_path = self.state_root / "logs" / "live_market_universe.json"
+        self._market_snapshot_max_age_seconds = 30 * 24 * 60 * 60
+        self._market_snapshot_max_symbols = 5000
         self._assessment_cache = {}
         stream_symbols = tuple(getattr(settings, "live_symbols", ()) or ())
         self._live_tracker = LiveTracker(
@@ -309,6 +318,158 @@ class SignalTerminal:
             self._exchange_error = f"{type(exc).__name__}:{exc}"
         return self._exchange
 
+    def _load_market_snapshot(self) -> dict:
+        """Load a bounded, recent market-universe snapshot for UI navigation only."""
+        path = self._market_snapshot_path
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+
+        if str(payload.get("exchange", "")) != str(getattr(self.settings, "exchange", "binance")):
+            return {}
+        if str(payload.get("timeframe", "")) != str(getattr(self.settings, "timeframe", "15m")):
+            return {}
+
+        try:
+            stamp = datetime.fromisoformat(str(payload.get("generated_at", "")).replace("Z", "+00:00"))
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
+            else:
+                stamp = stamp.astimezone(timezone.utc)
+            age = (datetime.now(timezone.utc) - stamp).total_seconds()
+        except (TypeError, ValueError, OverflowError):
+            return {}
+        if age < -300 or age > float(self._market_snapshot_max_age_seconds):
+            return {}
+
+        raw_symbols = payload.get("symbols")
+        if not isinstance(raw_symbols, list):
+            return {}
+        symbols = []
+        seen = set()
+        for value in raw_symbols:
+            if not isinstance(value, str):
+                continue
+            symbol = value.strip()
+            if not symbol or len(symbol) > 80 or "/" not in symbol or any(ord(ch) < 32 for ch in symbol):
+                continue
+            if symbol not in seen:
+                symbols.append(symbol)
+                seen.add(symbol)
+            if len(symbols) >= int(self._market_snapshot_max_symbols):
+                break
+        if not symbols:
+            return {}
+
+        counts = payload.get("market_counts")
+        if not isinstance(counts, dict):
+            counts = {}
+        try:
+            recorded_total = int(payload.get("universe_total", len(symbols)) or len(symbols))
+        except (TypeError, ValueError, OverflowError):
+            recorded_total = len(symbols)
+        return {
+            "generated_at": stamp.isoformat(),
+            "exchange": str(payload.get("exchange")),
+            "timeframe": str(payload.get("timeframe")),
+            "source": str(payload.get("source") or "exchange"),
+            "symbols": symbols,
+            "market_counts": counts,
+            "universe_total": max(len(symbols), recorded_total),
+        }
+
+    def _save_market_snapshot(self, symbols: list[str], universe_meta: dict) -> None:
+        """Atomically persist authoritative exchange discovery for UI navigation only."""
+        if not bool(universe_meta.get("exchange_market_metadata", False)):
+            return
+        normalized = []
+        seen = set()
+        for value in symbols:
+            if not isinstance(value, str):
+                continue
+            symbol = value.strip()
+            if not symbol or len(symbol) > 80 or "/" not in symbol or any(ord(ch) < 32 for ch in symbol):
+                continue
+            if symbol not in seen:
+                normalized.append(symbol)
+                seen.add(symbol)
+            if len(normalized) >= int(self._market_snapshot_max_symbols):
+                break
+        if not normalized:
+            return
+
+        counts = universe_meta.get("market_counts")
+        try:
+            recorded_total = int(universe_meta.get("universe_total", len(normalized)) or len(normalized))
+        except (TypeError, ValueError, OverflowError):
+            recorded_total = len(normalized)
+        payload = {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "exchange": str(getattr(self.settings, "exchange", "binance")),
+            "timeframe": str(getattr(self.settings, "timeframe", "15m")),
+            "source": str(universe_meta.get("universe_mode") or "all_active_markets"),
+            "symbols": normalized,
+            "market_counts": _json_safe(counts if isinstance(counts, dict) else {}),
+            "universe_total": max(len(normalized), recorded_total),
+        }
+        path = self._market_snapshot_path
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+            tmp.replace(path)
+        except OSError:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    @staticmethod
+    def _safe_universe_total(meta: dict, fallback: int) -> int:
+        try:
+            return max(0, int(meta.get("universe_total", fallback) or fallback))
+        except (AttributeError, TypeError, ValueError, OverflowError):
+            return max(0, int(fallback))
+
+    def _market_navigation_snapshot(self, live_symbols: list[str], universe_meta: dict) -> dict:
+        """Choose a live universe or last-known snapshot without changing scan eligibility."""
+        exchange_discovery_is_current = bool(universe_meta.get("exchange_market_metadata", False))
+        if exchange_discovery_is_current and live_symbols:
+            self._save_market_snapshot(live_symbols, universe_meta)
+            return {
+                "symbols": list(live_symbols[: self._market_snapshot_max_symbols]),
+                "source": "live_exchange",
+                "snapshot_at": datetime.now(timezone.utc).isoformat(),
+                "stale": False,
+                "universe_total": max(len(live_symbols), self._safe_universe_total(universe_meta, len(live_symbols))),
+                "market_counts": _json_safe(universe_meta.get("market_counts", {})),
+            }
+
+        snapshot = self._load_market_snapshot()
+        if snapshot:
+            combined = list(dict.fromkeys(snapshot["symbols"] + list(live_symbols)))
+            return {
+                "symbols": combined[: self._market_snapshot_max_symbols],
+                "source": "persisted_snapshot",
+                "snapshot_at": snapshot.get("generated_at"),
+                "stale": True,
+                "universe_total": max(len(combined), int(snapshot.get("universe_total", len(combined)) or len(combined))),
+                "market_counts": _json_safe(snapshot.get("market_counts", {})),
+            }
+
+        symbols = list(dict.fromkeys(live_symbols))[: self._market_snapshot_max_symbols]
+        return {
+            "symbols": symbols,
+            "source": "local_fallback",
+            "snapshot_at": None,
+            "stale": True,
+            "universe_total": max(len(symbols), self._safe_universe_total(universe_meta, len(symbols))),
+            "market_counts": _json_safe(universe_meta.get("market_counts", {})),
+        }
+
     def _bundle_snapshot(self, symbol: str) -> dict:
         bundle = resolve_signal_bundle(self.settings, self.root, symbol)
         info = {
@@ -372,56 +533,127 @@ class SignalTerminal:
     def _ticker_row(symbol: str, ticker: dict) -> dict:
         def as_float(key: str):
             value = ticker.get(key)
-            return float(value) if value is not None else None
+            if value is None:
+                return None
+            try:
+                number = float(value)
+            except (TypeError, ValueError, OverflowError):
+                return None
+            return number if math.isfinite(number) else None
 
+        last = as_float("last")
+        bid = as_float("bid")
+        ask = as_float("ask")
+        # A valid, non-crossed bid/ask gives a more stable display price than
+        # the last trade. Keep the last trade separately for inspection/fallback.
+        midpoint = None
+        if bid is not None and ask is not None and 0.0 < bid <= ask:
+            midpoint = (bid + ask) / 2.0
         return {
             "symbol": symbol,
-            "price": as_float("last"),
-            "bid": as_float("bid"),
-            "ask": as_float("ask"),
+            "price": midpoint if midpoint is not None else last,
+            "last_price": last,
+            "bid": bid,
+            "ask": ask,
             "timestamp": ticker.get("timestamp"),
-            "quote_volume": ticker.get("quoteVolume"),
+            "quote_volume": as_float("quoteVolume"),
         }
 
-    def _quotes(self, symbols: list[str]) -> dict:
-        """Best-effort realtime ticker overlay; failure never blocks signals."""
-        result = {}
-        try:
-            exchange = self._get_exchange()
-        except Exception as exc:
-            return {"_error": f"{type(exc).__name__}:{exc}"}
+    def _cached_quote(self, symbol: str) -> dict | None:
+        now = time.monotonic()
+        with self._quote_cache_lock:
+            entry = self._quote_cache.get(str(symbol))
+            if entry is None:
+                return None
+            stored_at, payload = entry
+            if now - stored_at > float(self._quote_cache_ttl):
+                self._quote_cache.pop(str(symbol), None)
+                return None
+            return dict(payload)
 
-        missing = list(dict.fromkeys(symbols))
+    def _remember_quote(self, symbol: str, payload: dict) -> None:
+        if not isinstance(payload, dict) or payload.get("error"):
+            return
+        if not any(payload.get(key) is not None for key in ("price", "last_price", "bid", "ask")):
+            return
+        now = time.monotonic()
+        key = str(symbol)
+        with self._quote_cache_lock:
+            # Prune expired rows first and bound memory if users browse many markets.
+            expired = [
+                cached_key
+                for cached_key, (stored_at, _) in self._quote_cache.items()
+                if now - stored_at > float(self._quote_cache_ttl)
+            ]
+            for cached_key in expired:
+                self._quote_cache.pop(cached_key, None)
+            if key not in self._quote_cache and len(self._quote_cache) >= 2048:
+                oldest = min(self._quote_cache, key=lambda cached_key: self._quote_cache[cached_key][0])
+                self._quote_cache.pop(oldest, None)
+            self._quote_cache[key] = (now, dict(payload))
+
+    def _quotes(self, symbols: list[str]) -> dict:
+        """Return recent cached quotes first, then refresh only expired/missing symbols."""
+        requested = list(dict.fromkeys(str(symbol) for symbol in symbols if str(symbol).strip()))
+        result = {}
+        missing = []
+        for symbol in requested:
+            cached = self._cached_quote(symbol)
+            if cached is None:
+                missing.append(symbol)
+            else:
+                result[symbol] = cached
+        if not missing:
+            return result
+
+        exchange = self._get_exchange()
+        if exchange is None:
+            error = self._exchange_error or "exchange_unavailable"
+            for symbol in missing:
+                result[symbol] = {"symbol": symbol, "error": error}
+            return result
+
         bulk = getattr(exchange, "fetch_tickers", None)
-        if missing and callable(bulk):
+        if callable(bulk):
             try:
-                # Large universes are cheaper and safer to fetch as the exchange-wide ticker map
-                # when the adapter supports that form (Binance does); small lists stay targeted.
+                # Large universes are cheaper and safer to fetch as one exchange-wide
+                # ticker map when supported; small lists stay targeted.
                 tickers = bulk() if len(missing) > 100 else bulk(missing)
                 if isinstance(tickers, dict):
                     for symbol in missing:
                         ticker = tickers.get(symbol)
                         if isinstance(ticker, dict):
-                            result[symbol] = self._ticker_row(symbol, ticker)
+                            payload = self._ticker_row(symbol, ticker)
+                            result[symbol] = payload
+                            self._remember_quote(symbol, payload)
                     missing = [symbol for symbol in missing if symbol not in result]
             except Exception:
                 pass
 
         for symbol in missing:
             try:
-                result[symbol] = self._ticker_row(symbol, exchange.fetch_ticker(symbol))
+                payload = self._ticker_row(symbol, exchange.fetch_ticker(symbol))
+                result[symbol] = payload
+                self._remember_quote(symbol, payload)
             except Exception as exc:
                 result[symbol] = {"symbol": symbol, "error": f"{type(exc).__name__}:{exc}"}
         return result
 
     def _quote(self, symbol: str) -> dict:
+        key = str(symbol).strip()
+        cached = self._cached_quote(key)
+        if cached is not None:
+            return cached
         try:
             exchange = self._get_exchange()
-            payload = self._ticker_row(symbol, exchange.fetch_ticker(symbol))
+            if exchange is None:
+                raise RuntimeError(self._exchange_error or "exchange_unavailable")
+            payload = self._ticker_row(key, exchange.fetch_ticker(key))
             payload["generated_at"] = datetime.now(timezone.utc).isoformat()
+            self._remember_quote(key, payload)
             return payload
         except Exception as exc:
-            return {"symbol": symbol, "error": f"{type(exc).__name__}:{exc}"}
+            return {"symbol": key, "error": f"{type(exc).__name__}:{exc}"}
 
     @staticmethod
     def _history_slug(symbol: str, timeframe: str) -> str:
@@ -563,6 +795,12 @@ class SignalTerminal:
         return _json_safe(assessment.to_dict())
 
     def _bootstrap_state(self) -> dict:
+        configured_symbols = list(dict.fromkeys(
+            getattr(self.settings, "live_symbols", ()) or (self.settings.symbol,)
+        ))
+        snapshot = self._load_market_snapshot()
+        market_symbols = list(dict.fromkeys((snapshot.get("symbols") or []) + configured_symbols))
+        quote_symbols = configured_symbols
         return {
             "ok": True,
             "app": APP_TITLE,
@@ -577,7 +815,9 @@ class SignalTerminal:
                 "exchange": self.settings.exchange,
                 "timeframe": self.settings.timeframe,
                 "primary_symbol": self.settings.symbol,
-                "live_symbols": list(getattr(self.settings, "live_symbols", ()) or ()),
+                "live_symbols": configured_symbols,
+                "market_symbols": market_symbols,
+                "market_counts": snapshot.get("market_counts", {}),
                 "scan_scope": "all_active_markets",
                 "signal_only_mode": bool(self.settings.signal_only_mode),
                 "paper_only": bool(self.settings.paper_only),
@@ -597,6 +837,23 @@ class SignalTerminal:
                 "terminal_ready": False,
             },
             "signals": [],
+            "market_data": {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "exchange": getattr(self.settings, "exchange", "binance"),
+                "available": self._exchange is not None,
+                "error": self._exchange_error,
+                "symbols": market_symbols,
+                "quote_symbols": quote_symbols,
+                "quotes": _json_safe({
+                    symbol: cached
+                    for symbol in quote_symbols
+                    if (cached := self._cached_quote(symbol)) is not None
+                }),
+                "universe_source": "persisted_snapshot" if snapshot else "local_fallback",
+                "universe_snapshot_at": snapshot.get("generated_at"),
+                "universe_stale": True,
+                "universe_total": int(snapshot.get("universe_total", len(market_symbols)) or len(market_symbols)),
+            },
             "journal": self._journal(),
             "outcome_update": {},
             "notes": ["Scansione completa dell'universo attivo in corso."],
@@ -676,11 +933,13 @@ class SignalTerminal:
             # Keep the full discovered universe for navigation, but only fetch tickers
             # needed for the visible dashboard. Arbitrary active markets are quoted on demand
             # through /api/quote when the user opens the Market data view.
-            market_symbols = sorted({
+            live_market_symbols = sorted({
                 str(symbol).strip()
                 for symbol in (universe_meta.get("market_symbols") or [])
-                if str(symbol).strip()
+                if isinstance(symbol, str) and str(symbol).strip()
             })
+            navigation = self._market_navigation_snapshot(live_market_symbols, universe_meta)
+            market_symbols = list(navigation["symbols"])
             quote_symbols = list(dict.fromkeys(
                 configured_symbols + [x.symbol for x in assessments[:5]]
             ))
@@ -709,6 +968,11 @@ class SignalTerminal:
                 "symbols": list(market_symbols or quote_symbols),
                 "quote_symbols": list(quote_symbols),
                 "quotes": _json_safe(quotes),
+                "universe_source": navigation["source"],
+                "universe_snapshot_at": navigation["snapshot_at"],
+                "universe_stale": bool(navigation["stale"]),
+                "universe_total": int(navigation["universe_total"]),
+                "market_counts": navigation["market_counts"],
             }
             signals = []
             ages = []
@@ -765,9 +1029,12 @@ class SignalTerminal:
                     "primary_symbol": self.settings.symbol,
                     "live_symbols": configured_symbols,
                     "market_symbols": market_symbols,
-                    "market_counts": universe_meta.get("market_counts", {}),
+                    "market_counts": navigation["market_counts"],
                     "scan_scope": universe_meta.get("universe_mode", "all_active_markets"),
-                    "scan_source": "exchange" if market_symbols else "local_fallback",
+                    "scan_source": "exchange" if navigation["source"] == "live_exchange" else navigation["source"],
+                    "market_universe_source": navigation["source"],
+                    "market_universe_snapshot_at": navigation["snapshot_at"],
+                    "market_universe_stale": bool(navigation["stale"]),
                     "signal_only_mode": bool(
                         self.settings.signal_only_mode
                     ),
@@ -1494,6 +1761,7 @@ button:focus-visible,select:focus-visible,.nav-btn:focus-visible,.pick-card:focu
         </div>
         <div class="chart-tools">
           <span id="livePrice" class="pill good">REALTIME —</span>
+          <span id="universeStatus" class="pill warn" title="L'elenco dei mercati non autorizza alcun segnale.">MARKETS —</span>
           <span id="historySource" class="pill">HISTORY —</span>
           <div class="asset-picker"><input id="asset" list="marketSymbols" inputmode="search" autocomplete="off" spellcheck="false" placeholder="Cerca simbolo..." aria-label="Cerca un simbolo di mercato"/><datalist id="marketSymbols"></datalist><button id="loadAsset" type="button">Apri</button></div>
           <select id="range" aria-label="Numero di candele"><option value="120">120</option><option value="240" selected>240</option><option value="480">480</option></select>
@@ -1887,7 +2155,10 @@ function renderFocus(data){
     box.innerHTML='<div class="top5-empty"><h2 style="margin:0">Nessun segnale</h2><p class="small" style="margin:10px 0 0">'+esc(message)+'</p></div>';
     return;
   }
-  const coverage=(data.summary&&data.summary.universe_total!=null)?Number(data.summary.universe_total):null;
+  const marketUniverse=data.market_data||{};
+  const coverage=marketUniverse.universe_total!=null
+    ?Number(marketUniverse.universe_total)
+    :((data.summary&&data.summary.universe_total!=null)?Number(data.summary.universe_total):null);
   const eligible=(data.summary&&data.summary.model_eligible_assets!=null)?Number(data.summary.model_eligible_assets):((data.summary&&data.summary.compatible_bundles!=null)?Number(data.summary.compatible_bundles):null);
   const coverageNode=$("coverageSummary");
   if(coverageNode){
@@ -2269,6 +2540,23 @@ function renderLiveData(data){
 
 function render(data){
   state.data=data;
+  const marketData=data.market_data||{};
+  const universeNode=$("universeStatus");
+  if(universeNode){
+    const source=marketData.universe_source||(data.config||{}).market_universe_source||"local_fallback";
+    const universeSymbols=Array.isArray(marketData.symbols)?marketData.symbols:((data.config||{}).market_symbols||[]);
+    const rawTotal=marketData.universe_total!=null?Number(marketData.universe_total):universeSymbols.length;
+    const total=Number.isFinite(rawTotal)?Math.max(0,rawTotal):universeSymbols.length;
+    const stale=marketData.universe_stale!==false;
+    const label=source==="live_exchange"&&!stale?"MARKETS LIVE":source==="persisted_snapshot"?"MARKETS CACHED":"MARKETS LOCAL";
+    universeNode.textContent=label+" · "+total;
+    universeNode.className="pill "+(stale?"warn":"good");
+    universeNode.title=source==="persisted_snapshot"
+      ?"Elenco dell'ultima scoperta exchange riuscita ("+(marketData.universe_snapshot_at||"data sconosciuta")+"). Solo navigazione; i segnali richiedono dati e modelli attuali."
+      :source==="live_exchange"&&!stale
+        ?"Universo exchange appena verificato. L'idoneità ai segnali viene controllata separatamente."
+        :"Universo locale/fallback. Non equivale a una lista exchange aggiornata e non abilita segnali.";
+  }
   if(!data.ok){
     $("radarRows").innerHTML='<tr><td colspan="3"><span class="signal signal-wait">WAIT</span></td></tr>';
     $("detailRows").innerHTML='<tr><td colspan="11" class="small">'+esc(data.error||"Terminale non disponibile")+'</td></tr>';
@@ -2280,7 +2568,10 @@ function render(data){
   populateAssets(signals,liveSymbols);
   renderRadar(signals);
   renderLiveData(data);
-  const coverage=(data.summary&&data.summary.universe_total!=null)?Number(data.summary.universe_total):null;
+  const marketUniverse=data.market_data||{};
+  const coverage=marketUniverse.universe_total!=null
+    ?Number(marketUniverse.universe_total)
+    :((data.summary&&data.summary.universe_total!=null)?Number(data.summary.universe_total):null);
   const eligible=(data.summary&&data.summary.model_eligible_assets!=null)?Number(data.summary.model_eligible_assets):((data.summary&&data.summary.compatible_bundles!=null)?Number(data.summary.compatible_bundles):null);
   const coverageNode=$("coverageSummary");
   if(coverageNode){

@@ -1,6 +1,6 @@
 # Adaptive AI Trading Lab
 
-Release **0.9.42** — pre-alpha read-only signal terminal built on the trained research stack.
+Release **0.9.44** — pre-alpha read-only signal terminal built on the trained research stack.
 
 This repository is a research-first adaptive trading platform for real market data, purged walk-forward validation, pristine holdouts, cost-aware event-driven backtesting, autonomous research and guarded paper/signal workflows.
 
@@ -16,6 +16,10 @@ This repository is a research-first adaptive trading platform for real market da
 - Deterministic benchmark controls and CI checks for compile, tests, CLI startup and benchmark execution.
 - Single-file `signal_dashboard.py` signal terminal with automatic public-data refresh, provenance-aware bundle checks and prequential signal journal.
 - Alpha visual foundation with Sakura Tactical glow, anime operator, animated navigation, decision trace, signal timeline, decision inspector and lightweight ambient effects.
+
+## Project map and maintenance
+
+The codebase map, data/artifact boundaries, validation contract, maintainer commands and documentation index live in [`docs/PROJECT_MAP.md`](docs/PROJECT_MAP.md). Start with [Windows setup](SETUP_WINDOWS.md) for users or [the Windows build contract](BUILD_WINDOWS_EXE.md) for packaging. Generated market data, models and runtime journals are deliberately excluded from Git.
 
 ## Single signal terminal
 
@@ -36,8 +40,8 @@ Live order placement is not implemented as an autonomous capability. The default
 ## Common commands
 
 ```bash
-pip install -e .
-# Optional research stack: pip install -e ".[full]"
+pip install -r requirements.txt
+# Optional experimental/research extras: pip install -e ".[full]"
 python -m ai_trading_lab.main doctor
 python -m ai_trading_lab.main demo
 python -m ai_trading_lab.main benchmark --benchmark-bars 1200
@@ -55,7 +59,7 @@ The dashboard is a read-only market-data terminal. To make it immediately useful
 
 ```powershell
 python -m ai_trading_lab.main doctor
-python -m ai_trading_lab.main bootstrap-live-data --symbols BTC/USDT,ETH/USDT,BNB/USDT,SOL/USDT,XRP/USDT --live-bars 600
+python -m ai_trading_lab.main bootstrap-live-data --live-bars 1200 --workers 4
 python signal_dashboard.py
 ```
 

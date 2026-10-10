@@ -1,42 +1,33 @@
-# Research status — 0.9.18
+# Research and validation status — release 0.9.43
 
-## Current state
+## What is established
 
-The repository contains the full research source tree plus the autonomous orchestration, data utilities, model bundles, tests and GitHub Actions workflows needed to operate the project coherently.
+The repository contains a real-data ingestion path, temporal training/validation, a heterogeneous base model, an event/direction specialist, an event-driven backtester and a strict read-only live signal surface. Current engineering checks include compilation, regression tests, integrity checks, CLI smoke tests and benchmark smoke tests. A successful CI or package build demonstrates software correctness for the covered checks; it does **not** prove a profitable trading edge.
 
-The system is deliberately research-first. No result in this repository should be interpreted as proof of a durable trading edge, and the live/paper signal path defaults to conservative WAIT behavior.
+## Required standard for a model to publish signals
 
-## Research protocol
+1. Use closed candles with validated chronology, coverage, OHLC consistency and provenance.
+2. Fit only on information available at each decision timestamp, with purging around forward-looking labels.
+3. Keep a chronological holdout outside tuning and report its exact time range and data fingerprint.
+4. Evaluate the actual deployable policy rather than model probabilities in isolation.
+5. Include realistic fees, slippage, impact, short borrow and funding where applicable.
+6. Require sufficient sample support, non-negative net economics, acceptable drawdown and robust statistical utility.
+7. Bind model, dataset, execution semantics and artifact hashes in deployment evidence.
+8. Publish no LONG/SHORT signal unless the current bundle passes every required gate.
 
-1. Download versioned real historical OHLCV.
-2. Remove the live/incomplete candle.
-3. Verify chronology, gaps, duplicates, OHLC consistency and provenance.
-4. Train only on information available at the decision timestamp.
-5. Use purged walk-forward out-of-sample evaluation.
-6. Keep a chronological final holdout untouched by tuning.
-7. Stress fees, slippage, impact and borrow assumptions.
-8. Run bootstrap/statistical diagnostics, placebo controls and stability checks.
-9. Compare against simple non-ML controls and cross-market validation.
-10. Never auto-promote from a research runner without passing all promotion evidence gates.
+The intended behavior under weak evidence is abstention. An empty signal list is a valid—and safer—result than forcing a trade.
 
-## Engineering state
+## User-facing interpretation
 
-The 0.9.15 hardening pass restores the missing benchmark command, fixes master-tuning cache partitioning, repairs paper/live inference, wires strict signal safety gates, makes configured cost-stress multipliers effective, and adds CI/regression coverage.
+The system is signal-only. Journal returns are estimates resolved from later OHLC bars and configured transaction-cost assumptions; they are not actual fills, account returns or proof of strategy profitability. Historical reports in the repository retain the version and data window they originally evaluated and should not be read as current validation.
 
-The current code remains suitable for research and paper/signal operation. A production-grade market edge remains **unproven** until fresh multi-year, multi-asset real-data evidence passes the full protocol.
+## Reproducibility
 
-The 0.9.18 pre-alpha terminal is now the stable read-only observation layer: realtime ticker data is visually overlaid, while model inference continues to use the closed-candle path. Signal history is tracked prequentially so the next alpha UI can build on a stable, provenance-aware data contract.
+```bash
+python -m compileall -q src signal_dashboard.py
+python -m pytest -q
+python -m ai_trading_lab.main doctor
+python signal_dashboard.py --once
+```
 
-## Required deployment gate
-
-A candidate must have:
-- purged walk-forward evidence;
-- a pristine final holdout;
-- positive economic value after realistic costs;
-- sufficient trade count;
-- acceptable drawdown;
-- placebo / negative-control sanity checks;
-- parameter stability;
-- consistent behavior across assets and regimes.
-
-The repository keeps deployment authority separate from autonomous research so learning cannot silently become execution authority.
+For the current runtime map, user setup and Windows packaging contract, see `docs/PROJECT_MAP.md`, `SETUP_WINDOWS.md` and `BUILD_WINDOWS_EXE.md`.

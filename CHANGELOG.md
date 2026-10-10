@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.9.44
+- Aligned base classifier, return regressor, analog memory and meta-policy targets with the executable ATR barrier/time-stop returns used by backtesting, instead of raw next-open-to-next-open returns.
+- Aligned untouched holdout directional diagnostics with the exact executable target, including opening gaps, early barriers and ambiguous OHLC exclusions.
+- Bumped model target semantics so previously trained bundles cannot be silently reused after the target/execution correction; all affected assets must be retrained and pass the unchanged economic/readiness gates.
+- Added regression tests for a stop-out followed by a recovery before the time-stop, ambiguous intrabar collisions, and timeout returns.
+
+## 0.9.43
+- Made full-universe historical bootstrap bounded-parallel and resumable with per-worker exchange clients, atomic CSV replacement, freshness/order checks and a deterministic per-symbol report.
+- Added a visible Market cockpit universe freshness label (`LIVE`, `CACHED` or `LOCAL`) and used last-known market count for navigation coverage while keeping scan/eligible counts separate.
+- Persisted the last authoritative market universe for offline market-selector navigation, with a 30-day expiry, atomic writes and explicit stale/source metadata; saved markets never widen signal eligibility.
+- Added an 8-second bounded realtime quote cache to reduce repeated public ticker calls while keeping signal inference on closed candles.
+- Realtime display price now prefers a valid bid/ask midpoint and retains the last trade separately; malformed/crossed books fall back safely.
+- Corrected short-signal net-return math to use simple PnL over entry notional, matching the event-driven backtester instead of overstating returns via an inverse-price formula.
+- Added short win/loss/timeout regression tests and a maintainer-facing source/data map.
+- Tightened Git exclusions for generated market data, trained bundles, runtime logs and Python tooling caches.
+- Added flushed JSON progress events for each asset and long-running training stage, including elapsed durations, readiness status and immediate per-asset failures.
+- Added a regression test for the multi-stage training progress contract.
+
 ## 0.9.42
 - Fixed signal-history timestamp handoff so historical outcomes resolve against the original market-data candle, including legacy journal entries.
 - Corrected historical signal net returns to include configured round-trip market impact and elapsed short-borrow costs.

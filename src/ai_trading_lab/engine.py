@@ -28,9 +28,38 @@ class EngineArtifacts:
 
 
 def directional_target_from_returns(target_ret: pd.Series) -> pd.Series:
-    """Create the binary direction target aligned with simulated realized returns."""
+    """Create a binary direction target from executable, realized price returns."""
     returns = pd.to_numeric(target_ret, errors="coerce").replace([np.inf, -np.inf], np.nan)
     return returns.gt(0.0).astype(float).where(returns.notna())
+
+
+def execution_aligned_targets(
+    df: pd.DataFrame,
+    horizon_bars: int,
+    pt_atr: float,
+    sl_atr: float,
+) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
+    """Build the base model's targets from the same barrier/time-stop path as backtesting.
+
+    The binary target is the sign of the simulated gross return: an ATR barrier
+    may exit before the horizon, while unresolved positions exit at the time-stop
+    open. Intrabar collisions whose order is unknowable from OHLC remain NaN and
+    are excluded from base-model, calibration, memory and meta-policy targets.
+    """
+    ordered = df.sort_index().copy()
+    if ordered.index.has_duplicates:
+        raise ValueError("duplicate_timestamps")
+    labels = triple_barrier_labels(
+        ordered,
+        int(horizon_bars),
+        float(pt_atr),
+        float(sl_atr),
+    )
+    target_returns = pd.to_numeric(
+        labels["tb_return"], errors="coerce"
+    ).replace([np.inf, -np.inf], np.nan)
+    direction = directional_target_from_returns(target_returns)
+    return labels, target_returns, direction
 
 
 def _pre_calibration_core_mask(index, calibration_start, purge_bars):
@@ -73,15 +102,17 @@ class AdaptiveEngine:
 
     def fit(self,df):
         validate_execution_alignment(self.settings)
-        features,_,_raw_future_ret=make_features(df,self.settings.horizon_bars,external_feature_lag_bars=getattr(self.settings,'external_feature_lag_bars',1))
-        # Preserve triple-barrier outcomes as diagnostics, but train the base
-        # classifier/regressor against a direction-neutral market return over the
-        # same next-open-to-next-open horizon used by the time-stop. The policy
-        # later gates LONG/SHORT proposals, and the executable backtest validates
-        # their separate barrier geometry and economics.
-        tb=triple_barrier_labels(df,self.settings.horizon_bars,self.settings.pt_atr,self.settings.sl_atr)
-        target_ret=pd.to_numeric(_raw_future_ret,errors='coerce').replace([np.inf,-np.inf],np.nan)
-        y=directional_target_from_returns(target_ret)
+        # Keep features, executable labels and model targets on the same ordered
+        # decision-candle index. No-event timeouts and barrier exits share one
+        # execution path; ambiguous OHLC barrier collisions are excluded.
+        df=df.sort_index().copy()
+        features,_,_=make_features(df,self.settings.horizon_bars,external_feature_lag_bars=getattr(self.settings,'external_feature_lag_bars',1))
+        tb,target_ret,y=execution_aligned_targets(
+            df,
+            self.settings.horizon_bars,
+            self.settings.pt_atr,
+            self.settings.sl_atr,
+        )
         cal_n=max(48,int(max(1,y.notna().sum())*0.15)); valid_idx=y.notna(); valid_positions=np.flatnonzero(valid_idx.to_numpy()); selection_mask=pd.Series(False,index=features.index)
         if len(valid_positions)>cal_n+100: selection_mask.iloc[valid_positions[:-cal_n]]=True
         else: selection_mask.loc[valid_idx.index]=valid_idx
