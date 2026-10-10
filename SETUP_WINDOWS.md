@@ -1,4 +1,4 @@
-# Adaptive AI Signal Terminal — Windows Setup
+# Adaptive AI Signal Terminal — Windows Setup (0.9.43)
 
 ## Packaged EXE
 
@@ -13,7 +13,7 @@ Keep `config.yaml` beside the executable. Model/deployment bundles remain extern
 Install Python 3.11+ 64-bit:
 
 ```powershell
-python -m pip install -e .
+python -m pip install -r requirements.txt
 python signal_dashboard.py
 ```
 
@@ -41,14 +41,7 @@ python signal_dashboard.py
 
 The dashboard refreshes realtime quotes through the configured public exchange adapter. The `bootstrap-live-data` command creates `data/historical/<SYMBOL>_<TIMEFRAME>.csv`; live model inference still requires a compatible trained bundle under `models/assets/<SYMBOL>/`. Running the command without `--symbols` discovers all active spot/swap/future markets for the configured exchange. It resumes from recent CSVs, writes replacements atomically, and supports bounded parallel workers; it may take substantial time on a full universe. Downloading a market's candles does not create a signal model or make that market signal-eligible.
 
-### All symbols
+### Scope and safety
 
-With no `--symbols` argument, the bootstrap command discovers the full active exchange universe eligible for OHLCV and downloads it. For example:
-
-```powershell
-python -m ai_trading_lab.main bootstrap-live-data --live-bars 600
-```
-
-Use `--market-types spot,swap,future` to make the scope explicit, or `--symbols BTC/USDT,ETH/USDT` to limit the run. The command is resumable and reuses sufficiently fresh CSVs.
-
+Use `--market-types spot,swap,future` to make the scope explicit or `--symbols BTC/USDT,ETH/USDT` to limit a run. The command defaults to the full active OHLCV universe, caps concurrency at eight workers, resumes sufficiently fresh CSVs and records per-symbol errors in `logs/bootstrap_live_data.json`. Downloading candles does not train a model or make an asset signal-eligible.
 
