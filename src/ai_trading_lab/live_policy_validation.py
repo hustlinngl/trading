@@ -242,9 +242,24 @@ def build_live_policy_holdout_report(
             "holdout_fingerprint": strong_dataset_fingerprint(holdout_fingerprint_df),
         },
     )
+    action_counts = {
+        action: int((primary_actions == action).sum())
+        for action in ("LONG", "SHORT", "FLAT")
+    }
+    action_total = max(1, int(len(primary_actions)))
     report = {
         "schema_version": 1,
         "symbol": str(settings.symbol),
+        "signal_gate_diagnostics": {
+            "rows": int(len(primary_actions)),
+            "action_counts": action_counts,
+            "action_fractions": {
+                action: float(count / action_total)
+                for action, count in action_counts.items()
+            },
+            "configured_policy_trade_count": primary_trade_count,
+            "minimum_required_trades": min_trades,
+        },
         "timeframe": str(settings.timeframe),
         "data_fingerprint": strong_dataset_fingerprint(full_fingerprint_df),
         "validation_train_data_fingerprint": strong_dataset_fingerprint(train_df),
