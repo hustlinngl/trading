@@ -506,12 +506,38 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
             else True
         )
     )
+    def _score_distribution(values):
+        values = np.asarray(values, dtype=float)
+        values = values[np.isfinite(values)]
+        if not len(values):
+            return {"n": 0}
+        return {
+            "n": int(len(values)),
+            "min": float(np.min(values)),
+            "p50": float(np.quantile(values, 0.50)),
+            "p90": float(np.quantile(values, 0.90)),
+            "p95": float(np.quantile(values, 0.95)),
+            "p99": float(np.quantile(values, 0.99)),
+            "max": float(np.max(values)),
+        }
+
+    event_pass = p_event >= min_event_probability
+    confidence_pass = p_direction >= min_confidence
     report = {
         "production_ready": bool(ready),
         "holdout_precision": precision,
         "holdout_wilson_lower": wilson,
         "holdout_signals": int(support),
         "holdout_candidates_before_nonoverlap": int(candidates.sum()),
+        "holdout_probability_diagnostics": {
+            "event_probability": _score_distribution(p_event),
+            "conditional_direction_confidence": _score_distribution(p_direction),
+            "min_event_probability": min_event_probability,
+            "min_direction_confidence": min_confidence,
+            "event_probability_gate_passes": int(event_pass.sum()),
+            "direction_confidence_gate_passes": int(confidence_pass.sum()),
+            "both_probability_gates_pass": int((event_pass & confidence_pass).sum()),
+        },
         "holdout_unexecutable_short_candidates": int(unexecutable_short_candidates),
         "holdout_ambiguous_candidate_exclusions": int(ambiguous_candidate_exclusions),
         "holdout_unresolved_candidate_exclusions": int(unresolved_candidate_exclusions),
@@ -557,8 +583,13 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
     return report
 
 
-def score_trade_window_frame(df, settings, model_path=None, symbol=None):
+def score_trade_window_frame(
+    df, settings, model_path=None, symbol=None, *, allow_unready_for_validation=False
+):
     """Score the specialist row-by-row using the same checks as live inference.
+
+    This validation-only override lets the isolated research evaluator measure an
+    unpromoted candidate without weakening the default live-inference contract.
 
     This is used by live inference and chronological policy validation. It does not
     use future labels; features are causal, class-prior correction is identical to
@@ -623,7 +654,7 @@ def score_trade_window_frame(df, settings, model_path=None, symbol=None):
         precision = float(report.get("holdout_precision", 0.0) or 0.0)
         if report.get("probability_semantics") != BALANCED_PROBABILITY_SEMANTICS:
             return failed("probability_semantics_missing", available=True, precision=precision)
-        if not bool(report.get("production_ready", False)):
+        if not bool(report.get("production_ready", False)) and not allow_unready_for_validation:
             return failed("not_production_ready", available=True, precision=precision)
 
         base_minutes = float(

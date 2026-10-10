@@ -14,6 +14,7 @@ from ai_trading_lab.trade_window import (
     _fill_feature_frame,
     assess_trade_window,
     directional_event_probabilities,
+    score_trade_window_frame,
     train_trade_window_backbone,
 )
 
@@ -239,11 +240,61 @@ def test_trade_window_holdout_scores_actual_barrier_exit_not_time_stop_open(monk
     report = train_trade_window_backbone(frame, settings, holdout_frac=0.20)
 
     assert report["holdout_candidates_before_nonoverlap"] == 1
+    probability_diagnostics = report["holdout_probability_diagnostics"]
+    assert probability_diagnostics["both_probability_gates_pass"] == 1
+    assert probability_diagnostics["event_probability"]["n"] > 0
+    assert probability_diagnostics["event_probability"]["max"] >= settings.trade_window_min_event_probability
     assert report["holdout_signals"] == 1
     assert report["holdout_economic_observations"] == 1
     assert np.isclose(report["holdout_net_return_mean"], 0.0025 - 0.0004)
     assert report["holdout_net_return_mean"] > 0.0
     assert report["holdout_net_return_compounded"] > 0.0
+
+
+def test_unready_specialist_can_be_scored_only_by_explicit_validation_override(tmp_path):
+    settings = load_settings("config.yaml")
+    settings.symbol = "BTC/USDT"
+    settings.live_max_missing_feature_fraction = 1.0
+    frame = _flat_market(rows=40)
+    model = DummyClassifier(strategy="prior")
+    model.fit(np.asarray([[0.0], [1.0], [2.0]]), np.asarray([-1, 0, 1]))
+    artifact_path = tmp_path / "candidate.joblib"
+    joblib.dump(
+        {
+            "model": model,
+            "feature_columns": ["ret_1"],
+            "fill_values": pd.Series({"ret_1": 0.0}),
+            "report": {
+                "production_ready": False,
+                "symbol": settings.symbol,
+                "timeframe": settings.timeframe,
+                "model_semantics_fingerprint": model_semantics_fingerprint(settings),
+                "deployment_semantics_fingerprint": deployment_semantics_fingerprint(settings),
+                "holdout_precision": 0.0,
+                "train_class_counts": {"-1": 1, "0": 1, "1": 1},
+                "probability_semantics": BALANCED_PROBABILITY_SEMANTICS,
+            },
+        },
+        artifact_path,
+    )
+
+    live_scores = score_trade_window_frame(
+        frame, settings, artifact_path, symbol=settings.symbol
+    )
+    research_scores = score_trade_window_frame(
+        frame,
+        settings,
+        artifact_path,
+        symbol=settings.symbol,
+        allow_unready_for_validation=True,
+    )
+
+    assert set(live_scores["trade_window_reason"]) == {"not_production_ready"}
+    assert not live_scores["trade_window_ready"].any()
+    assert research_scores["trade_window_available"].all()
+    assert set(research_scores["trade_window_reason"]) == {
+        "below_event_or_direction_threshold"
+    }
 
 
 def test_trade_window_refuses_binary_only_training_and_removes_stale_artifact(tmp_path, monkeypatch):

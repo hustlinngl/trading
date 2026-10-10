@@ -166,6 +166,9 @@ def test_holdout_builder_persists_combined_gate_provenance(monkeypatch, tmp_path
     assert report["holdout_governance"]["pristine"] is True
     assert persisted["validation_holdout_data_fingerprint"] == validation.strong_dataset_fingerprint(holdout.drop(columns=["atr_14"], errors="ignore"))
     assert persisted["holdout_start"] == str(holdout.index.min())
+    assert persisted["signal_gate_diagnostics"]["rows"] == len(holdout)
+    assert persisted["signal_gate_diagnostics"]["action_counts"]["LONG"] == len(holdout)
+    assert persisted["signal_gate_diagnostics"]["action_counts"]["FLAT"] == 0
     assert persisted["statistical_evidence"]["deflated_sharpe_ratio_available"] is True
     assert persisted["statistical_evidence"]["deflated_sharpe_ratio"] is not None
     assert persisted["statistical_evidence"]["prior_research_trial_count"] == 123
