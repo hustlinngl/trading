@@ -142,8 +142,41 @@ def test_refresh_deployment_manifest_requires_matching_evidence(tmp_path):
         json.dumps({"production_ready":True,"symbol":"BTC/USDT","timeframe":"15m","data_fingerprint":fp,"model_semantics_fingerprint":sem,"deployment_semantics_fingerprint":dep_sem,"holdout":{"backtest":duration_stats}}),
         encoding="utf-8",
     )
+    # Separate base/specialist reports are no longer sufficient: deployment
+    # must prove the combined live_signal_gate and statistical evidence.
+    manifest = refresh_deployment_manifest(settings, tmp_path)
+    assert manifest["ready"] is False
+    assert manifest["checks"]["live_policy_holdout_report_present"] is False
+
+    live_report = {
+        "schema_version": 1,
+        "symbol": "BTC/USDT",
+        "timeframe": "15m",
+        "data_fingerprint": fp,
+        "validation_holdout_data_fingerprint": "holdout-fp",
+        "holdout_start": "2026-01-01T00:00:00+00:00",
+        "holdout_end": "2026-03-01T00:00:00+00:00",
+        "model_semantics_fingerprint": sem,
+        "deployment_semantics_fingerprint": dep_sem,
+        "live_signal_gate_applied": True,
+        "specialist_gate_applied": True,
+        "holdout_governance": {"pristine": True},
+        "candidate_fold_count": 6,
+        "holdout": base_stats,
+        "statistical_evidence": {
+            "deflated_sharpe_ratio": 0.95,
+            "probability_of_backtest_overfitting": {"available": True, "pbo": 0.10},
+            "stability": {"available": True, "stable": True},
+            "negative_control": {"available": True, "passes_95pct_negative_control": True, "placebo_samples": 100},
+        },
+    }
+    (bundle / "live_policy_holdout_report.json").write_text(
+        json.dumps(live_report),
+        encoding="utf-8",
+    )
     manifest = refresh_deployment_manifest(settings, tmp_path)
     assert manifest["ready"] is True
+    assert manifest["live_policy_evidence"]["valid"] is True
     assert manifest["data_fingerprint"] == fp
     assert manifest["model_semantics_fingerprint"] == sem
     assert manifest["bundle_artifact_fingerprint"] == bundle_artifact_fingerprint(bundle)
