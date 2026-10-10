@@ -465,6 +465,88 @@ def test_signal_terminal_bulk_ticker_path_and_browser_escape(tmp_path, monkeypat
     assert 'function esc(v){return String(v??"").replace(/[&<>"]/g,c=>c==="&"?"&amp;":c==="<"?"&lt;":c===">"?"&gt;":"&quot;");}' in terminal_mod.HTML
 
 
+def test_ticker_row_prefers_valid_bid_ask_midpoint_and_keeps_last_trade():
+    import signal_dashboard as terminal_mod
+
+    quote = terminal_mod.SignalTerminal._ticker_row(
+        "BTC/USDT",
+        {"last": 105.0, "bid": 99.0, "ask": 101.0, "quoteVolume": "1200"},
+    )
+
+    assert quote["price"] == 100.0
+    assert quote["last_price"] == 105.0
+    assert quote["bid"] == 99.0
+    assert quote["ask"] == 101.0
+    assert quote["quote_volume"] == 1200.0
+
+
+def test_ticker_row_uses_last_trade_when_book_is_crossed_or_invalid():
+    import signal_dashboard as terminal_mod
+
+    crossed = terminal_mod.SignalTerminal._ticker_row(
+        "BTC/USDT", {"last": 105.0, "bid": 106.0, "ask": 104.0}
+    )
+    malformed = terminal_mod.SignalTerminal._ticker_row(
+        "BTC/USDT", {"last": "105", "bid": "not-a-price", "ask": 110.0}
+    )
+
+    assert crossed["price"] == 105.0
+    assert malformed["price"] == 105.0
+    assert malformed["bid"] is None
+
+
+def test_signal_terminal_reuses_cached_quotes_within_ttl(tmp_path, monkeypatch):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    calls = {"single": 0, "bulk": 0}
+
+    class FakeExchange:
+        def fetch_ticker(self, symbol):
+            calls["single"] += 1
+            return {"last": 105.0, "bid": 99.0, "ask": 101.0, "timestamp": 1}
+
+        def fetch_tickers(self, symbols):
+            calls["bulk"] += 1
+            return {"BTC/USDT": {"last": 105.0, "bid": 99.0, "ask": 101.0, "timestamp": 1}}
+
+    monkeypatch.setattr(terminal_mod, "exchange_client", lambda *args, **kwargs: FakeExchange())
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path)
+    first = terminal._quote("BTC/USDT")
+    second = terminal._quote("BTC/USDT")
+    third = terminal._quotes(["BTC/USDT"])["BTC/USDT"]
+
+    assert first["price"] == second["price"] == third["price"] == 100.0
+    assert first["generated_at"] == second["generated_at"]
+    assert calls == {"single": 1, "bulk": 0}
+
+
+def test_signal_terminal_refreshes_expired_quote_cache(tmp_path, monkeypatch):
+    import signal_dashboard as terminal_mod
+
+    settings = load_settings("config.yaml")
+    calls = {"count": 0}
+
+    class FakeExchange:
+        def fetch_ticker(self, symbol):
+            calls["count"] += 1
+            return {"last": 100.0 + calls["count"], "bid": 99.0, "ask": 101.0}
+
+    monkeypatch.setattr(terminal_mod, "exchange_client", lambda *args, **kwargs: FakeExchange())
+    terminal = terminal_mod.SignalTerminal(settings, tmp_path)
+    first = terminal._quote("BTC/USDT")
+    stored_at, payload = terminal._quote_cache["BTC/USDT"]
+    terminal._quote_cache["BTC/USDT"] = (
+        stored_at - terminal._quote_cache_ttl - 1.0,
+        payload,
+    )
+    second = terminal._quote("BTC/USDT")
+
+    assert first["last_price"] == 101.0
+    assert second["last_price"] == 102.0
+    assert calls["count"] == 2
+
+
 def test_signal_terminal_alpha_ui_keeps_visual_layer_separate_from_execution():
     import signal_dashboard as terminal_mod
 
