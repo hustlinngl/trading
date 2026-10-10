@@ -152,6 +152,49 @@ def _event_score_arrays(probabilities, classes):
     return p_short, p_neutral, p_long, p_event, p_direction, direction
 
 
+
+BALANCED_PROBABILITY_SEMANTICS = "balanced_class_weight_prior_corrected_v1"
+
+
+def _correct_balanced_class_probabilities(probabilities, classes, class_counts):
+    """Undo inverse-frequency class weighting before treating scores as event probabilities.
+
+    class_weight='balanced' changes the class prior seen by the estimator. For
+    probabilities in the original population, reweight each class score by its
+    observed training count and renormalize. This prior correction is not a
+    substitute for out-of-sample calibration; it prevents weighted scores from
+    being mislabeled as natural event probabilities.
+    """
+    proba = np.asarray(probabilities, dtype=float)
+    labels = [int(value) for value in np.asarray(classes).tolist()]
+    if proba.ndim != 2 or proba.shape[1] != len(labels):
+        raise ValueError("trade_window_probability_shape_mismatch")
+    if not np.isfinite(proba).all() or (proba < 0).any():
+        raise ValueError("trade_window_invalid_probabilities")
+
+    if not isinstance(class_counts, dict):
+        raise ValueError("trade_window_class_prior_metadata_missing")
+    counts = []
+    for label in labels:
+        value = class_counts.get(str(label), class_counts.get(label))
+        try:
+            count = float(value)
+        except (TypeError, ValueError):
+            raise ValueError("trade_window_class_prior_metadata_missing") from None
+        if not np.isfinite(count) or count <= 0:
+            raise ValueError("trade_window_class_prior_metadata_invalid")
+        counts.append(count)
+
+    totals = proba.sum(axis=1, keepdims=True)
+    if np.any(totals <= 1e-12):
+        raise ValueError("trade_window_invalid_probabilities")
+    normalized = proba / totals
+    corrected = normalized * np.asarray(counts, dtype=float)[None, :]
+    corrected_totals = corrected.sum(axis=1, keepdims=True)
+    if np.any(corrected_totals <= 1e-12):
+        raise ValueError("trade_window_prior_correction_failed")
+    return corrected / corrected_totals
+
 def directional_event_probabilities(probabilities, classes, min_event_probability=0.60):
     """Return conditional direction only when the qualifying event is sufficiently likely."""
     threshold = float(min_event_probability)
@@ -278,8 +321,11 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
         class_weight="balanced",
     )
     model.fit(train_x, train_y)
-    proba = model.predict_proba(holdout_x)
+    weighted_proba = model.predict_proba(holdout_x)
     try:
+        proba = _correct_balanced_class_probabilities(
+            weighted_proba, model.classes_, class_counts
+        )
         p_short, p_neutral, p_long, p_event, p_direction, pred_direction = _event_score_arrays(
             proba, model.classes_
         )
@@ -397,6 +443,7 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
         "train_rows": int(len(train_x)),
         "holdout_rows": int(len(holdout_x)),
         "train_class_counts": class_counts,
+        "probability_semantics": BALANCED_PROBABILITY_SEMANTICS,
         "holdout_class_counts": {str(label): int((holdout_y == label).sum()) for label in (-1, 0, 1)},
         "min_hours": min_hours,
         "max_hours": max_hours,
@@ -496,7 +543,17 @@ def assess_trade_window(df, settings, model_path=None, symbol=None):
             out["trade_window_reason"] = "empty_features"
             return out
 
-        probability = model.predict_proba(x.iloc[[-1]])[0]
+        if report.get("probability_semantics") != BALANCED_PROBABILITY_SEMANTICS:
+            out["trade_window_reason"] = "probability_semantics_missing"
+            return out
+        weighted_probability = model.predict_proba(x.iloc[[-1]])
+        try:
+            probability = _correct_balanced_class_probabilities(
+                weighted_probability, model.classes_, report.get("train_class_counts")
+            )[0]
+        except ValueError as exc:
+            out["trade_window_reason"] = str(exc)
+            return out
         min_confidence = float(getattr(settings, "trade_window_min_confidence", 0.80))
         min_event_probability = float(getattr(settings, "trade_window_min_event_probability", 0.60))
         scores = directional_event_probabilities(

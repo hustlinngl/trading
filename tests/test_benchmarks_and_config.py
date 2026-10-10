@@ -67,5 +67,7 @@ def test_release_versions_are_aligned():
     pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
     match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
     assert match is not None
-    assert __version__ == version_file == match.group(1)
-    assert __version__ == "0.9.40"
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    release_match = re.search(r"^Release [*]{2}([^*]+)[*]{2}", readme, re.MULTILINE)
+    assert release_match is not None
+    assert __version__ == version_file == match.group(1) == release_match.group(1)

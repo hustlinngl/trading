@@ -1,3 +1,11 @@
+# Changelog
+
+## 0.9.41
+- Aligned live signal outcome tracking with executable opening-gap, minimum-holding and time-stop semantics.
+- Corrected class-balanced trade-window scores for the training class prior before treating them as event probabilities; legacy model bundles are invalidated by the semantic fingerprint.
+- Added regression coverage for outcome execution, class-prior correction and release-version consistency.
+- Made the Windows package's displayed version derive from VERSION instead of a hard-coded release number and removed a stale version label from the Windows setup guide.
+
 ## 0.9.40
 - Expanded the model/data defaults to 30k training bars, 1.2k live bars and 15 configured live assets.
 - Hardened dashboard presentation around the direct six-field signal contract and removed malformed CSS boundaries.
@@ -22,8 +30,6 @@
 - Exposed realtime market quotes in `/api/state` even when no model-backed signal is available, so the dashboard still shows useful live market data.
 - History loading now prefers fresh local cache, refreshes stale cache from the live exchange, and falls back to bundled history only when the network is unavailable.
 - Added `bootstrap-live-data` to populate `data/historical/` with closed OHLCV bars for the configured live symbols.
-
-# Changelog
 
 ## 0.9.31
 - Final dashboard polish: the primary Top 5 surface is result-first, with restrained card entrance motion, compact confidence visualization and cleaner empty/loading states.
