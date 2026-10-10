@@ -323,6 +323,30 @@ def test_triple_barrier_timeout_matches_backtest_exit_at_next_open():
     assert out.loc[idx[14], "tb_label"] == 0.0
     assert np.isclose(out.loc[idx[14], "tb_return"], 0.01)
 
+    bt_df = df.assign(atr_14=1.0)
+    actions = pd.Series("FLAT", index=idx)
+    actions.iloc[14:17] = "LONG"
+    risk = RiskEngine(
+        initial_cash=10_000.0,
+        risk_per_trade=0.01,
+        max_position_pct=0.25,
+        max_daily_loss_pct=0.50,
+        stop_atr_mult=1.0,
+        rr=2.0,
+        fee_bps=0.0,
+        slippage_bps=0.0,
+        max_participation_pct=1.0,
+        impact_bps_per_sqrt=0.0,
+    )
+    backtest = run_backtest(
+        bt_df, actions, risk, 10_000.0,
+        fee_bps=0.0, slippage_bps=0.0, impact_bps_per_sqrt=0.0,
+        max_holding_bars=2, intrabar_barriers=True,
+    )
+    trade = backtest.trades.iloc[0]
+    assert trade["exit_reason"] == "time_stop"
+    assert np.isclose(trade["exit"], 101.0)
+
 
 def test_triple_barrier_opening_gap_uses_executable_open_before_intrabar_collision():
     idx = pd.date_range("2026-01-01", periods=22, freq="15min", tz="UTC")
