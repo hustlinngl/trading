@@ -120,8 +120,14 @@ def live_signal_gate(row, settings):
         reasons.append("base_policy")
     if bool(row.get("funding_data_missing", False)):
         reasons.append("funding_data_missing")
-    if direction < 0 and bool(getattr(settings, "require_short_borrow_cost", True)) and float(getattr(settings, "short_borrow_bps_per_bar", 0.0)) <= 0.0:
-        reasons.append("short_borrow_cost_missing")
+    if direction < 0:
+        if not bool(getattr(settings, "short_signals_enabled", False)):
+            reasons.append("short_signals_disabled")
+        market_type = str(row.get("market_type", "unknown") or "unknown").strip().lower()
+        if market_type not in {"margin", "swap", "future", "perpetual"}:
+            reasons.append("short_instrument_not_supported")
+        if bool(getattr(settings, "require_short_borrow_cost", True)) and float(getattr(settings, "short_borrow_bps_per_bar", 0.0)) <= 0.0:
+            reasons.append("short_borrow_cost_missing")
 
     if bool(getattr(settings, "signal_only_mode", True)):
         probability_floor = max(
