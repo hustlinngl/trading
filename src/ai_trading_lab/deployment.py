@@ -250,7 +250,9 @@ def _deployment_evidence_is_current(settings, bundle: str | Path, symbol: str, m
                 and bool(duration.get("production_ready", False))
                 and str(duration.get("symbol")) == str(symbol)
                 and str(duration.get("timeframe")) == str(getattr(settings, "timeframe", ""))
-                and str(duration.get("data_fingerprint")) == str(current_fp)
+                and str(duration.get("data_fingerprint")) == str(base.get("validation_train_data_fingerprint"))
+                and bool(duration.get("training_data_end"))
+                and str(duration.get("training_data_end")) < str(base.get("validation_holdout_start"))
                 and str(duration.get("model_semantics_fingerprint")) == str(meta.get("model_semantics_fingerprint"))
                 and str(duration.get("deployment_semantics_fingerprint")) == str(meta.get("deployment_semantics_fingerprint"))
                 and (
@@ -494,7 +496,10 @@ def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
     current_fp=meta.get("data_fingerprint") or base.get("data_fingerprint")
     duration_provenance_match=(
         bool(duration)
-        and str(duration.get("data_fingerprint"))==str(current_fp)
+        and bool(base)
+        and str(duration.get("data_fingerprint"))==str(base.get("validation_train_data_fingerprint"))
+        and bool(duration.get("training_data_end"))
+        and str(duration.get("training_data_end")) < str(base.get("validation_holdout_start",""))
         and str(duration.get("symbol"))==str(getattr(settings,"symbol",""))
         and str(duration.get("timeframe"))==str(getattr(settings,"timeframe",""))
     )
