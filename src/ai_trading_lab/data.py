@@ -60,11 +60,13 @@ def fetch_ohlcv(exchange, symbol: str, timeframe: str, limit: int = 8000, since:
 
     requested_raw = target if include_unclosed else target + 1
     latest_window = since is None
-    cursor = (
-        max(0, int(time.time() * 1000) - requested_raw * tf_ms)
-        if latest_window
-        else int(since)
-    )
+    if latest_window:
+        # Align to an exchange candle boundary. An unaligned since can make
+        # CCXT skip the first candle and return one bar fewer.
+        latest_open_ms = (int(time.time() * 1000) // tf_ms) * tf_ms
+        cursor = max(0, latest_open_ms - (requested_raw - 1) * tf_ms)
+    else:
+        cursor = int(since)
     all_rows = []
     while len(all_rows) < requested_raw:
         batch_limit = min(1000, requested_raw - len(all_rows))
