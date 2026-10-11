@@ -106,7 +106,7 @@ def _funding_snapshot(exchange,symbol,settings):
             return {"market_type":market_type,"funding_rate":None,"funding_cost_return":0.0,"funding_data_missing":True}
         rate=float(rate)
         bar_delta=timeframe_offset(getattr(settings,"timeframe","15m"))
-        bar_hours=max(bar_delta.total_seconds()/3600.0,1e-9)
+        bar_hours=max(float(bar_delta.nanos)/3_600_000_000_000.0,1e-9)
         holding_hours=max(float(getattr(settings,"max_holding_bars",getattr(settings,"horizon_bars",8)))*bar_hours,bar_hours)
         raw_interval = snapshot.get("fundingInterval")
         if raw_interval in (None, ""):
