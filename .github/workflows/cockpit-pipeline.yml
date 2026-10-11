@@ -1,0 +1,118 @@
+name: Cockpit Pipeline
+
+# Manual run of `cockpit pipeline` (data -> training -> readiness) on GitHub's
+# runners, so heavy work never depends on the operator's machine.
+#
+# * Research governance: the persistent ledger on the `research-ledger` branch is
+#   restored first (fail closed: never start from an empty ledger) and written
+#   back afterwards, even when the pipeline fails, because holdout accesses
+#   consumed by a failed run must still be recorded.
+# * Readiness gates are never relaxed. A run with zero ready models is a valid
+#   research-only outcome and is reported as such in the job summary.
+# * No orders are placed. PAPER_ONLY / SANDBOX stay enforced.
+# * Models, data and logs are NOT committed; only the ledger is persisted.
+
+on:
+  workflow_dispatch:
+    inputs:
+      live_bars:
+        description: 'Closed bars per asset to download'
+        required: false
+        default: '1200'
+      holdout_frac:
+        description: 'Temporal holdout fraction'
+        required: false
+        default: '0.15'
+
+permissions:
+  contents: write   # pushes only the `research-ledger` branch
+
+concurrency:
+  group: research-ledger-writer
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      PAPER_ONLY: 'true'
+      SANDBOX: 'true'
+      LEDGER_BRANCH: research-ledger
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Restore persistent research ledger
+        run: |
+          set -euo pipefail
+          mkdir -p data
+          git fetch --no-tags origin "refs/heads/${LEDGER_BRANCH}:refs/remotes/origin/${LEDGER_BRANCH}"
+          git show "refs/remotes/origin/${LEDGER_BRANCH}:research_ledger.json" > data/research_ledger.json
+          cp data/research_ledger.json "$RUNNER_TEMP/ledger_before.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          ledger = json.loads(Path("data/research_ledger.json").read_text(encoding="utf-8"))
+          if not isinstance(ledger, dict) or ledger.get("schema_version") != 2:
+              raise SystemExit("Persistent research ledger has an unsupported schema; refusing to reset governance.")
+          print("research-ledger-restored", {
+              "total_trials": ledger.get("total_trials", 0),
+              "holdout_accesses": len(ledger.get("holdout_accesses", [])),
+          })
+          PY
+
+      - name: Cockpit pipeline
+        run: |
+          python -m ai_trading_lab.cockpit pipeline \
+            --live-bars "${{ inputs.live_bars }}" \
+            --holdout-frac "${{ inputs.holdout_frac }}"
+
+      - name: Readiness report
+        if: always()
+        run: |
+          python -m ai_trading_lab.cockpit report | tee cockpit_report.txt
+          { echo '### Readiness report'; echo '```'; cat cockpit_report.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Persist research ledger
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -s data/research_ledger.json
+          if cmp -s data/research_ledger.json "$RUNNER_TEMP/ledger_before.json"; then
+            echo "Ledger unchanged."
+            exit 0
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          ledger = json.loads(Path("data/research_ledger.json").read_text(encoding="utf-8"))
+          if not isinstance(ledger, dict) or ledger.get("schema_version") != 2:
+              raise SystemExit("Refusing to persist a ledger with an unsupported schema.")
+          PY
+          git fetch --no-tags origin "refs/heads/${LEDGER_BRANCH}:refs/remotes/origin/${LEDGER_BRANCH}"
+          git worktree add --detach "$RUNNER_TEMP/research-ledger" "refs/remotes/origin/${LEDGER_BRANCH}"
+          install -m 600 data/research_ledger.json "$RUNNER_TEMP/research-ledger/research_ledger.json"
+          git -C "$RUNNER_TEMP/research-ledger" config user.name "github-actions[bot]"
+          git -C "$RUNNER_TEMP/research-ledger" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$RUNNER_TEMP/research-ledger" add research_ledger.json
+          if git -C "$RUNNER_TEMP/research-ledger" diff --cached --quiet; then
+            echo "Ledger unchanged."
+            exit 0
+          fi
+          git -C "$RUNNER_TEMP/research-ledger" commit -m "chore: persist research governance ledger from cockpit run ${GITHUB_RUN_ID}"
+          git -C "$RUNNER_TEMP/research-ledger" push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${LEDGER_BRANCH}"

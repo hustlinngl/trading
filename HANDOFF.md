@@ -16,16 +16,18 @@ Obiettivo del proprietario: prodotto finito, operabile **solo dal terminale** (a
 5. Modifica minima e isolata + test di regressione; allineare VERSION/pyproject/`__init__`/README/CHANGELOG se cambia la release.
 6. Una build riuscita non implica un edge profittevole.
 
-## Fatto in questa sessione
-- `src/ai_trading_lab/cockpit.py` + `tests/test_cockpit.py` + entry `cockpit` in pyproject.
+## Fatto
+- `cockpit.py` + `tests/test_cockpit.py` + entry `cockpit` in pyproject.
+- Suite completa verificata: 259 passed (prima delle modifiche di questa sessione).
+- Chiavi reali del manifest verificate (`ready`, `checks` dict di bool, inclusi i `live_policy_*`): `_failed()` compatibile.
+- `cockpit report`: diagnosi in chiaro dei gate falliti per asset (`EXPLAIN`, con test che ne verifica la copertura).
+- Workflow `cockpit-pipeline.yml` (workflow_dispatch): ripristina il ledger, esegue `cockpit pipeline`, persiste il ledger su `research-ledger` anche in caso di fallimento.
+- Documentazione cockpit in README e START_HERE.
 
-## Da fare (priorità consigliata)
-1. Eseguire `pytest -q` completo in CI e correggere eventuali regressioni (pytest non era installabile nella sandbox della sessione: il test cockpit è stato verificato solo via smoke test).
-2. Workflow `workflow_dispatch` che esegue `cockpit pipeline` e persiste il ledger sul branch `research-ledger`.
-3. Comando `cockpit report`: diagnosi automatica dei gate falliti per asset in linguaggio chiaro (cosa manca per diventare PRONTO).
-4. Verificare le chiavi reali di `deployment_manifest.json` (`ready`, `checks`/motivi) e adattare `_failed()` in cockpit.py.
-5. Installer one-shot (`start_ui.*`) che lanci il cockpit.
-6. Documentare il cockpit in README/START_HERE.
+## Da fare
+1. Eseguire una volta `Cockpit Pipeline` su Actions e verificare il ledger persistito (non testabile dalla sessione: rete/exchange).
+2. Installer one-shot (`start_ui.*`) che lanci il cockpit.
+3. Se si aggiungono check a `deployment.py`, aggiungere la spiegazione in `cockpit.EXPLAIN` (il test lo impone per i `live_*`).
 
 ## Convenzioni commit
 Trailer: `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>` e `Claude-Session: <url sessione>`.
