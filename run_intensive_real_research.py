@@ -27,9 +27,9 @@ if str(SRC) not in sys.path:
 import numpy as np
 import pandas as pd
 
-from ai_trading_lab.binance_vision import download_range, merge_archives, clip_history, archive_provenance, rolling_closed_history_window
+from ai_trading_lab.binance_vision import download_range, merge_archives, clip_history, archive_provenance, rolling_closed_history_window, validate_history_window
 from ai_trading_lab.config import load_settings
-from ai_trading_lab.data_quality import audit_market_data
+from ai_trading_lab.data_quality import audit_market_data, timeframe_minutes
 from ai_trading_lab.engine import AdaptiveEngine
 from ai_trading_lab.features import make_oos_features
 from ai_trading_lab.fingerprint import strong_dataset_fingerprint
@@ -172,6 +172,35 @@ def _aggregate_bootstrap(fold_returns, fold_dds, seed):
     return out
 
 
+def _data_quality_diagnostics(df: pd.DataFrame, quality, timeframe: str) -> dict:
+    """Return actionable timestamps and metrics for a rejected historical dataset."""
+    expected_delta = pd.Timedelta(minutes=timeframe_minutes(timeframe))
+    index = pd.DatetimeIndex(df.index)
+    deltas = index.to_series().diff()
+    gap_positions = np.flatnonzero((deltas > expected_delta * 1.5).to_numpy())
+    gap_details = []
+    for position in gap_positions[:10]:
+        delta = index[position] - index[position - 1]
+        missing_bars = max(0, int(round(delta / expected_delta)) - 1)
+        gap_details.append({
+            "after": index[position - 1].isoformat(),
+            "before": index[position].isoformat(),
+            "missing_bars_estimate": missing_bars,
+            "gap_minutes": int(delta.total_seconds() // 60),
+        })
+    return {
+        "rows": quality.rows,
+        "reasons": list(quality.reasons),
+        "gap_rows": quality.gap_rows,
+        "max_gap_bars": quality.max_gap_bars,
+        "gap_ratio": quality.gap_ratio,
+        "coverage_ratio": quality.coverage_ratio,
+        "inferred_timeframe": quality.inferred_timeframe,
+        "median_bar_minutes": quality.median_bar_minutes,
+        "first_gap_details": gap_details,
+    }
+
+
 def run_symbol(symbol, args, base_settings):
     settings = _clone_settings(base_settings)
     settings.symbol = symbol
@@ -205,7 +234,26 @@ def run_symbol(symbol, args, base_settings):
 
     quality = audit_market_data(df, settings.timeframe)
     if not quality.passed:
-        raise RuntimeError(f"Data quality failed for {symbol}: {quality.reasons}")
+        diagnostics = _data_quality_diagnostics(df, quality, settings.timeframe)
+        raise RuntimeError(
+            f"Data quality failed for {symbol}: "
+            + json.dumps(diagnostics, sort_keys=True, default=str)
+        )
+
+    # Quality ratios alone can miss a small number of absent bars at the
+    # requested window edges. Research must not silently accept a stale or
+    # truncated history merely because its overall coverage ratio is high.
+    try:
+        history_window_validation = validate_history_window(
+            df.rename_axis("timestamp").reset_index(),
+            args.start,
+            args.end,
+            interval=settings.timeframe,
+        )
+    except ValueError as exc:
+        raise RuntimeError(
+            f"Requested history window validation failed for {symbol}: {exc}"
+        ) from exc
 
     tuning = master_tune(
         df, settings, trials=args.trials, final_holdout_frac=args.holdout_frac,
@@ -244,6 +292,7 @@ def run_symbol(symbol, args, base_settings):
         "end": str(df.index.max()),
         "data_fingerprint": strong_dataset_fingerprint(df),
         "archive_provenance": archive_provenance(paths),
+        "history_window_validation": history_window_validation,
         "quality": asdict(quality),
         "walk_forward": wf_records,
         "walk_forward_summary": {

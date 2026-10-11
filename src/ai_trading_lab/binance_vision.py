@@ -104,8 +104,25 @@ def download_range(symbol,interval,start,end,market='spot',out_dir='data/raw/bin
         if end_ts.date()!=(end_ts.normalize()+pd.offsets.MonthEnd(0)).date(): boundary_months.add((end_ts.year,end_ts.month))
     for y,m in _months(start,end):
         if (y,m) in boundary_months: continue
-        try: out.append(download_month(symbol,interval,y,m,market,out_dir,timeout,verify_checksum))
-        except FileNotFoundError: continue
+        try:
+            out.append(download_month(symbol,interval,y,m,market,out_dir,timeout,verify_checksum))
+        except FileNotFoundError:
+            # A missing monthly archive must not silently create a hole in
+            # multi-year history. For exact research windows, recover that
+            # month from daily archives; the downstream quality gate still
+            # rejects any dates that remain unavailable.
+            if not exact:
+                continue
+            month_start = date(y, m, 1)
+            month_end = (pd.Timestamp(year=y, month=m, day=1) + pd.offsets.MonthEnd(0)).date()
+            day = max(start_ts.date(), month_start)
+            last_day = min(end_ts.date(), month_end)
+            while day <= last_day:
+                try:
+                    out.append(download_daily(symbol, interval, day, market, out_dir, timeout, verify_checksum))
+                except FileNotFoundError:
+                    pass
+                day += timedelta(days=1)
     if exact:
         for y,m in sorted(boundary_months):
             first=max(start_ts.date(),date(y,m,1)); last=min(end_ts.date(),(pd.Timestamp(year=y, month=m, day=1)+pd.offsets.MonthEnd(0)).date())
