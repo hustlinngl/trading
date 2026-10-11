@@ -83,7 +83,12 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
                  funding_rate_column: str = 'funding_rate', funding_interval_bars: int = 32,
                  funding_bps_per_bar: float = 0.0, apply_funding: bool = False,
                  require_short_borrow_cost: bool = False) -> BacktestResult:
-    """Event-driven single-asset simulator with strict decision/execution semantics."""
+    """Event-driven single-asset simulator.
+
+    A signal opens an eligible position on the next bar. Existing positions are
+    governed by the configured barriers, time stop, and risk limits; later model
+    signals do not force early exits, preserving the triple-barrier target horizon.
+    """
     if not signal.index.equals(df.index):
         signal = signal.reindex(df.index).fillna('FLAT')
     df = df.sort_index().copy()
@@ -157,12 +162,9 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
             risk.reset_day(equity_curve[-1])
 
         pending = str(signal.iloc[i - 1]) if i > 0 else 'FLAT'
-        if side != 0 and pending in {'FLAT', 'LONG', 'SHORT'}:
-            reverse = (pending == 'SHORT' and side > 0) or (pending == 'LONG' and side < 0)
-            flat_exit = pending == 'FLAT'
-            if reverse or flat_exit:
-                close_position(ts, open_, prev_quote_volume, 'reverse' if reverse else 'signal_exit')
-
+        # A signal is an entry decision, not an exit instruction. Training labels
+        # define exits via the same triple barriers/time-stop; changing later signals
+        # must not truncate the target trade and create a train/backtest mismatch.
         if side == 0 and i > 0 and pending in {'LONG', 'SHORT'}:
             # ATR defines executable barriers and position size; don't invent a
             # risk scale when market-derived ATR is missing or invalid.
