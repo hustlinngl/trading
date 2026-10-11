@@ -36,7 +36,7 @@ on:
 
 concurrency:
   group: intensive-real-research
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: write
