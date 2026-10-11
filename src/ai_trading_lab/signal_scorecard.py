@@ -260,8 +260,9 @@ def build_scorecard(
     return {
         "disclaimer": (
             "Returns are OHLC-derived estimates after configured costs, not exchange fills or "
-            "account PnL. Signals taken on the same bar across assets are correlated, so the "
-            "effective sample can be smaller than the signal count."
+            "account PnL. The bootstrap samples individual signals independently; cross-asset "
+            "correlation and overlapping holding periods can make intervals too narrow, so "
+            "positive verdicts may overstate evidence until dependence-aware validation exists."
         ),
         "overall": score_group(signals, confidence=confidence, **kwargs),
         "by_side": {
