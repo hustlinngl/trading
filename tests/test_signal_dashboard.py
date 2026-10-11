@@ -1161,6 +1161,7 @@ def test_signal_terminal_http_state_route_exposes_exact_public_signal_contract(t
     finally:
         server.shutdown()
         thread.join(timeout=2)
+        assert not thread.is_alive()
         server.server_close()
 
 
