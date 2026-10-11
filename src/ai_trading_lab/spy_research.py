@@ -187,15 +187,19 @@ def analyze_spy(
     )
     x, future = make_observations(history)
     training, validation, testing = chronological_slices(len(x))
-    train_y = (future.iloc[training] > 0).astype(int)
+    # The label at t consumes the next TWO opens. Purge the last two
+    # decisions before each split boundary to avoid label-window leakage.
+    fit = slice(training.start, training.stop - 2)
+    val_check = slice(validation.start, validation.stop - 2)
+    train_y = (future.iloc[fit] > 0).astype(int)
     if train_y.nunique() != 2:
         raise ValueError("SPY training labels contain only one class")
     model = make_pipeline(StandardScaler(), LogisticRegression(C=0.1, max_iter=500))
-    model.fit(x.iloc[training], train_y)
-    pv = model.predict_proba(x.iloc[validation])[:, 1]
+    model.fit(x.iloc[fit], train_y)
+    pv = model.predict_proba(x.iloc[val_check])[:, 1]
     pt = model.predict_proba(x.iloc[testing])[:, 1]
 
-    val = evaluate_one_day(pv, future.iloc[validation].to_numpy(), side_cost_bps=side_cost_bps)
+    val = evaluate_one_day(pv, future.iloc[val_check].to_numpy(), side_cost_bps=side_cost_bps)
     test = evaluate_one_day(pt, future.iloc[testing].to_numpy(), side_cost_bps=side_cost_bps)
     # A separate always-invested, dividend-aware benchmark. Buy at the same
     # first eligible next-open and sell at the last eligible following open;
@@ -228,12 +232,13 @@ def analyze_spy(
         "features": list(FEATURES),
         "execution": "features close(t); enter adjusted open(t+1), exit adjusted open(t+2)",
         "split": {
-            "train_end": str(x.index[training.stop - 1].date()),
+            "train_end": str(x.index[fit.stop - 1].date()),
             "validation_start": str(x.index[validation.start].date()),
-            "validation_end": str(x.index[validation.stop - 1].date()),
+            "validation_end": str(x.index[val_check.stop - 1].date()),
             "test_start": str(x.index[testing.start].date()),
             "test_end": str(x.index[testing.stop - 1].date()),
         },
+        "purge_bars_at_train_and_test_boundaries": 2,
         "entry_probability": ENTRY_PROBABILITY,
         "per_side_cost_bps": side_cost_bps,
         "validation": val,
