@@ -59,6 +59,8 @@ def test_signal_model_keeps_calibrated_core_learners_as_the_deployed_model():
     assert model.fit_rows_ == expected_core_rows
     assert clf_fit_lengths == [expected_core_rows] * len(model.clfs)
     assert reg_fit_lengths == [expected_core_rows] * len(model.regs)
+    assert np.allclose(model.weights_cls, np.full(len(model.clfs), 1 / len(model.clfs)))
+    assert np.allclose(model.weights_reg, np.full(len(model.regs), 1 / len(model.regs)))
 
     predictions = model.predict(x.tail(4))
     assert {"p_up_raw", "p_up"} <= set(predictions.columns)
