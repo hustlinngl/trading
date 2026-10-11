@@ -33,9 +33,10 @@ def _stats(equity: pd.Series, trades: list[dict], bars_per_year: float | None = 
     if bars_per_year is None:
         bars_per_year = _annualization_factor(equity.index)
     rets = equity.pct_change().replace([np.inf, -np.inf], np.nan).fillna(0)
-    downside = rets.where(rets < 0, 0.0)
+    downside = np.minimum(rets.to_numpy(dtype=float), 0.0)
+    downside_deviation = float(np.sqrt(np.mean(np.square(downside)))) if len(downside) else 0.0
     sharpe = float(np.sqrt(bars_per_year) * rets.mean() / (rets.std() + 1e-12))
-    sortino = float(np.sqrt(bars_per_year) * rets.mean() / (downside.std() + 1e-12))
+    sortino = float(np.sqrt(bars_per_year) * rets.mean() / (downside_deviation + 1e-12))
     dd = equity / equity.cummax() - 1
     pnls = np.array([t['pnl_net'] for t in trades], dtype=float)
     abs_pnls = np.abs(pnls)
@@ -82,7 +83,12 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
                  funding_rate_column: str = 'funding_rate', funding_interval_bars: int = 32,
                  funding_bps_per_bar: float = 0.0, apply_funding: bool = False,
                  require_short_borrow_cost: bool = False) -> BacktestResult:
-    """Event-driven single-asset simulator with strict decision/execution semantics."""
+    """Event-driven single-asset simulator.
+
+    A signal opens an eligible position on the next bar. Existing positions are
+    governed by the configured barriers, time stop, and risk limits; later model
+    signals do not force early exits, preserving the triple-barrier target horizon.
+    """
     if not signal.index.equals(df.index):
         signal = signal.reindex(df.index).fillna('FLAT')
     df = df.sort_index().copy()
@@ -142,8 +148,6 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
         prev_row = df.iloc[i - 1] if i > 0 else None
         prev_atr = prev_row.get('atr_14', np.nan) if prev_row is not None else np.nan
         atr = float(prev_atr) if pd.notna(prev_atr) else np.nan
-        if not np.isfinite(atr) or atr <= 0:
-            atr = max((float(prev_row['close']) if prev_row is not None else close) * 0.01, 1e-8)
         if prev_row is not None:
             if 'quote_volume' in prev_row.index and pd.notna(prev_row.get('quote_volume')):
                 prev_quote_volume = float(prev_row.get('quote_volume', 0.0))
@@ -158,13 +162,15 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
             risk.reset_day(equity_curve[-1])
 
         pending = str(signal.iloc[i - 1]) if i > 0 else 'FLAT'
-        if side != 0 and pending in {'FLAT', 'LONG', 'SHORT'}:
-            reverse = (pending == 'SHORT' and side > 0) or (pending == 'LONG' and side < 0)
-            flat_exit = pending == 'FLAT'
-            if reverse or flat_exit:
-                close_position(ts, open_, prev_quote_volume, 'reverse' if reverse else 'signal_exit')
-
+        # A signal is an entry decision, not an exit instruction. Training labels
+        # define exits via the same triple barriers/time-stop; changing later signals
+        # must not truncate the target trade and create a train/backtest mismatch.
         if side == 0 and i > 0 and pending in {'LONG', 'SHORT'}:
+            # ATR defines executable barriers and position size; don't invent a
+            # risk scale when market-derived ATR is missing or invalid.
+            if not np.isfinite(atr) or atr <= 0:
+                equity_curve.append(mark(close))
+                continue
             direction = 1 if pending == 'LONG' else -1
             if direction < 0 and require_short_borrow_cost and float(short_borrow_bps_per_bar) <= 0.0:
                 equity_curve.append(mark(close))

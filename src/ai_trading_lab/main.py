@@ -790,8 +790,14 @@ def main():
                 df=fetch_ohlcv(ex,s.symbol,s.timeframe,s.lookback_bars); cache_ohlcv(df,cache_path)
     if args.command == 'train':
         validate_research_data(df, s)
-        asset_dir, art = train_base_asset(df, s)
-        print(json.dumps({'symbol': s.symbol, 'rows': len(df), 'bundle': str(asset_dir), 'latest': art.predictions.iloc[-1].to_dict()}, default=str, indent=2)); return
+        asset_dir, _art = train_base_asset(df, s)
+        print(json.dumps({
+            'symbol': s.symbol,
+            'rows': len(df),
+            'bundle': str(asset_dir),
+            'prediction_scope': 'in_sample_training_diagnostics_only',
+            'note': 'Training-frame predictions are not out-of-sample signals or evaluation results.',
+        }, indent=2)); return
 
     if args.command == 'train-complete':
         validate_research_data(df, s)

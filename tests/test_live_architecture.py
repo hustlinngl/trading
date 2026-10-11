@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import numpy as np
 import threading
 import time
 
-import pytest
-
 import pandas as pd
+import pytest
 
 from ai_trading_lab.config import load_settings
 from ai_trading_lab.efficiency import (
@@ -300,3 +300,32 @@ def test_market_type_lookup_fails_closed_when_exchange_metadata_is_missing():
     )
     assert snapshot["market_type"] == "unknown"
     assert snapshot["funding_data_missing"] is True
+
+
+def test_funding_snapshot_accepts_ccxt_string_funding_interval():
+    import ai_trading_lab.live as live_mod
+
+    class FakeSwapExchange:
+        markets = {"BTC/USDT:USDT": {"type": "swap"}}
+        has = {"fetchFundingRate": True}
+
+        def fetch_funding_rate(self, symbol):
+            assert symbol == "BTC/USDT:USDT"
+            return {"fundingRate": "0.0001", "fundingInterval": "8h"}
+
+    settings = load_settings("config.yaml")
+    snapshot = live_mod._funding_snapshot(
+        FakeSwapExchange(), "BTC/USDT:USDT", settings
+    )
+
+    assert snapshot["market_type"] == "swap"
+    assert snapshot["funding_data_missing"] is False
+    from ai_trading_lab.data import timeframe_offset
+    bar_hours = timeframe_offset(settings.timeframe).nanos / 3_600_000_000_000.0
+    holding_hours = max(
+        float(getattr(settings, "max_holding_bars", settings.horizon_bars)) * bar_hours,
+        bar_hours,
+    )
+    expected_intervals = max(1, int(np.ceil(holding_hours / 8.0)))
+    assert snapshot["funding_intervals"] == expected_intervals
+    assert snapshot["funding_cost_return"] == pytest.approx(0.0001 * expected_intervals)

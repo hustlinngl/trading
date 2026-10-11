@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from ai_trading_lab.evaluation import directional_validation_diagnostics
+from ai_trading_lab.validation import compare_equity, _block_bootstrap_samples
 
 
 def test_directional_validation_compares_predictions_to_realized_returns():
@@ -40,3 +42,25 @@ def test_directional_validation_handles_no_usable_holdout_observations():
         "observations": 0,
         "reason": "no_finite_oos_observations",
     }
+
+
+def test_compare_equity_uses_one_bootstrap_distribution_for_ci_and_probability():
+    index = pd.date_range("2026-01-01", periods=30, freq="15min", tz="UTC")
+    returns_a = np.asarray([0.001, -0.002, 0.003, 0.0, -0.001] * 6)
+    returns_b = np.asarray([0.0, -0.001, 0.001, 0.0, -0.002] * 6)
+    equity_a = pd.Series(100.0 * np.cumprod(1.0 + returns_a), index=index)
+    equity_b = pd.Series(100.0 * np.cumprod(1.0 + returns_b), index=index)
+    diff = (
+        equity_a.pct_change().fillna(0).to_numpy()
+        - equity_b.pct_change().fillna(0).to_numpy()
+    )
+    samples = _block_bootstrap_samples(
+        diff, np.random.default_rng(17), reps=101, block=3
+    )
+
+    result = compare_equity(equity_a, equity_b, seed=17, reps=101, block=3)
+
+    assert result["mean_return_diff"] == pytest.approx(float(diff.mean()))
+    assert result["ci_low"] == pytest.approx(float(np.quantile(samples, 0.025)))
+    assert result["ci_high"] == pytest.approx(float(np.quantile(samples, 0.975)))
+    assert result["bootstrap_probability_mean_diff_gt_0"] == pytest.approx(float(np.mean(samples > 0)))

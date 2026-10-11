@@ -71,10 +71,14 @@ jobs:
         run: python run_adversarial_integrity.py
 
       - name: Run intensive real-data research
+        env:
+          INPUT_START: ${{ inputs.start }}
+          INPUT_END: ${{ inputs.end }}
+          INPUT_TRIALS: ${{ inputs.trials }}
         run: |
-          START_DATE='${{ inputs.start }}'
-          END_DATE='${{ inputs.end }}'
-          TRIALS='${{ inputs.trials }}'
+          START_DATE="${INPUT_START:-2022-01-01}"
+          END_DATE="${INPUT_END:-}"
+          TRIALS="${INPUT_TRIALS:-60}"
           START_DATE=${START_DATE:-2022-01-01}
           END_DATE=${END_DATE:-$(date -u +%F)}
           TRIALS=${TRIALS:-60}

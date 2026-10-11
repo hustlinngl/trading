@@ -10,6 +10,26 @@ from sklearn.isotonic import IsotonicRegression
 from sklearn.metrics import roc_auc_score, brier_score_loss, mean_squared_error
 from sklearn.linear_model import LogisticRegression
 
+def _finite_sample_conformal_quantile(residuals, level: float) -> float:
+    """Finite-sample split-conformal order statistic.
+
+    The usual coverage interpretation relies on exchangeability, which market
+    time series generally violate; this corrects the finite-sample rank only and
+    does not claim distribution-free coverage for temporal data.
+    """
+    values = np.asarray(residuals, dtype=float).reshape(-1)
+    values = values[np.isfinite(values)]
+    if not len(values):
+        # No usable calibration residuals cannot justify a zero-width interval.
+        return float("inf")
+    rank = int(np.ceil((len(values) + 1) * float(np.clip(level, 0.50, 0.999))))
+    if rank > len(values):
+        # Correct conformal behavior at unattainably high levels is an unbounded
+        # interval, rather than silently understating the required quantile.
+        return float("inf")
+    return float(np.partition(values, rank - 1)[rank - 1])
+
+
 try:
     from xgboost import XGBClassifier, XGBRegressor
     HAVE_XGB = True
@@ -105,6 +125,7 @@ class SignalModel:
                 clf.fit(Xcore, ycore_c)
             for reg in self.regs:
                 reg.fit(Xcore, ycore_r)
+            self.fit_rows_ = int(len(Xcore))
             # Keep the later calibration tail untouched for meta-policy training.
             # Model weights, probability calibration, and conformal residuals are
             # estimated only on the earlier calibration slice; using the same rows
@@ -125,20 +146,13 @@ class SignalModel:
             rets_meta = np.column_stack([m.predict(Xmeta) for m in self.regs])
 
             uniform = np.ones(len(self.clfs), dtype=float) / len(self.clfs)
-            briers = np.array(
-                [brier_score_loss(ycal_fit, probs_fit[:, j]) for j in range(probs_fit.shape[1])],
-                dtype=float,
-            )
-            rmses = np.array(
-                [mean_squared_error(ycal_fit_r, rets_fit[:, j]) ** 0.5 for j in range(rets_fit.shape[1])],
-                dtype=float,
-            )
-            inv_b = 1.0 / np.maximum(briers, 1e-6)
-            inv_r = 1.0 / np.maximum(rmses, 1e-8)
-            learned_cls = inv_b / inv_b.sum()
-            learned_reg = inv_r / inv_r.sum()
-            self.weights_cls = 0.5 * uniform + 0.5 * learned_cls
-            self.weights_reg = 0.5 * uniform + 0.5 * learned_reg
+            # Keep blend weights fixed before probability/interval calibration.
+            # Learning weights on this same small calibration slice and then
+            # measuring calibration residuals on it double-uses its labels.
+            # If adaptive weights are reintroduced, learn them from cross-fitted
+            # predictions or an earlier disjoint slice.
+            self.weights_cls = uniform.copy()
+            self.weights_reg = np.ones(len(self.regs), dtype=float) / len(self.regs)
             self.weights = uniform
 
             raw_p_fit = probs_fit @ self.weights_cls
@@ -167,8 +181,8 @@ class SignalModel:
             self.conformal_scale_col = scale_col
             if len(residuals):
                 self.conformal_abs_residuals_ = residuals.astype(float)
-                self.conformal_abs_error_ = float(
-                    np.quantile(residuals, self.conformal_level, method='higher')
+                self.conformal_abs_error_ = _finite_sample_conformal_quantile(
+                    residuals, self.conformal_level
                 )
                 if scale_col is not None:
                     scale = np.maximum(
@@ -176,8 +190,8 @@ class SignalModel:
                     )
                     scaled = residuals / scale
                     self.conformal_scaled_residuals_ = scaled.astype(float)
-                    self.conformal_scaled_error_ = float(
-                        np.quantile(scaled, self.conformal_level, method='higher')
+                    self.conformal_scaled_error_ = _finite_sample_conformal_quantile(
+                        scaled, self.conformal_level
                     )
                 else:
                     self.conformal_scaled_residuals_ = None
@@ -200,13 +214,8 @@ class SignalModel:
                 },
                 index=Xmeta.index,
             )
-            # Calibration remains strictly OOS. Once calibration evidence is frozen,
-            # refit the production learners on the full chronological training dataset so
-            # deployment uses every available labeled row without contaminating validation.
-            Xfit = Xraw.fillna(self.fill_values).ffill().fillna(0.0)
-            self.fit_rows_ = int(len(Xfit))
-            for clf in self.clfs: clf.fit(Xfit, yc)
-            for reg in self.regs: reg.fit(Xfit, yr)
+            # Do not refit on calibration or meta rows: calibration, conformal
+            # margins, and meta-policy features must describe these deployed learners.
         else:
             self.fill_values = Xraw.median(numeric_only=True)
             Xfit = Xraw.fillna(self.fill_values).ffill().fillna(0.0)
@@ -227,9 +236,13 @@ class SignalModel:
     def set_conformal_level(self, level: float):
         self.conformal_level = float(np.clip(level, 0.50, 0.999))
         if self.conformal_abs_residuals_ is not None and len(self.conformal_abs_residuals_):
-            self.conformal_abs_error_ = float(np.quantile(self.conformal_abs_residuals_, self.conformal_level, method='higher'))
+            self.conformal_abs_error_ = _finite_sample_conformal_quantile(
+                self.conformal_abs_residuals_, self.conformal_level
+            )
         if self.conformal_scaled_residuals_ is not None and len(self.conformal_scaled_residuals_):
-            self.conformal_scaled_error_ = float(np.quantile(self.conformal_scaled_residuals_, self.conformal_level, method='higher'))
+            self.conformal_scaled_error_ = _finite_sample_conformal_quantile(
+                self.conformal_scaled_residuals_, self.conformal_level
+            )
         return self
 
     def _predict_raw(self, X: pd.DataFrame) -> pd.DataFrame:
@@ -267,7 +280,9 @@ class SignalModel:
         raw['model_disagreement'] = pmat.std(axis=1)
         raw['return_disagreement'] = rmat.std(axis=1)
         if self.conformal_scale_col is not None and self.conformal_scaled_error_ > 0 and self.conformal_scale_col in X.columns:
-            scale = np.maximum(np.abs(pd.to_numeric(X[self.conformal_scale_col], errors='coerce').to_numpy(float)), 1e-6)
+            # Use the fitted imputer for this scale just as for all model features.
+            # A raw NaN here otherwise makes both expected-return bounds NaN.
+            scale = np.maximum(np.abs(pd.to_numeric(Xn[self.conformal_scale_col], errors='coerce').to_numpy(float)), 1e-6)
             margin_arr = scale * float(self.conformal_scaled_error_)
         else:
             margin_arr = np.full(len(raw), float(max(0.0, self.conformal_abs_error_)))
