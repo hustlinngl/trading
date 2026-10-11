@@ -261,6 +261,54 @@ def _event_score_arrays(probabilities, classes):
 
 
 
+def _probability_quality_metrics(probabilities, classes, truth, calibration_bins=10):
+    """Measure probability quality on the chronological holdout without tuning gates."""
+    proba = np.asarray(probabilities, dtype=float)
+    class_values = [int(value) for value in np.asarray(classes).tolist()]
+    y = np.asarray(truth, dtype=int).reshape(-1)
+    positions = {value: index for index, value in enumerate(class_values)}
+    if proba.ndim != 2 or proba.shape != (len(y), len(class_values)):
+        raise ValueError("trade_window_probability_quality_shape_mismatch")
+    if not {-1, 0, 1}.issubset(positions):
+        raise ValueError("trade_window_probability_quality_class_mismatch")
+    if not np.isfinite(proba).all() or (proba < 0).any():
+        raise ValueError("trade_window_probability_quality_invalid")
+    if len(y) == 0:
+        return {"rows": 0, "multiclass_brier": None, "multiclass_log_loss": None, "event_brier": None, "event_log_loss": None, "conditional_direction_brier": None, "conditional_direction_log_loss": None, "conditional_direction_accuracy": None, "event_calibration_bins": []}
+    row_sums = proba.sum(axis=1)
+    if np.any(row_sums <= 0) or not np.allclose(row_sums, 1.0, atol=1e-5):
+        raise ValueError("trade_window_probability_quality_not_normalized")
+    true_positions = np.asarray([positions.get(int(label), -1) for label in y], dtype=int)
+    if (true_positions < 0).any():
+        raise ValueError("trade_window_probability_quality_unknown_label")
+    one_hot = np.zeros_like(proba)
+    one_hot[np.arange(len(y)), true_positions] = 1.0
+    eps = np.finfo(float).eps
+    multiclass_log_loss = float(-np.log(np.clip(proba[np.arange(len(y)), true_positions], eps, 1.0)).mean())
+    p_short = proba[:, positions[-1]]
+    p_long = proba[:, positions[1]]
+    p_event = p_short + p_long
+    actual_event = (y != 0).astype(float)
+    event_prob_clipped = np.clip(p_event, eps, 1.0 - eps)
+    event_log_loss = float(-np.mean(actual_event * np.log(event_prob_clipped) + (1.0 - actual_event) * np.log1p(-event_prob_clipped)))
+    event_mask = y != 0
+    if event_mask.any():
+        directional_long_probability = np.divide(p_long[event_mask], p_event[event_mask], out=np.full(int(event_mask.sum()), 0.5, dtype=float), where=p_event[event_mask] > eps)
+        directional_long_probability = np.clip(directional_long_probability, eps, 1.0 - eps)
+        actual_long = (y[event_mask] == 1).astype(float)
+        directional_brier = float(np.mean((directional_long_probability - actual_long) ** 2))
+        directional_log_loss = float(-np.mean(actual_long * np.log(directional_long_probability) + (1.0 - actual_long) * np.log1p(-directional_long_probability)))
+        predicted_direction = np.where(p_long[event_mask] >= p_short[event_mask], 1, -1)
+        direction_accuracy = float(np.mean(predicted_direction == y[event_mask]))
+    else:
+        directional_brier = directional_log_loss = direction_accuracy = None
+    order = np.argsort(p_event, kind="stable")
+    chunks = np.array_split(order, min(max(1, int(calibration_bins)), len(order)))
+    bins = []
+    for chunk in chunks:
+        if len(chunk):
+            bins.append({"count": int(len(chunk)), "mean_predicted_event_probability": float(p_event[chunk].mean()), "observed_event_rate": float(actual_event[chunk].mean())})
+    return {"rows": int(len(y)), "multiclass_brier": float(np.mean(np.sum((proba - one_hot) ** 2, axis=1))), "multiclass_log_loss": multiclass_log_loss, "event_brier": float(np.mean((p_event - actual_event) ** 2)), "event_log_loss": event_log_loss, "conditional_direction_brier": directional_brier, "conditional_direction_log_loss": directional_log_loss, "conditional_direction_accuracy": direction_accuracy, "event_calibration_bins": bins}
 BALANCED_PROBABILITY_SEMANTICS = "balanced_class_weight_prior_corrected_v1"
 
 
@@ -635,6 +683,7 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
         "holdout_wilson_lower": wilson,
         "holdout_signals": int(support),
         "holdout_candidates_before_nonoverlap": int(candidates.sum()),
+        "holdout_probability_quality": _probability_quality_metrics(proba, model.classes_, truth),
         "holdout_probability_diagnostics": {
             "event_probability": _score_distribution(p_event),
             "conditional_direction_confidence": _score_distribution(p_direction),
