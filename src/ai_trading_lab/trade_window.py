@@ -324,19 +324,28 @@ def _correct_balanced_class_probabilities(probabilities, classes, class_counts):
         raise ValueError("trade_window_prior_correction_failed")
     return corrected / corrected_totals
 
-def directional_event_probabilities(probabilities, classes, min_event_probability=0.02):
-    """Return conditional direction only when the qualifying event is sufficiently likely."""
+def directional_event_probabilities(
+    probabilities,
+    classes,
+    min_event_probability=0.02,
+    min_direction_confidence=0.80,
+):
+    """Return a direction only when both event likelihood and conditional direction clear their gates."""
     threshold = float(min_event_probability)
+    confidence_threshold = float(min_direction_confidence)
     if not np.isfinite(threshold) or not 0.0 <= threshold <= 1.0:
         raise ValueError("trade_window_min_event_probability_invalid")
+    if not np.isfinite(confidence_threshold) or not 0.0 <= confidence_threshold <= 1.0:
+        raise ValueError("trade_window_min_confidence_invalid")
     short, neutral, long, event, confidence, direction = _event_score_arrays(
         np.asarray(probabilities, dtype=float).reshape(1, -1),
         classes,
     )
     p_event = float(event[0])
+    p_direction = float(confidence[0])
     predicted_direction = (
         ("LONG" if int(direction[0]) > 0 else "SHORT")
-        if p_event >= threshold and p_event > 1e-12
+        if p_event >= threshold and p_event > 1e-12 and p_direction >= confidence_threshold
         else "FLAT"
     )
     return {
