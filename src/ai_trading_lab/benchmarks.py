@@ -218,8 +218,7 @@ def evaluate_suite(settings: Settings, n: int = 3000) -> pd.DataFrame:
     }
     for key, value in metadata.items():
         frame[key] = value
-    frame.attrs["benchmark_metadata"] = metadata
-    frame.attrs["diagnostic_scope"] = (
+    diagnostic_scope = (
         "OOS test split; core live gates are evaluated on policy candidates without "
         "the separate required trade-window specialist, which this benchmark does not load"
     )
@@ -234,7 +233,10 @@ def evaluate_suite(settings: Settings, n: int = 3000) -> pd.DataFrame:
         "excess_return", "max_drawdown", "sharpe_like", "sortino_like",
         "trades", "win_rate", "profit_factor", "robust_score", "error",
     ]
-    return frame[[c for c in preferred if c in frame.columns]]
+    result = frame[[c for c in preferred if c in frame.columns]]
+    result.attrs["benchmark_metadata"] = metadata
+    result.attrs["diagnostic_scope"] = diagnostic_scope
+    return result
 
 
 def save_suite_report(result: pd.DataFrame, path: str | Path = "logs/benchmark_suite.json") -> Path:
