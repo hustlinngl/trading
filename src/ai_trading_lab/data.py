@@ -50,30 +50,60 @@ def exchange_client(exchange_id: str = 'binance', sandbox: bool = True, api_key:
     return ex
 
 def fetch_ohlcv(exchange, symbol: str, timeframe: str, limit: int = 8000, since: int | None = None, include_unclosed: bool = False) -> pd.DataFrame:
-    all_rows = []
-    tf_ms = int(exchange.parse_timeframe(timeframe) * 1000)
-    cursor = since
+    """Fetch a paginated OHLCV window, and reject short latest-history requests."""
     target = int(limit)
-    while len(all_rows) < target:
-        batch_limit = min(1000, target - len(all_rows))
-        batch = exchange.fetch_ohlcv(symbol, timeframe=timeframe, since=cursor, limit=batch_limit)
+    if target < 1:
+        raise ValueError("OHLCV limit must be positive")
+    tf_ms = int(float(exchange.parse_timeframe(timeframe)) * 1000)
+    if tf_ms < 1:
+        raise ValueError(f"Invalid exchange timeframe duration: {timeframe}")
+
+    requested_raw = target if include_unclosed else target + 1
+    latest_window = since is None
+    cursor = (
+        max(0, int(time.time() * 1000) - requested_raw * tf_ms)
+        if latest_window
+        else int(since)
+    )
+    all_rows = []
+    while len(all_rows) < requested_raw:
+        batch_limit = min(1000, requested_raw - len(all_rows))
+        batch = exchange.fetch_ohlcv(
+            symbol, timeframe=timeframe, since=cursor, limit=batch_limit
+        )
         if not batch:
             break
         all_rows.extend(batch)
-        last_ts = int(batch[-1][0])
+        last_ts = max(int(row[0]) for row in batch)
         next_cursor = last_ts + tf_ms
-        if cursor is not None and next_cursor <= cursor:
+        if next_cursor <= cursor:
             break
         cursor = next_cursor
         if len(batch) < batch_limit:
             break
-        time.sleep(max(float(getattr(exchange, 'rateLimit', 0)) / 1000.0, 0.0))
-    df = pd.DataFrame(all_rows, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-    if df.empty: raise RuntimeError(f'No OHLCV returned for {symbol} {timeframe}')
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms', utc=True)
-    df = df.set_index('timestamp').astype(float)
+        if len(all_rows) < requested_raw:
+            time.sleep(max(float(getattr(exchange, "rateLimit", 0)) / 1000.0, 0.0))
+
+    df = pd.DataFrame(
+        all_rows, columns=["timestamp", "open", "high", "low", "close", "volume"]
+    )
+    if df.empty:
+        raise RuntimeError(f"No OHLCV returned for {symbol} {timeframe}")
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+    df = df.set_index("timestamp").astype(float)
     df = _deduplicate_ohlcv(df)
-    return df if include_unclosed else drop_unclosed_tail(df, timeframe)
+    if not include_unclosed:
+        df = drop_unclosed_tail(df, timeframe)
+
+    if latest_window:
+        if len(df) < target:
+            requested_label = "bars" if include_unclosed else "closed bars"
+            raise RuntimeError(
+                f"Insufficient OHLCV bars for {symbol} {timeframe}: "
+                f"requested {target} {requested_label}, received {len(df)}"
+            )
+        return df.iloc[-target:].copy()
+    return df.iloc[:target].copy()
 
 def drop_unclosed_tail(df: pd.DataFrame, timeframe: str, now: pd.Timestamp | None = None) -> pd.DataFrame:
     if df.empty or not isinstance(df.index, pd.DatetimeIndex):
