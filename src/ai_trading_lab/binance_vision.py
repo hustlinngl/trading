@@ -200,7 +200,7 @@ def validate_history_window(frame, start, end, interval="15m"):
     actual_first = stamps.min()
     actual_last = stamps.max()
 
-    if actual_first > expected_first + delta:
+    if actual_first > expected_first:
         raise ValueError(
             f"historical_window_start_missing: expected <= {expected_first + delta}, got {actual_first}"
         )
