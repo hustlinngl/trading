@@ -25,7 +25,6 @@ def _deduplicate_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     dupes=df.loc[dup_mask].sort_index()
     compare_cols=[c for c in ('open','high','low','close','volume','quote_volume','trades','taker_buy_base_volume','taker_buy_quote_volume') if c in dupes.columns]
     for ts, group in dupes.groupby(level=0, sort=False):
-        first=group.iloc[0]
         for col in compare_cols:
             vals=pd.to_numeric(group[col],errors='coerce').to_numpy(float)
             if not bool(np.all((np.isclose(vals, vals[0], rtol=1e-10, atol=1e-12, equal_nan=True)))):
