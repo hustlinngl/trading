@@ -72,6 +72,41 @@ def test_risk_sizing_respects_position_cap_and_economic_costs():
     assert decision.take_profit > 100.0 > decision.stop
 
 
+def test_backtest_holds_position_after_signal_turns_flat_until_time_stop():
+    index = pd.date_range("2026-01-01", periods=20, freq="15min", tz="UTC")
+    close = np.full(len(index), 100.0)
+    market = pd.DataFrame(
+        {
+            "open": close,
+            "high": close + 0.5,
+            "low": close - 0.5,
+            "close": close,
+            "volume": np.full(len(index), 100_000.0),
+            "atr_14": np.full(len(index), 1.0),
+        },
+        index=index,
+    )
+    actions = pd.Series("FLAT", index=index)
+    actions.iloc[4] = "LONG"
+    risk = RiskEngine(
+        10_000.0, 0.01, 0.25, 0.50, 1.0, 2.0, 0.0, 0.0, 1.0, 0.0,
+        max_holding_bars=3,
+    )
+
+    result = run_backtest(
+        market, actions, risk, 10_000.0, fee_bps=0.0,
+        slippage_bps=0.0, impact_bps_per_sqrt=0.0,
+        max_holding_bars=3, intrabar_barriers=True,
+    )
+
+    assert len(result.trades) == 1
+    trade = result.trades.iloc[0]
+    assert trade["exit_reason"] == "time_stop"
+    assert pd.Timestamp(trade["entry_timestamp"]) == index[5]
+    assert pd.Timestamp(trade["timestamp"]) == index[8]
+    assert trade["holding_bars"] == 3
+
+
 def test_backtest_executes_on_next_bar_not_same_bar():
     df = market_frame(40)
     actions = pd.Series("FLAT", index=df.index)
