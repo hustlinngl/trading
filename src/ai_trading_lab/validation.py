@@ -4,27 +4,60 @@ import numpy as np
 import pandas as pd
 
 
+def _block_bootstrap_samples(values, rng, reps=1500, block=8):
+    """Return circular block-bootstrap means using memory-bounded vectorized chunks."""
+    values = np.asarray(values, dtype=float)
+    n = len(values)
+    reps = max(1, int(reps))
+    if n == 0:
+        return np.zeros(reps, dtype=float)
+    block = max(1, int(block))
+    n_blocks = int(np.ceil(n / block))
+    offsets = np.arange(block, dtype=np.int64)
+    chunk_size = max(1, min(reps, 2_000_000 // max(1, n_blocks * block)))
+    samples = np.empty(reps, dtype=float)
+    for first in range(0, reps, chunk_size):
+        count = min(chunk_size, reps - first)
+        starts = rng.integers(0, n, size=(count, n_blocks), dtype=np.int64)
+        indices = (starts[:, :, None] + offsets[None, None, :]) % n
+        indices = indices.reshape(count, -1)[:, :n]
+        samples[first:first + count] = values[indices].mean(axis=1)
+    return samples
+
+
 def _block_bootstrap_mean(values, rng, reps=1500, block=8):
-    values=np.asarray(values,dtype=float)
-    if len(values)==0: return 0.0,(0.0,0.0)
-    starts=rng.integers(0,len(values),size=(reps,int(np.ceil(len(values)/block)))); samples=[]
-    for row in starts:
-        idx=np.concatenate([((s+np.arange(block))%len(values)) for s in row])[:len(values)]; samples.append(values[idx].mean())
-    arr=np.asarray(samples)
-    return float(values.mean()),(float(np.quantile(arr,0.025)),float(np.quantile(arr,0.975)))
+    values = np.asarray(values, dtype=float)
+    if len(values) == 0:
+        return 0.0, (0.0, 0.0)
+    samples = _block_bootstrap_samples(values, rng, reps=reps, block=block)
+    return float(values.mean()), (
+        float(np.quantile(samples, 0.025)),
+        float(np.quantile(samples, 0.975)),
+    )
 
 
 def compare_equity(a: pd.Series, b: pd.Series, seed=42, reps=2000, block=8):
-    r_a=a.pct_change().fillna(0).to_numpy(float); r_b=b.reindex(a.index).pct_change().fillna(0).to_numpy(float); n=min(len(r_a),len(r_b)); diff=(r_a[:n]-r_b[:n]).astype(float)
-    rng=np.random.default_rng(seed); mean,ci=_block_bootstrap_mean(diff,rng,reps=reps,block=block)
-    if len(diff):
-        starts=rng.integers(0,len(diff),size=(int(reps),int(np.ceil(len(diff)/max(1,block))))); boot=np.empty(int(reps))
-        for j,row in enumerate(starts):
-            idx=np.concatenate([((s+np.arange(max(1,block)))%len(diff)) for s in row])[:len(diff)]; boot[j]=diff[idx].mean()
-        prob=float(np.mean(boot>0))
-    else: prob=0.5
-    return {'mean_return_diff':mean,'ci_low':ci[0],'ci_high':ci[1],'bootstrap_probability_mean_diff_gt_0':prob}
-
+    r_a = a.pct_change().fillna(0).to_numpy(dtype=float)
+    r_b = b.reindex(a.index).pct_change().fillna(0).to_numpy(dtype=float)
+    n = min(len(r_a), len(r_b))
+    diff = (r_a[:n] - r_b[:n]).astype(float)
+    diff = diff[np.isfinite(diff)]
+    if not len(diff):
+        return {
+            "mean_return_diff": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0,
+            "bootstrap_probability_mean_diff_gt_0": 0.5,
+        }
+    samples = _block_bootstrap_samples(
+        diff, np.random.default_rng(seed), reps=reps, block=block
+    )
+    return {
+        "mean_return_diff": float(diff.mean()),
+        "ci_low": float(np.quantile(samples, 0.025)),
+        "ci_high": float(np.quantile(samples, 0.975)),
+        "bootstrap_probability_mean_diff_gt_0": float(np.mean(samples > 0)),
+    }
 
 def robust_score(stats: dict) -> float:
     total=float(np.clip(stats.get('total_return',0.0),-1,1)); sharpe=float(np.clip(stats.get('sharpe_like',0.0),-6,6)); sortino=float(np.clip(stats.get('sortino_like',0.0),-8,8)); pf=min(float(stats.get('profit_factor',0.0)),4.0); win=float(np.clip(stats.get('win_rate',0.5),0,1)); dd=float(np.clip(stats.get('max_drawdown',0.0),-1,0)); excess=float(np.clip(stats.get('excess_return',total),-1,1)); concentration=float(np.clip(stats.get('trade_pnl_concentration',0.0),0,1)); trades=max(0,int(stats.get('trades',0)))
