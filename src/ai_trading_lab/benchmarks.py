@@ -12,7 +12,6 @@ from .data import load_cached
 from .engine import AdaptiveEngine
 from .features import make_oos_features
 from .evaluation import run_configured_backtest
-from .risk import RiskEngine
 from .validation import robust_score
 
 
