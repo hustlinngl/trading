@@ -382,3 +382,102 @@ def test_assess_trade_window_requires_event_probability_and_uses_training_imputa
     assert neutral["trade_window_ready"] is False
     assert neutral["trade_window_direction"] == "FLAT"
     assert neutral["trade_window_event_probability"] < settings.trade_window_min_event_probability
+
+
+def test_vectorized_barrier_labels_match_reference_scan_on_mixed_ohlc_paths():
+    # Keep a deliberately simple row-by-row oracle in tests: the production
+    # implementation is vectorized, but must preserve exact event priority,
+    # gap handling, ambiguous-candle semantics, and time-stop economics.
+    rng = np.random.default_rng(731)
+    rows = 180
+    returns = rng.normal(0.0, 0.002, rows)
+    close = 100.0 * np.exp(np.cumsum(returns))
+    open_ = np.r_[close[0], close[:-1]] * (1.0 + rng.normal(0.0, 0.0005, rows))
+    high = np.maximum(open_, close) * (1.0 + rng.uniform(0.0001, 0.004, rows))
+    low = np.minimum(open_, close) * (1.0 - rng.uniform(0.0001, 0.004, rows))
+    # Include both-sided hits, opening gaps, and invalid rows so the test covers
+    # resolution ordering as well as ordinary take-profit/stop-loss paths.
+    high[35] = max(high[35], open_[35] * 1.03)
+    low[35] = min(low[35], open_[35] * 0.97)
+    open_[52] = high[52] * 1.01
+    high[77] = np.nan
+    frame = pd.DataFrame(
+        {"open": open_, "high": high, "low": low, "close": close,
+         "volume": rng.uniform(10.0, 1000.0, rows)},
+        index=pd.date_range("2026-01-01", periods=rows, freq="15min", tz="UTC"),
+    )
+    horizon, minimum, pt, sl = 9, 3, 1.25, 0.90
+    actual = _barrier_labels(frame, horizon, minimum, pt, sl)
+
+    sorted_frame = frame.sort_index()
+    opens = sorted_frame["open"].to_numpy(float)
+    highs = sorted_frame["high"].to_numpy(float)
+    lows = sorted_frame["low"].to_numpy(float)
+    prev = sorted_frame["close"].shift(1)
+    atr = pd.concat(
+        [
+            sorted_frame["high"] - sorted_frame["low"],
+            (sorted_frame["high"] - prev).abs(),
+            (sorted_frame["low"] - prev).abs(),
+        ],
+        axis=1,
+    ).max(axis=1).rolling(14, min_periods=14).mean().to_numpy(float)
+    expected = {
+        "direction": np.full(rows, np.nan),
+        "margin": np.full(rows, np.nan),
+        "gross_return": np.full(rows, np.nan),
+        "exit_position": np.full(rows, np.nan),
+        "holding_bars": np.full(rows, np.nan),
+    }
+    statuses = np.full(rows, "unresolved", dtype=object)
+    for i in range(max(0, rows - horizon - 1)):
+        entry_i, exit_i = i + 1, i + horizon + 1
+        entry = opens[entry_i]
+        if not np.isfinite(atr[i]) or atr[i] <= 0 or not np.isfinite(entry) or entry <= 0 or not np.isfinite(opens[exit_i]) or opens[exit_i] <= 0:
+            continue
+        upper, lower = entry + pt * atr[i], entry - sl * atr[i]
+        outcome = 0.0
+        gross = opens[exit_i] / entry - 1.0
+        exit_pos, held_bars, status = float(exit_i), float(horizon), "time_stop"
+        for j in range(entry_i, exit_i):
+            bar_open = opens[j]
+            held = j - entry_i
+            if not np.isfinite(bar_open) or bar_open <= 0:
+                outcome, gross, exit_pos, held_bars, status = np.nan, np.nan, np.nan, np.nan, "invalid_ohlc"
+                break
+            if bar_open >= upper:
+                outcome = 1.0 if held >= minimum else 0.0
+                gross, exit_pos, held_bars, status = bar_open / entry - 1.0, float(j), float(max(1, held + 1)), "opening_gap_take_profit"
+                break
+            if bar_open <= lower:
+                outcome = -1.0 if held >= minimum else 0.0
+                gross, exit_pos, held_bars, status = bar_open / entry - 1.0, float(j), float(max(1, held + 1)), "opening_gap_stop_loss"
+                break
+            if not np.isfinite(highs[j]) or not np.isfinite(lows[j]):
+                outcome, gross, exit_pos, held_bars, status = np.nan, np.nan, np.nan, np.nan, "invalid_ohlc"
+                break
+            hit_up, hit_down = highs[j] >= upper, lows[j] <= lower
+            if hit_up and hit_down:
+                outcome, gross, exit_pos, held_bars, status = 0.0, np.nan, float(j), float(max(1, held + 1)), "ambiguous_intrabar"
+                break
+            if hit_up:
+                outcome = 1.0 if held >= minimum else 0.0
+                gross, exit_pos, held_bars, status = upper / entry - 1.0, float(j), float(max(1, held + 1)), "take_profit"
+                break
+            if hit_down:
+                outcome = -1.0 if held >= minimum else 0.0
+                gross, exit_pos, held_bars, status = lower / entry - 1.0, float(j), float(max(1, held + 1)), "stop_loss"
+                break
+        expected["direction"][i] = outcome
+        expected["margin"][i] = abs(outcome)
+        expected["gross_return"][i] = gross
+        expected["exit_position"][i] = exit_pos
+        expected["holding_bars"][i] = held_bars
+        statuses[i] = status
+
+    for column, values in expected.items():
+        np.testing.assert_allclose(
+            actual[column].to_numpy(float), values, rtol=1e-12, atol=1e-12,
+            equal_nan=True, err_msg=f"vectorized mismatch in {column}",
+        )
+    np.testing.assert_array_equal(actual["execution_status"].to_numpy(), statuses)
