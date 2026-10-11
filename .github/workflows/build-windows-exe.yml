@@ -6,6 +6,20 @@ on:
     branches: [main]
     tags:
       - "v*"
+    # A Windows package is expensive to rebuild; documentation, tests, and
+    # research-workflow-only changes should not cancel a valid package build.
+    # Tag pushes still build releases; path filtering applies to branch pushes.
+    paths:
+      - "src/**"
+      - "signal_dashboard.py"
+      - "config.yaml"
+      - "requirements.txt"
+      - "pyproject.toml"
+      - "*.spec"
+      - "assets/**"
+      - "data/historical/**"
+      - "models/**"
+      - "scripts/**"
 
 permissions:
   contents: write
