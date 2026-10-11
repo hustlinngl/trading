@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.46
+- Train independent long and short signal heads with side-mirrored executable triple-barrier labels, position-PnL returns, independent meta-policies and analog memories.
+- Remove the unsafe 1 - p_up short-confidence shortcut; each side must clear its own core-training success prior plus the configured probability edge. Short signals remain disabled by default.
+- Fit base regimes on the pre-calibration core only, fail loudly on calibration-boundary errors, and align training/prediction missing-value handling.
+- Make deployment fingerprints and required artifact manifests side-head aware so incompatible old model bundles cannot silently serve signals.
+- Add deterministic symmetric-noise, side-label, and calibration-boundary regression tests; include random-entry and buy-and-hold reference metrics in walk-forward research reports.
+- Side-specific model outputs are used consistently by inference, paper/live signal gates and master tuning. Retrain each asset bundle before signal publication.
+
 ## 0.9.45
 - Corrected the 3–24h specialist holdout economics to use the actual first executable barrier/gap exit or time-stop return instead of always pricing a candidate at the later full-horizon open.
 - Record exit location, holding duration and execution type in the specialist label path; ambiguous OHLC collision PnL remains unknown and is excluded from economic readiness.

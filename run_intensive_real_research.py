@@ -103,18 +103,31 @@ def _tuned_holdout_stress(df: pd.DataFrame, settings, best_params: dict, holdout
         external_feature_lag_bars=getattr(tuned, "external_feature_lag_bars", 1),
     )
     pred = engine.model.predict(features)
+    short_pred = engine.short_model.predict(features)
     regimes = engine.regimes.transform(features)
     persistence = engine.regimes.persistence(features)
     probs = engine.regimes.semantic_probabilities(features)
     analog = engine.memory.query_many(features)
-    meta_x = __import__("ai_trading_lab.meta", fromlist=["MetaPolicy"]).MetaPolicy.frame(
+    short_analog = engine.short_memory.query_many(features)
+    meta_module = __import__("ai_trading_lab.meta", fromlist=["MetaPolicy"])
+    meta_x = meta_module.MetaPolicy.frame(
         pred, features, regimes, analog, regime_persistence=persistence, regime_probs=probs
     )
+    short_meta_x = meta_module.MetaPolicy.frame(
+        short_pred, features, regimes, short_analog,
+        regime_persistence=persistence, regime_probs=probs
+    )
     meta_p = engine.meta.predict_proba(meta_x)
+    short_meta_p = engine.short_meta.predict_proba(short_meta_x)
     snap = FoldSnapshot(
         -1, holdout_df, features, pred, regimes, analog, meta_p, persistence, probs,
         getattr(engine.model, "conformal_abs_residuals_", None),
         getattr(engine.model, "conformal_scaled_residuals_", None),
+        short_pred=short_pred,
+        short_analog=short_analog,
+        short_meta_p=short_meta_p,
+        short_conformal_abs_residuals=getattr(engine.short_model, "conformal_abs_residuals_", None),
+        short_conformal_scaled_residuals=getattr(engine.short_model, "conformal_scaled_residuals_", None),
     )
     actions = _actions(snap, tuned, best_params)
     rows = []

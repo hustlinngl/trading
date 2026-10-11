@@ -51,6 +51,7 @@ def test_strict_inference_rejects_missing_model_features():
         feature_cols = ["required_feature"]
 
     bundle.model = FakeModel()
+    bundle.short_model = FakeModel()
 
     frame = pd.DataFrame(
         {"other_feature": [1.0]},
