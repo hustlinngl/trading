@@ -105,6 +105,7 @@ class SignalModel:
                 clf.fit(Xcore, ycore_c)
             for reg in self.regs:
                 reg.fit(Xcore, ycore_r)
+            self.fit_rows_ = int(len(Xcore))
             # Keep the later calibration tail untouched for meta-policy training.
             # Model weights, probability calibration, and conformal residuals are
             # estimated only on the earlier calibration slice; using the same rows
@@ -200,13 +201,8 @@ class SignalModel:
                 },
                 index=Xmeta.index,
             )
-            # Calibration remains strictly OOS. Once calibration evidence is frozen,
-            # refit the production learners on the full chronological training dataset so
-            # deployment uses every available labeled row without contaminating validation.
-            Xfit = Xraw.fillna(self.fill_values).ffill().fillna(0.0)
-            self.fit_rows_ = int(len(Xfit))
-            for clf in self.clfs: clf.fit(Xfit, yc)
-            for reg in self.regs: reg.fit(Xfit, yr)
+            # Do not refit on calibration or meta rows: calibration, conformal
+            # margins, and meta-policy features must describe these deployed learners.
         else:
             self.fill_values = Xraw.median(numeric_only=True)
             Xfit = Xraw.fillna(self.fill_values).ffill().fillna(0.0)
@@ -267,7 +263,9 @@ class SignalModel:
         raw['model_disagreement'] = pmat.std(axis=1)
         raw['return_disagreement'] = rmat.std(axis=1)
         if self.conformal_scale_col is not None and self.conformal_scaled_error_ > 0 and self.conformal_scale_col in X.columns:
-            scale = np.maximum(np.abs(pd.to_numeric(X[self.conformal_scale_col], errors='coerce').to_numpy(float)), 1e-6)
+            # Use the fitted imputer for this scale just as for all model features.
+            # A raw NaN here otherwise makes both expected-return bounds NaN.
+            scale = np.maximum(np.abs(pd.to_numeric(Xn[self.conformal_scale_col], errors='coerce').to_numpy(float)), 1e-6)
             margin_arr = scale * float(self.conformal_scaled_error_)
         else:
             margin_arr = np.full(len(raw), float(max(0.0, self.conformal_abs_error_)))
