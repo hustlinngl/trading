@@ -12,7 +12,6 @@ from .memory import AnalogMemory
 from .meta import MetaPolicy
 from .models import SignalModel
 from .policy import decide_actions
-from .regimes import RegimeDetector
 
 
 class InferenceBundleError(RuntimeError):

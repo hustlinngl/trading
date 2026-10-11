@@ -16,7 +16,6 @@ from .research import walk_forward, strategy_discovery
 from .paper import one_iteration
 from .autolearn import auto_update
 from .optimizer import optimize_policy
-from .objectives import robust_performance_utility
 from .fingerprint import strong_dataset_fingerprint
 from .autonomous import autonomous_cycle, daemon
 from .deployment import model_semantics_fingerprint, deployment_semantics_fingerprint, MANAGED_BUNDLE_FILES, refresh_deployment_manifest as _refresh_deployment_manifest

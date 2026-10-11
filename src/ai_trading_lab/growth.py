@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
-import hashlib, json, sqlite3
+import hashlib, json
 from typing import Any
 import numpy as np, pandas as pd
 from .time_utils import utcnow

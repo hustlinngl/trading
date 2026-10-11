@@ -4,7 +4,6 @@ from dataclasses import dataclass, asdict
 from typing import Any
 import math
 import hashlib
-import numpy as np
 
 @dataclass
 class ResearchTask:

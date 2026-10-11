@@ -10,7 +10,7 @@ from .inference import InferenceBundle, InferenceBundleError
 from .fingerprint import strong_dataset_fingerprint
 from .policy import live_signal_gate
 from .trade_window import assess_trade_window
-from .deployment import resolve_signal_bundle, resolve_trade_window_model, bundle_compatibility
+from .deployment import resolve_signal_bundle, resolve_trade_window_model
 
 def one_iteration(settings, root: str | Path = "."):
     root=Path(root); (root/"logs").mkdir(parents=True,exist_ok=True)
@@ -61,7 +61,6 @@ def one_iteration(settings, root: str | Path = "."):
                         json.dumps(result,indent=2,default=str),encoding="utf-8"
                     )
                     return result
-                model_dir=model.parent
                 try:
                     bundle=InferenceBundle.load(settings,root,settings.symbol)
                 except InferenceBundleError as exc:
