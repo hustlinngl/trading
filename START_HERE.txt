@@ -8,6 +8,13 @@ QUICK START
 4. Headless check: python signal_dashboard.py --once
 5. Test suite: python -m pytest -q
 
+TERMINAL COCKPIT (no code needed)
+- Menu: python -m ai_trading_lab.cockpit   (or `cockpit` after pip install -e .)
+- Commands: status | report | pipeline | scan | outcomes | scorecard | doctor | test | dashboard
+- `report` explains in plain language which readiness gates fail per asset. It never relaxes a gate.
+- Heavy work (training) can run on GitHub: Actions -> "Cockpit Pipeline" -> Run workflow. It persists the research ledger on the `research-ledger` branch.
+- Read-only on the market: no orders are ever sent.
+
 USER EXPERIENCE
 - The browser opens the read-only local terminal.
 - Market cockpit shows closed-candle history, display-only realtime quotes, current decision and available evidence.

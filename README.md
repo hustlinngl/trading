@@ -21,6 +21,19 @@ This repository is a research-first adaptive trading platform for real market da
 
 The codebase map, data/artifact boundaries, validation contract, maintainer commands and documentation index live in [`docs/PROJECT_MAP.md`](docs/PROJECT_MAP.md). Start with [Windows setup](SETUP_WINDOWS.md) for users or [the Windows build contract](BUILD_WINDOWS_EXE.md) for packaging. Generated market data, models and runtime journals are deliberately excluded from Git.
 
+## Terminal cockpit
+
+Operate the whole cycle from the terminal, without touching code:
+
+```bash
+python -m ai_trading_lab.cockpit            # interactive menu (or `cockpit` after pip install -e .)
+python -m ai_trading_lab.cockpit status     # per-asset readiness
+python -m ai_trading_lab.cockpit report     # plain-language reasons for every failed gate
+python -m ai_trading_lab.cockpit pipeline   # data -> training -> status
+```
+
+The `Cockpit Pipeline` GitHub workflow runs the same pipeline on Actions and persists the research ledger on the `research-ledger` branch. The cockpit never relaxes readiness gates and never sends orders.
+
 ## Single signal terminal
 
 The intended pre-alpha user experience is now one program:
