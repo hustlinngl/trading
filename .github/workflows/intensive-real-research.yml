@@ -2,6 +2,15 @@ name: Intensive Real Research
 
 
 on:
+  # Re-run bounded real-data research after changes to ingestion and quality gates.
+  # Scheduled and manually dispatched runs retain the full research budget.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/intensive-real-research.yml"
+      - "run_intensive_real_research.py"
+      - "src/ai_trading_lab/binance_vision.py"
+      - "src/ai_trading_lab/data_quality.py"
   workflow_dispatch:
     inputs:
       start:
@@ -80,10 +89,14 @@ jobs:
         run: |
           START_DATE="${INPUT_START:-2022-01-01}"
           END_DATE="${INPUT_END:-}"
-          TRIALS="${INPUT_TRIALS:-60}"
+          TRIALS="${INPUT_TRIALS:-}"
           START_DATE=${START_DATE:-2022-01-01}
           END_DATE="${END_DATE:-$(python -c 'from ai_trading_lab.binance_vision import rolling_closed_history_window; print(rolling_closed_history_window()["end"])')}"
-          TRIALS=${TRIALS:-60}
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            TRIALS=${TRIALS:-3}
+          else
+            TRIALS=${TRIALS:-60}
+          fi
           python run_intensive_real_research.py \
             --symbols BTC/USDT,ETH/USDT,BNB/USDT,SOL/USDT,XRP/USDT,ADA/USDT,DOGE/USDT,LINK/USDT \
             --timeframe 15m \
@@ -93,6 +106,7 @@ jobs:
             --holdout-frac 0.15 \
             --require-all-assets
       - name: Run cross-exchange transfer validation
+        if: ${{ github.event_name != 'push' }}
         run: |
           python run_cross_exchange_validation.py --trials 24 --holdout-frac 0.15
 
