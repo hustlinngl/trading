@@ -152,3 +152,17 @@ def test_validate_history_window_rejects_even_one_missing_first_candle():
 
     with pytest.raises(ValueError, match="historical_window_start_missing"):
         validate_history_window(frame, "2026-10-01", "2026-10-09", interval="15m")
+
+
+
+def test_research_workflow_starts_after_documented_binance_spot_halt():
+    from pathlib import Path
+
+    workflow = Path(".github/workflows/intensive-real-research.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "default: '2023-03-25'" in workflow
+    assert 'INPUT_START:-2023-03-25' in workflow
+    assert "official exchange-wide trading halt on 2023-03-24" in workflow
+    assert "weaken the long-gap data-quality gate" in workflow
