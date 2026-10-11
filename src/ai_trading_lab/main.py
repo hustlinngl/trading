@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import time
 import sys
 from datetime import datetime, timezone
@@ -19,6 +20,8 @@ from .optimizer import optimize_policy
 from .fingerprint import strong_dataset_fingerprint
 from .autonomous import autonomous_cycle, daemon
 from .deployment import model_semantics_fingerprint, deployment_semantics_fingerprint, MANAGED_BUNDLE_FILES, refresh_deployment_manifest as _refresh_deployment_manifest
+
+logger = logging.getLogger(__name__)
 
 
 def synthetic_data(s, n=5000):
@@ -442,7 +445,7 @@ def system_doctor(settings, root: str | Path = ".") -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description='Adaptive AI Trading Lab')
-    parser.add_argument('command', choices=['download', 'bulk-download', 'import-data', 'list-data', 'train', 'train-all', 'train-complete', 'train-complete-all', 'train-window', 'train-window-all', 'test', 'test-window', 'test-all', 'live-scan', 'live-outcomes', 'research', 'discover', 'optimize', 'master-tune', 'benchmark', 'paper', 'paper-daemon', 'demo', 'auto-update', 'autonomous', 'grow', 'evolve', 'daemon', 'state', 'stream', 'real-history', 'real-ticker', 'bootstrap-live-data', 'doctor', 'rl-help'])
+    parser.add_argument('command', choices=['download', 'bulk-download', 'import-data', 'list-data', 'train', 'train-all', 'train-complete', 'train-complete-all', 'train-window', 'train-window-all', 'test', 'test-window', 'test-all', 'signals', 'live-scan', 'live-outcomes', 'research', 'discover', 'optimize', 'master-tune', 'benchmark', 'paper', 'paper-daemon', 'demo', 'auto-update', 'autonomous', 'grow', 'evolve', 'daemon', 'state', 'stream', 'real-history', 'real-ticker', 'bootstrap-live-data', 'doctor', 'rl-help'])
     parser.add_argument('--config', default='config.yaml')
     parser.add_argument('--iterations', type=int, default=1)
     parser.add_argument('--query', default=None, help='External-intelligence query for autonomous research')
@@ -535,7 +538,7 @@ def main():
         print(json.dumps(st.flatten(), indent=2, default=str))
         return
 
-    if args.command == 'live-scan':
+    if args.command in {'live-scan', 'signals'}:
         from .live import append_live_signal_history, scan_top5, write_live_snapshot
         symbols = [x.strip() for x in args.symbols.split(',') if x.strip()] if args.symbols else None
         results = scan_top5(s, '.', symbols=symbols)
@@ -611,7 +614,8 @@ def main():
             tf_delta = pd.Timedelta(timeframe_offset(str(getattr(s, 'timeframe', '15m'))))
             if not tf_delta > pd.Timedelta(0):
                 raise ValueError('non-positive timeframe')
-        except Exception:
+        except (TypeError, ValueError, OverflowError, KeyError) as exc:
+            logger.warning("Invalid timeframe %r; using 15m cache-age fallback: %s", getattr(s, 'timeframe', None), exc)
             tf_delta = pd.Timedelta(minutes=15)
         max_age = max(pd.Timedelta(minutes=30), tf_delta * 2.5)
 
@@ -672,10 +676,18 @@ def main():
                                     'source': 'cache',
                                     'end': last_stamp.isoformat(),
                                 }
-                    except Exception:
-                        # Corrupt/stale files are refreshed below; failures are recorded
-                        # only if the new download also fails.
-                        pass
+                    except (
+                        OSError,
+                        ValueError,
+                        KeyError,
+                        TypeError,
+                        pd.errors.ParserError,
+                        pd.errors.EmptyDataError,
+                        UnicodeDecodeError,
+                    ) as exc:
+                        # A corrupt/stale cache is refreshed below, but record why
+                        # the cached timestamp index could not be trusted.
+                        logger.debug("Ignoring invalid OHLCV cache %s: %s", path, exc)
 
                 frame = fetch_ohlcv(
                     worker_exchange(),
@@ -855,11 +867,8 @@ def main():
             for path in sorted(historical_root.iterdir()):
                 if path.suffix.lower() not in {'.csv', '.parquet', '.pq', '.json'}:
                     continue
-                try:
-                    sym = infer_symbol(path)
-                    sources.setdefault(str(sym), ('historical', str(path)))
-                except Exception:
-                    continue
+                sym = infer_symbol(path)
+                sources.setdefault(str(sym), ('historical', str(path)))
 
         for sym, (source, path) in sources.items():
             try:
@@ -899,10 +908,7 @@ def main():
             for path in sorted(historical_root.iterdir()):
                 if path.suffix.lower() not in {'.csv', '.parquet', '.pq', '.json'}:
                     continue
-                try:
-                    sources.setdefault(str(infer_symbol(path)), ('historical', str(path)))
-                except Exception:
-                    continue
+                sources.setdefault(str(infer_symbol(path)), ('historical', str(path)))
         for asset_index, (sym, (source, path)) in enumerate(sources.items(), start=1):
             try:
                 ss = load_settings(args.config); ss.symbol = sym
