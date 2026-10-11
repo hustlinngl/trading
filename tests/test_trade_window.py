@@ -13,6 +13,7 @@ from ai_trading_lab.trade_window import (
     _correct_balanced_class_probabilities,
     _effective_min_event_probability,
     _fill_feature_frame,
+    _probability_quality_metrics,
     assess_trade_window,
     directional_event_probabilities,
     score_trade_window_frame,
@@ -54,6 +55,30 @@ def test_empty_holdout_returns_are_reported_as_unavailable():
     assert np.isclose(mean, 0.0025)
     assert np.isclose(compounded, (1.01 * 0.995) - 1.0)
 
+
+def test_holdout_probability_quality_reports_calibration_and_direction_metrics():
+    metrics = _probability_quality_metrics(
+        probabilities=[[0.05, 0.90, 0.05], [0.80, 0.10, 0.10], [0.10, 0.10, 0.80], [0.10, 0.80, 0.10]],
+        classes=[-1, 0, 1],
+        truth=[0, -1, 1, 0],
+        calibration_bins=2,
+    )
+    assert metrics["rows"] == 4
+    assert 0.0 <= metrics["multiclass_brier"] <= 2.0
+    assert np.isfinite(metrics["multiclass_log_loss"])
+    assert 0.0 <= metrics["event_brier"] <= 1.0
+    assert np.isfinite(metrics["event_log_loss"])
+    assert metrics["conditional_direction_accuracy"] == 1.0
+    assert len(metrics["event_calibration_bins"]) == 2
+    assert sum(row["count"] for row in metrics["event_calibration_bins"]) == 4
+
+
+def test_holdout_probability_quality_marks_missing_holdout_as_unavailable():
+    metrics = _probability_quality_metrics(probabilities=np.empty((0, 3)), classes=[-1, 0, 1], truth=[])
+    assert metrics["rows"] == 0
+    assert metrics["event_brier"] is None
+    assert metrics["conditional_direction_accuracy"] is None
+    assert metrics["event_calibration_bins"] == []
 
 def test_trade_window_retains_neutral_no_event_labels():
     frame = _flat_market()
