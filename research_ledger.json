@@ -1188,10 +1188,46 @@
       "purpose": "combined_live_policy_holdout_validation",
       "run_id": "combined_live_policy_holdout_validation:2026-10-11T02:54:45.950234+00:00",
       "scope": "XRP/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "652dfc2287508deb92a4e075:6",
+      "accessed_at": "2026-10-11T12:26:41.421015+00:00",
+      "dataset_fingerprint": "ab36d02b2f9e18ce9b0aecf5ddde9fe9",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "652dfc2287508deb92a4e075",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "19a8f5f18d83b89693da8922a46c1304",
+        "symbol": "ADA/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 5,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T12:26:41.421015+00:00",
+      "scope": "ADA/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "f3a1eb74ab40cf76c331ad6e:6",
+      "accessed_at": "2026-10-11T12:28:36.245607+00:00",
+      "dataset_fingerprint": "e09d86b87d15792a33b88b07adad9ce9",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "f3a1eb74ab40cf76c331ad6e",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "64d812b369ad67db7a6d7122f3e81565",
+        "symbol": "ATOM/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 5,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T12:28:36.245607+00:00",
+      "scope": "ATOM/USDT|15m|adaptive_signal"
     }
   ],
   "schema_version": 2,
   "total_trials": 0,
   "trial_runs": [],
-  "updated_at": "2026-10-11T02:54:45.950234+00:00"
+  "updated_at": "2026-10-11T12:28:36.245607+00:00"
 }
