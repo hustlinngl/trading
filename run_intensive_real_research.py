@@ -27,7 +27,7 @@ if str(SRC) not in sys.path:
 import numpy as np
 import pandas as pd
 
-from ai_trading_lab.binance_vision import download_range, merge_archives, clip_history, archive_provenance, rolling_closed_history_window
+from ai_trading_lab.binance_vision import download_range, merge_archives, clip_history, archive_provenance, rolling_closed_history_window, validate_history_window
 from ai_trading_lab.config import load_settings
 from ai_trading_lab.data_quality import audit_market_data, timeframe_minutes
 from ai_trading_lab.engine import AdaptiveEngine
@@ -240,6 +240,21 @@ def run_symbol(symbol, args, base_settings):
             + json.dumps(diagnostics, sort_keys=True, default=str)
         )
 
+    # Quality ratios alone can miss a small number of absent bars at the
+    # requested window edges. Research must not silently accept a stale or
+    # truncated history merely because its overall coverage ratio is high.
+    try:
+        history_window_validation = validate_history_window(
+            df.rename_axis("timestamp").reset_index(),
+            args.start,
+            args.end,
+            interval=settings.timeframe,
+        )
+    except ValueError as exc:
+        raise RuntimeError(
+            f"Requested history window validation failed for {symbol}: {exc}"
+        ) from exc
+
     tuning = master_tune(
         df, settings, trials=args.trials, final_holdout_frac=args.holdout_frac,
         save_path=Path(args.log_dir) /
@@ -277,6 +292,7 @@ def run_symbol(symbol, args, base_settings):
         "end": str(df.index.max()),
         "data_fingerprint": strong_dataset_fingerprint(df),
         "archive_provenance": archive_provenance(paths),
+        "history_window_validation": history_window_validation,
         "quality": asdict(quality),
         "walk_forward": wf_records,
         "walk_forward_summary": {
