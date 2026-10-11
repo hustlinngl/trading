@@ -247,6 +247,7 @@ def _event_score_arrays(probabilities, classes):
         raise ValueError("trade_window_invalid_probabilities")
 
     p_short = proba[:, positions[-1]]
+    p_neutral = proba[:, positions[0]]
     p_long = proba[:, positions[1]]
     p_event = p_short + p_long
     p_direction = np.divide(
@@ -285,7 +286,6 @@ def _probability_quality_metrics(probabilities, classes, truth, calibration_bins
     eps = np.finfo(float).eps
     multiclass_log_loss = float(-np.log(np.clip(proba[np.arange(len(y)), true_positions], eps, 1.0)).mean())
     p_short = proba[:, positions[-1]]
-    p_neutral = proba[:, positions[0]]
     p_long = proba[:, positions[1]]
     p_event = p_short + p_long
     actual_event = (y != 0).astype(float)
