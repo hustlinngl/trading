@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from ai_trading_lab.meta import MetaPolicy
-from ai_trading_lab.models import SignalModel
+from ai_trading_lab.models import SignalModel, _finite_sample_conformal_quantile
 
 
 class _FakeClassifier:
@@ -146,3 +146,12 @@ def test_nan_conformal_scale_uses_fitted_imputer_and_keeps_bounds_finite():
         predictions.loc[frame.index[0], "expected_return_ucb"]
         - predictions.loc[frame.index[0], "expected_return_lcb"]
     ) == pytest.approx(0.08)
+
+
+def test_conformal_quantile_uses_finite_sample_order_statistic():
+    residuals = np.arange(1.0, 11.0)
+
+    # ceil((n+1)*0.8) = 9, so the order statistic is the ninth value.
+    assert _finite_sample_conformal_quantile(residuals, 0.80) == pytest.approx(9.0)
+    # ceil((4+1)*0.9) = 5 is beyond the available sample: fail conservatively.
+    assert np.isinf(_finite_sample_conformal_quantile([1.0, 2.0, 3.0, 4.0], 0.90))
