@@ -27,7 +27,7 @@ if str(SRC) not in sys.path:
 import numpy as np
 import pandas as pd
 
-from ai_trading_lab.binance_vision import download_range, merge_archives, clip_history, archive_provenance
+from ai_trading_lab.binance_vision import download_range, merge_archives, clip_history, archive_provenance, rolling_closed_history_window
 from ai_trading_lab.config import load_settings
 from ai_trading_lab.data_quality import audit_market_data
 from ai_trading_lab.engine import AdaptiveEngine
@@ -280,7 +280,7 @@ def main():
     p.add_argument("--symbols", default="BTC/USDT,ETH/USDT,SOL/USDT")
     p.add_argument("--timeframe", default="15m")
     p.add_argument("--start", default="2022-01-01")
-    p.add_argument("--end", default=datetime.now(timezone.utc).date().isoformat())
+    p.add_argument("--end", default=rolling_closed_history_window()["end"])
     p.add_argument("--market", default="spot", choices=["spot", "futures-um"])
     p.add_argument("--trials", type=int, default=60)
     p.add_argument("--holdout-frac", type=float, default=0.15)
