@@ -178,6 +178,7 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     # Evaluate direction against untouched, realized next-open outcomes. This
     # is intentionally separate from the policy's predicted-vs-predicted checks.
     holdout_predictions = eng.model.predict(feat)
+    short_holdout_predictions = eng.short_model.predict(feat)
     labelled_market = pd.concat([train_df, test_df])
     # Score probability against the exact executable barrier/time-stop
     # returns used to train the base model, including ambiguous-OHLC exclusions.
@@ -192,6 +193,18 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
         holdout_predictions["p_up"].reindex(test_df.index).to_numpy(),
         realized_returns.to_numpy(),
     )
+    _, short_realized_returns, _ = execution_aligned_targets(
+        labelled_market,
+        settings.horizon_bars,
+        settings.pt_atr,
+        settings.sl_atr,
+        side=-1,
+    )
+    short_realized_returns = short_realized_returns.reindex(test_df.index)
+    short_directional_validation = directional_validation_diagnostics(
+        short_holdout_predictions["p_up"].reindex(test_df.index).to_numpy(),
+        short_realized_returns.to_numpy(),
+    )
     action_diagnostics = {
         "actions_by_side": {
             str(side): int(count)
@@ -202,6 +215,20 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     bt = test_df.copy()
     bt["atr_14"] = feat["atr_14"].reindex(test_df.index).ffill()
     result = run_configured_backtest(bt, actions, settings)
+    # Fair activity baseline: preserve this model's action counts, but randomize
+    # their timestamps and use the same causal exits, risk rules, and cost engine.
+    baseline_rng = np.random.default_rng(int(getattr(settings, "seed", 42)))
+    random_actions = pd.Series(
+        baseline_rng.permutation(actions.to_numpy(dtype=object)),
+        index=actions.index,
+        name="randomized_model_activity",
+    )
+    random_result = run_configured_backtest(bt, random_actions, settings)
+    buy_hold_gross_return = (
+        float(test_df["close"].iloc[-1] / test_df["open"].iloc[0] - 1.0)
+        if len(test_df) and float(test_df["open"].iloc[0]) > 0.0
+        else float("nan")
+    )
     report = {
         "symbol": settings.symbol,
         "timeframe": str(settings.timeframe),
@@ -219,6 +246,15 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
         "validation_holdout_frac": float(holdout_frac),
         "action_diagnostics": action_diagnostics,
         "realized_directional_validation": realized_directional_validation,
+        "short_realized_directional_validation": short_directional_validation,
+        "baseline_metrics": {
+            "buy_and_hold_gross_return": buy_hold_gross_return,
+            "randomized_entries_net_return": float(random_result.stats.get("total_return", 0.0)),
+            "randomized_entries_trades": int(random_result.stats.get("trades", 0)),
+            "randomized_entries_action_counts": {
+                str(key): int(value) for key, value in random_actions.value_counts().items()
+            },
+        },
         "model_semantics_fingerprint": model_semantics_fingerprint(settings),
         "deployment_semantics_fingerprint": deployment_semantics_fingerprint(settings),
         "holdout": result.stats,
