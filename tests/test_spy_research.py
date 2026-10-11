@@ -98,7 +98,9 @@ def test_training_does_not_access_future_test_labels(tmp_path):
     old = spy.analyze_spy(tmp_path / "a", adjusted_history=original)
     new = spy.analyze_spy(tmp_path / "b", adjusted_history=modified)
     assert old["validation"] == new["validation"]
-    assert old["test"] != new["test"]
+    # Zero-trade policies have identical strategy stats even if late data changes.
+    # The buy-and-hold benchmark must reflect the changed adjusted close window.
+    assert old["test_buy_and_hold_net_return"] != new["test_buy_and_hold_net_return"]
 
 
 def test_list_studies_skips_invalid_json(tmp_path):
