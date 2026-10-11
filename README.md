@@ -67,9 +67,9 @@ Journalled signals are resolved against later candles (`python -m ai_trading_lab
 python -m ai_trading_lab.main scorecard --min-resolved 30
 ```
 
-It reports the mean net return with a bootstrap confidence interval, hit rate, profit factor, drawdown and PSR, overall and per side/symbol. With too few resolved signals the answer is `INSUFFICIENT_EVIDENCE`; a positive verdict requires the interval to sit above zero. Results are OHLC-based estimates, not fills or account PnL. The report is also written to `logs/signal_scorecard.json`.
+It reports the mean net return with a bootstrap confidence interval, hit rate, profit factor, drawdown and PSR, overall and per side/symbol. With too few resolved signals the answer is `INSUFFICIENT_EVIDENCE`; a positive verdict requires the interval to sit above zero. The current bootstrap resamples signal rows as independent, so cross-asset correlation and overlapping holding periods may make confidence intervals too narrow and the `EDGE_SUPPORTED` verdict overstate evidence. Treat positive verdicts as provisional until dependence-aware validation is added. Results are OHLC-based estimates, not fills or account PnL. The report is also written to `logs/signal_scorecard.json`.
 
-#### Automatic daily tracking (GitHub Actions)
+#### Automatic six-hour tracking (GitHub Actions)
 
 The `Signal Journal` workflow (`.github/workflows/signal-journal.yml`) runs every 6 hours and on demand. It downloads the validated models from the latest successful `Build Windows EXE` run, scans, resolves mature signals and publishes the journal and scorecard to the `signal-journal` branch (`SCORECARD.txt`) and to the run summary. Prerequisites and limits:
 
