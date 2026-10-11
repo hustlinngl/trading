@@ -63,7 +63,6 @@ def decide_actions(
     prior_long = np.clip(_column(pred, "probability_baseline", 0.5), 0.0, 1.0)
     er_long = _column(pred, "expected_return", np.nan)
     lcb_long = _column(pred, "expected_return_lcb", np.nan)
-    ucb_long = _column(pred, "expected_return_ucb", np.nan)
     dis_long = _column(pred, "model_disagreement", np.nan)
     meta_long = np.asarray(meta_p, dtype=float).reshape(-1)
     if len(meta_long) != len(pred):
@@ -80,23 +79,19 @@ def decide_actions(
         prior_short = np.clip(_column(short_pred, "probability_baseline", 0.5), 0.0, 1.0)
         er_short = _column(short_pred, "expected_return", np.nan)
         lcb_short = _column(short_pred, "expected_return_lcb", np.nan)
-        ucb_short = _column(short_pred, "expected_return_ucb", np.nan)
         dis_short = _column(short_pred, "model_disagreement", np.nan)
         meta_short = np.asarray(short_meta_p, dtype=float).reshape(-1)
         if len(meta_short) != len(pred):
             raise ValueError("short_meta_prediction_length_mismatch")
         edge_short = _column(short_analog, "edge", np.nan)
         agreement_short = _column(short_analog, "agreement", np.nan)
-        neighbors_short = _column(short_analog, "n", 0.0)
         short_robust_return = er_short - conformal_blend * (er_short - lcb_short)
     else:
-        p_short = prior_short = er_short = lcb_short = ucb_short = dis_short = np.full(len(pred), np.nan)
+        p_short = prior_short = er_short = lcb_short = dis_short = np.full(len(pred), np.nan)
         meta_short = edge_short = agreement_short = short_robust_return = np.full(len(pred), np.nan)
-        neighbors_short = np.zeros(len(pred), dtype=float)
 
     edge_long = _column(analog, "edge", np.nan)
     agreement_long = _column(analog, "agreement", np.nan)
-    neighbors_long = _column(analog, "n", 0.0)
 
     regime_vector = regime.map(
         {
@@ -326,7 +321,6 @@ def live_signal_gate(row, settings, *, profile="strict"):
         disagreement = float(row["short_model_disagreement"])
         analog_n = int(float(row["short_analog_n"]))
         analog_agreement = float(row["short_analog_agreement"])
-        expected_return = float(row["short_expected_return"])
     else:
         probability = float(row["p_up"])
         baseline = float(row.get("probability_baseline", 0.5))
@@ -336,7 +330,6 @@ def live_signal_gate(row, settings, *, profile="strict"):
         disagreement = float(row["model_disagreement"])
         analog_n = int(float(row["analog_n"]))
         analog_agreement = float(row["analog_agreement"])
-        expected_return = float(row["expected_return"])
 
     funding_drag = max(0.0, float(row.get("funding_cost_return", 0.0) or 0.0))
     robust_expected_return = expected_return_lcb - funding_drag

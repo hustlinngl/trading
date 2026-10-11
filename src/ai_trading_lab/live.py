@@ -265,6 +265,7 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
         edge_floor=float(getattr(settings, "signal_min_expected_return", 0.003))
         score_floor=float(getattr(settings, "signal_min_score", 0.22))
         tw_floor=float(getattr(settings, "trade_window_min_confidence", 0.80))
+        tw_conf=float(last.get("trade_window_confidence", 0.0))
         # Rank the margin above the active gates, not an unrelated absolute scale.
         edge_strength=max(0.0, min(1.0, (robust_edge-edge_floor)/max(edge_floor*4.0, 0.006)))
         confidence_strength=max(0.0, min(1.0, (confidence-probability_floor)/max(1.0-probability_floor, 1e-6)))
