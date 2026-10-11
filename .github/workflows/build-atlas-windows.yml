@@ -4,6 +4,12 @@ name: Build Sakura Atlas Desktop
 # package. Trigger manually; use the smoke check before distributing an EXE.
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - 'sakura_atlas.py'
+      - 'src/ai_trading_lab/spy_research.py'
+      - 'requirements-atlas.txt'
+      - '.github/workflows/build-atlas-windows.yml'
 
 permissions:
   contents: read
