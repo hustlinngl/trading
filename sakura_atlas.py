@@ -18,6 +18,7 @@ STORAGE = (Path.home() / "SakuraAtlas") if getattr(sys, "frozen", False) else PR
 sys.path.insert(0, str(PROJECT / "src"))
 
 from ai_trading_lab.spy_research import analyze_spy, list_studies  # noqa: E402
+from ai_trading_lab.spy_shadow import track_spy  # noqa: E402
 
 try:
     import tkinter as tk
@@ -133,7 +134,15 @@ class AtlasApp(tk.Tk if tk is not None else object):
             relief="flat", bd=0, cursor="hand2",
             font=("Segoe UI", 13, "bold"), padx=25, pady=14,
         )
-        self.run_button.pack(anchor="w", pady=(30, 16))
+        self.run_button.pack(anchor="w", pady=(28, 12))
+        self.follow_button = tk.Button(
+            left, text="Check paper observations", command=self._follow,
+            bg=SURFACE_ALT, fg=PINK_PALE,
+            activebackground=LINE, activeforeground=TEXT,
+            relief="flat", bd=0, cursor="hand2",
+            font=("Segoe UI", 11, "bold"), padx=22, pady=11,
+        )
+        self.follow_button.pack(anchor="w", pady=(0, 14))
         self.status_var = tk.StringVar(value="Ready to analyze.")
         self.status_label = self._label(
             left, "", bg=SURFACE, color=MUTED, size=11, textvariable=self.status_var,
@@ -213,33 +222,72 @@ class AtlasApp(tk.Tk if tk is not None else object):
             self._show(summarize(self.studies[selection[0]]))
 
     def _start(self):
+        self._launch("study")
+
+    def _follow(self):
+        self._launch("shadow")
+
+    def _launch(self, mode: str):
         if self.busy:
             return
         self.busy = True
-        self.run_button.configure(state="disabled", text="Analyzing...")
-        self.status_var.set("Downloading adjusted SPY history, then training and evaluating offline.")
+        self.run_button.configure(state="disabled")
+        self.follow_button.configure(state="disabled")
+        self.status_var.set(
+            "Running the SPY study and saving its evidence..."
+            if mode == "study" else
+            "Checking completed sessions against the saved research model..."
+        )
 
         def worker():
             try:
-                report = analyze_spy(STORAGE)
-                self.events.put(("complete", report))
+                result = analyze_spy(STORAGE) if mode == "study" else track_spy(STORAGE)
+                self.events.put((mode, result))
             except Exception as exc:
                 self.events.put(("error", f"{type(exc).__name__}: {exc}"))
 
-        threading.Thread(target=worker, daemon=True, name="spy-research").start()
+        threading.Thread(target=worker, daemon=True, name=f"atlas-{mode}").start()
 
     def _drain_queue(self):
         try:
             while True:
                 kind, value = self.events.get_nowait()
                 self.busy = False
-                self.run_button.configure(state="normal", text="Analyze SPY  ↗")
-                if kind == "complete":
-                    self.status_var.set("Experiment saved. Compare the test with the benchmark on the right.")
+                self.run_button.configure(state="normal")
+                self.follow_button.configure(state="normal")
+                if kind == "study":
+                    self.status_var.set("Study saved. Its evidence appears on the right.")
                     self._refresh_studies(value["run_id"])
+                elif kind == "shadow":
+                    latest = value.get("latest") or {}
+                    self.status_var.set(
+                        "Paper observation saved." if value["recorded_new_observation"]
+                        else "No new observation; recorded history preserved."
+                    )
+                    self._show("\\n".join([
+                        "SPY / FORWARD PAPER OBSERVATIONS",
+                        "",
+                        "These are research observations, NEVER market orders.",
+                        "Predictions are recorded once after a completed session.",
+                        "Missed sessions are not retroactively filled.",
+                        "",
+                        f"Latest observed day      {latest.get('session', '-')}",
+                        f"Paper direction          {latest.get('shadow_side', '-')}",
+                        f"Probability up           {latest.get('probability_up', 0):.1%}",
+                        f"Sessions tracked         {value['observations']}",
+                        f"Resolved paper trades    {value['resolved_shadow_trades']}",
+                        "Net paper return         " + as_percent(
+                            value.get("net_return_on_resolved_shadow_trades")
+                        ),
+                        "",
+                        "All observations are exploratory. Forward evidence",
+                        "does not imply profitability or permission to trade.",
+                        "",
+                        f"Active research model    {value['run_id']}",
+                    ]))
                 else:
-                    self.status_var.set("Data or training failed. No report/model was promoted.")
-                    self._show("STUDY NOT COMPLETED\n\n" + value)
+                    self.status_var.set("The operation failed; earlier research is unchanged.")
+                    self._show("STUDY NOT COMPLETED\\n\\n" + value)
         except queue.Empty:
             pass
         self.after(100, self._drain_queue)
