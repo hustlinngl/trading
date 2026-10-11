@@ -1159,6 +1159,8 @@ def test_signal_terminal_http_state_route_exposes_exact_public_signal_contract(t
             "symbol", "signal", "confidence", "expected_return", "price", "horizon_bars"
         }
     finally:
+        server.shutdown()
+        thread.join(timeout=2)
         server.server_close()
 
 
