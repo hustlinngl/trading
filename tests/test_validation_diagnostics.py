@@ -3,7 +3,6 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-import pytest
 
 from ai_trading_lab.evaluation import directional_validation_diagnostics
 from ai_trading_lab.validation import compare_equity, _block_bootstrap_samples
