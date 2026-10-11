@@ -26,6 +26,7 @@ full = ["xgboost>=2.1", "lightgbm>=4.5", "ccxt>=4.5", "duckdb>=1.1", "plotly>=5.
 
 [project.scripts]
 aitrader = "ai_trading_lab.main:main"
+cockpit = "ai_trading_lab.cockpit:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

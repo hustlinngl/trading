@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Added the `cockpit` terminal console (`python -m ai_trading_lab.cockpit` or `cockpit`): one menu/CLI to run doctor, data bootstrap, full training pipeline, scan, outcomes, scorecard, benchmark, tests and dashboard, plus a model-readiness status view. It never places orders and never alters readiness gates. Added `HANDOFF.md` for continuation by another AI.
 - Added the scheduled `Signal Journal` workflow (every 6 hours and on demand): scan, resolve outcomes and publish the scorecard to the orphan `signal-journal` branch and the run summary. It never retrains (training stays under the research-ledger governance of `Build Windows EXE`), takes models only from a PRODUCTION-READY package, and skips with an explicit notice when models or exchange access are unavailable.
 - Added `signal_scorecard` and the `scorecard` CLI command: a statistical verdict on the live signal journal (bootstrap confidence interval of the mean net return, Wilson hit-rate interval, probabilistic Sharpe ratio, profit factor, drawdown). Ambiguous outcomes are never imputed, a minimum sample is required, and per-symbol/per-side breakdowns use a Bonferroni-adjusted confidence level. Verdicts: `EDGE_SUPPORTED`, `NEGATIVE_EDGE`, `INCONCLUSIVE`, `INSUFFICIENT_EVIDENCE`.
 
