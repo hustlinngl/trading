@@ -6,6 +6,7 @@ import time
 import pytest
 
 import pandas as pd
+import pytest
 
 from ai_trading_lab.config import load_settings
 from ai_trading_lab.efficiency import (
@@ -300,3 +301,24 @@ def test_market_type_lookup_fails_closed_when_exchange_metadata_is_missing():
     )
     assert snapshot["market_type"] == "unknown"
     assert snapshot["funding_data_missing"] is True
+
+
+def test_funding_snapshot_accepts_ccxt_string_funding_interval():
+    import ai_trading_lab.live as live_mod
+
+    class FakeSwapExchange:
+        markets = {"BTC/USDT:USDT": {"type": "swap"}}
+        has = {"fetchFundingRate": True}
+
+        def fetch_funding_rate(self, symbol):
+            assert symbol == "BTC/USDT:USDT"
+            return {"fundingRate": "0.0001", "fundingInterval": "8h"}
+
+    snapshot = live_mod._funding_snapshot(
+        FakeSwapExchange(), "BTC/USDT:USDT", load_settings("config.yaml")
+    )
+
+    assert snapshot["market_type"] == "swap"
+    assert snapshot["funding_data_missing"] is False
+    assert snapshot["funding_intervals"] == 1
+    assert snapshot["funding_cost_return"] == pytest.approx(0.0001)
