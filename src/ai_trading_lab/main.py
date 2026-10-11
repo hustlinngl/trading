@@ -144,6 +144,7 @@ def read_asset_dataframe(meta: dict):
 
 
 def test_base_holdout(df, settings, holdout_frac: float) -> dict:
+    import numpy as np
     import pandas as pd
 
     split = int(len(df) * (1.0 - holdout_frac))
