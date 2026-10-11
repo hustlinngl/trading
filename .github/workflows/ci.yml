@@ -35,7 +35,9 @@ jobs:
       - name: Adversarial integrity
         run: python run_adversarial_integrity.py
       - name: CLI smoke test
-        run: python -m ai_trading_lab.main --help
+        run: |
+          python -m ai_trading_lab.main --help
+          python sakura_atlas.py --check
       - name: Benchmark smoke test
         run: python -m ai_trading_lab.main benchmark --config config.yaml --benchmark-bars 1200
 
