@@ -4,6 +4,24 @@ Release **0.9.46** — pre-alpha read-only signal terminal built on the trained 
 
 This repository is a research-first adaptive trading platform for real market data, purged walk-forward validation, pristine holdouts, cost-aware event-driven backtesting, autonomous research and guarded paper/signal workflows.
 
+## Sakura Atlas — native SPY research desktop
+
+The new focused desktop research path is **Sakura Atlas**. On Windows,
+double-click `start_atlas.bat` (or run `bash start_atlas.sh` on Linux).
+The first launch creates a small separate Python environment and installs
+`requirements-atlas.txt`. Click **Analyze SPY** for a fixed, non-customizable
+Sakura desktop interface that downloads dividend/split-adjusted daily SPY
+history, trains a chronological exploratory model, evaluates it with
+transaction costs against an adjusted buy-and-hold baseline, and retains
+dated reports and model artifacts locally. No broker or live order support.
+
+**Research-only:** all SPY model output is deliberately blocked from
+production signals. Prior experiments do not establish profitable trading,
+and this is an initial integration rather than the unavailable external
+Sakura Atlas prototype from the shared conversation. See
+[SPY_RESEARCH_BRIEF.md](SPY_RESEARCH_BRIEF.md) for the full evidence contract
+and next validation work.
+
 ## What is included
 
 - Real-data adapters for Binance Vision and bounded Kraken validation.
