@@ -20,7 +20,8 @@ def _finite_sample_conformal_quantile(residuals, level: float) -> float:
     values = np.asarray(residuals, dtype=float).reshape(-1)
     values = values[np.isfinite(values)]
     if not len(values):
-        return 0.0
+        # No usable calibration residuals cannot justify a zero-width interval.
+        return float("inf")
     rank = int(np.ceil((len(values) + 1) * float(np.clip(level, 0.50, 0.999))))
     if rank > len(values):
         # Correct conformal behavior at unattainably high levels is an unbounded
