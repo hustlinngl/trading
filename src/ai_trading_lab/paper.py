@@ -69,26 +69,93 @@ def one_iteration(settings, root: str | Path = "."):
                         json.dumps(result,indent=2,default=str),encoding="utf-8"
                     )
                     return result
-                feat,pred=bundle.predict(df,strict=True)
-                if pred.empty:
-                    result["reason"]=["empty_prediction"]
+                feat = bundle.features(df)
+                strict_pred = bundle.predict_frame(feat, strict=True, profile="strict")
+                research_pred = bundle.predict_frame(feat, strict=True, profile="research")
+                if strict_pred.empty or research_pred.empty:
+                    result["reason"] = ["empty_prediction"]
                 else:
-                    last=pred.iloc[-1].copy()
-                    tw_path = resolve_trade_window_model(settings,root,settings.symbol)
+                    tw_path = resolve_trade_window_model(settings, root, settings.symbol)
                     tw = assess_trade_window(df, settings, tw_path)
-                    for key, value in tw.items():
-                        last[key] = value
-                    last["funding_cost_return"] = float(
-                        funding.get("funding_cost_return", 0.0) or 0.0
+                    market_type = str(funding.get("market_type", "spot") or "spot")
+                    funding_cost = float(funding.get("funding_cost_return", 0.0) or 0.0)
+                    funding_missing = bool(funding.get("funding_data_missing", False))
+
+                    def enrich(predictions):
+                        row = predictions.iloc[-1].copy()
+                        for key, value in tw.items():
+                            row[key] = value
+                        row["funding_cost_return"] = funding_cost
+                        row["funding_data_missing"] = funding_missing
+                        row["market_type"] = market_type
+                        return row
+
+                    strict_row = enrich(strict_pred)
+                    research_row = enrich(research_pred)
+                    strict_signal, strict_reasons = live_signal_gate(
+                        strict_row, settings, profile="strict"
                     )
-                    last["funding_data_missing"] = bool(
-                        funding.get("funding_data_missing", False)
+                    research_signal, research_reasons = live_signal_gate(
+                        research_row, settings, profile="research"
                     )
-                    last["market_type"] = funding.get("market_type", "spot")
-                    signal,reasons=live_signal_gate(last,settings)
-                    p=float(last.get("p_up",0.5))
-                    confidence=p if signal=="LONG" else (1.0-p if signal=="SHORT" else 0.0)
-                    result.update({"status":"SIGNAL" if signal!="FLAT" else "WAIT","signal":signal,"confidence":confidence,"expected_return":float(last.get("expected_return",0.0)),"score":float(last.get("score",0.0)),"meta_success":float(last.get("meta_success",0.5)),"model_disagreement":float(last.get("model_disagreement",0.0)),"analog_neighbors":int(last.get("analog_n",0)),"analog_agreement":float(last.get("analog_agreement",0.0)),"reason":reasons})
+                    configured_profile = str(
+                        getattr(settings, "paper_signal_profile", "strict")
+                    ).strip().lower()
+                    if configured_profile not in {"strict", "research"}:
+                        configured_profile = "strict"
+                        result["reason"] = ["invalid_paper_signal_profile"]
+                        selected_signal, selected_reasons, last = "FLAT", ["invalid_paper_signal_profile"], strict_row
+                    elif configured_profile == "research":
+                        selected_signal, selected_reasons, last = research_signal, research_reasons, research_row
+                    else:
+                        selected_signal, selected_reasons, last = strict_signal, strict_reasons, strict_row
+
+                    selected_short = selected_signal == "SHORT"
+                    side_prefix = "short_" if selected_short else ""
+                    confidence = (
+                        float(last.get("p_short", 0.0)) if selected_short
+                        else float(last.get("p_up", 0.5)) if selected_signal == "LONG"
+                        else 0.0
+                    )
+                    result.update({
+                        "status": "SIGNAL" if selected_signal != "FLAT" else "WAIT",
+                        "signal": selected_signal,
+                        "confidence": confidence,
+                        "selected_profile": configured_profile,
+                        "probability_baseline": float(last.get(
+                            "short_probability_baseline" if selected_short else "probability_baseline", 0.5
+                        )),
+                        "p_up": float(last.get("p_up", 0.5)),
+                        "p_short": float(last.get("p_short", 0.0)),
+                        "expected_return": float(last.get(f"{side_prefix}expected_return", 0.0)),
+                        "score": float(last.get(f"{side_prefix}score", last.get("score", 0.0))),
+                        "meta_success": float(last.get(f"{side_prefix}meta_success", 0.5)),
+                        "model_disagreement": float(last.get(f"{side_prefix}model_disagreement", 0.0)),
+                        "analog_neighbors": int(last.get(f"{side_prefix}analog_n", 0)),
+                        "analog_agreement": float(last.get(f"{side_prefix}analog_agreement", 0.0)),
+                        "reason": selected_reasons,
+                        "policy_comparison": {
+                            "strict": {
+                                "signal": strict_signal,
+                                "reasons": strict_reasons,
+                                "policy_diagnostics": strict_pred.attrs.get("policy_diagnostics", {}),
+                            },
+                            "research": {
+                                "signal": research_signal,
+                                "reasons": research_reasons,
+                                "policy_diagnostics": research_pred.attrs.get("policy_diagnostics", {}),
+                            },
+                            "publication_note": "Research profile is paper-only; the live terminal always uses strict gates.",
+                        },
+                        "trade_window": {
+                            key: value for key, value in tw.items()
+                        },
+                        "funding": {
+                            "market_type": market_type,
+                            "funding_data_missing": funding_missing,
+                            "funding_cost_return": funding_cost,
+                        },
+                    })
     except Exception as exc:
         result["reason"].append(f"runtime:{type(exc).__name__}:{exc}")
     (root/"logs"/"paper_last.json").write_text(json.dumps(result,indent=2,default=str),encoding="utf-8")

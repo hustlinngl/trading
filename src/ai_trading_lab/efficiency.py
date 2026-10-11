@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import asdict, dataclass
+import logging
 import time
 from typing import Any, Mapping
 
 import numpy as np
 import pandas as pd
 from sklearn.feature_selection import mutual_info_classif
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -131,8 +134,8 @@ def execution_efficiency_snapshot(
             )
             if isinstance(snapshot, Mapping):
                 return dict(snapshot)
-        except Exception:
-            pass
+        except (AttributeError, TypeError, ValueError, OverflowError) as exc:
+            logger.warning("Could not read execution telemetry snapshot: %s", exc)
 
     source = "context"
     slippage = None
@@ -237,8 +240,8 @@ def audit_features(
                 ranked = [vals.columns[i] for i in np.argsort(mi)[::-1]] + [
                     c for c in ranked if c not in vals.columns
                 ]
-        except Exception:
-            pass
+        except (ValueError, TypeError, FloatingPointError, OverflowError) as exc:
+            logger.warning("Feature mutual-information ranking skipped: %s", exc)
 
     keep, redundant = [], []
     corr = selection[ranked].corr().abs()

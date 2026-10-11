@@ -88,6 +88,7 @@ def test_holdout_builder_persists_combined_gate_provenance(monkeypatch, tmp_path
     predictions = pd.DataFrame(
         {
             "p_up": 0.95,
+            "probability_baseline": 0.39,
             "expected_return": 0.02,
             "expected_return_lcb": 0.01,
             "expected_return_ucb": 0.03,

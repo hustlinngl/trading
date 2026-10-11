@@ -13,6 +13,8 @@ model:
   min_train_rows: 1500
   retrain_every_bars: 96
   probability_threshold: 0.57
+  # Require each direction to beat its own training success rate.
+  minimum_probability_edge: 0.05
   min_expected_return: 0.0015
   min_edge_after_cost_bps: 5.0
   decision_threshold: 0.16
@@ -48,6 +50,24 @@ risk:
   require_funding_data_for_derivatives: true
   backtest_market_type: spot
 research:
+  # Paper profile compares strict publication gates to a deliberately looser research candidate.
+  # This profile is local paper evaluation only; live publication always applies strict gates.
+  paper_signal_profile: research
+  research_probability_threshold: 0.55
+  research_minimum_probability_edge: 0.02
+  research_min_expected_return: 0.0005
+  research_decision_threshold: 0.05
+  research_meta_threshold: 0.50
+  research_uncertainty_penalty_mult: 1.0
+  research_signal_confidence_threshold: 0.60
+  research_signal_probability_threshold: 0.55
+  research_signal_min_expected_return: 0.001
+  research_signal_meta_threshold: 0.52
+  research_signal_min_score: 0.04
+  research_signal_max_disagreement: 0.20
+  research_signal_memory_min_neighbors: 8
+  research_signal_memory_min_agreement: 0.55
+  research_trade_window_required_for_signal: false
   # These statistical thresholds are requirements, not tuning targets.
   live_policy_min_dsr: 0.80
   live_policy_max_pbo: 0.20

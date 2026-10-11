@@ -228,21 +228,44 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
         last['market_type']=str(funding.get('market_type','unknown') or 'unknown')
         signal,reasons=live_signal_gate(last,settings)
         p=float(last.get("p_up",0.5))
-        confidence=p if signal=="LONG" else (1.0-p if signal=="SHORT" else 0.0)
-        # Rank only after the hard gate, using directional conservative edge first.
-        lcb=float(last.get("expected_return_lcb", last.get("expected_return", 0.0)))
-        ucb=float(last.get("expected_return_ucb", last.get("expected_return", 0.0)))
-        robust_edge=lcb if signal=="LONG" else (-ucb if signal=="SHORT" else 0.0)
+        confidence=(
+            p if signal=="LONG"
+            else float(last.get("p_short",0.0)) if signal=="SHORT"
+            else 0.0
+        )
+        # Use the selected side's own uncertainty interval, probability baseline
+        # and score. A short must never be ranked as 1 - p_up.
+        long_lcb=float(last.get("expected_return_lcb", last.get("expected_return", 0.0)))
+        short_lcb=float(last.get("short_expected_return_lcb", float("nan")))
+        robust_edge=(
+            long_lcb if signal=="LONG"
+            else short_lcb if signal=="SHORT"
+            else 0.0
+        )
         robust_edge-=float(funding.get("funding_cost_return",0.0) or 0.0)
-        score=float(last.get("score", 0.0))
-        tw_conf=float(last.get("trade_window_confidence", 0.0))
+        score=float(
+            last.get("long_score", last.get("score", 0.0))
+            if signal=="LONG"
+            else last.get("short_score", last.get("score", 0.0))
+            if signal=="SHORT"
+            else 0.0
+        )
+        selected_baseline=float(
+            last.get("probability_baseline",0.5)
+            if signal=="LONG"
+            else last.get("short_probability_baseline",0.5)
+            if signal=="SHORT"
+            else 0.5
+        )
         probability_floor=max(
             float(getattr(settings, "signal_confidence_threshold", 0.82)),
             float(getattr(settings, "signal_probability_threshold", 0.72)),
+            selected_baseline + float(getattr(settings, "minimum_probability_edge", 0.05)),
         )
         edge_floor=float(getattr(settings, "signal_min_expected_return", 0.003))
         score_floor=float(getattr(settings, "signal_min_score", 0.22))
         tw_floor=float(getattr(settings, "trade_window_min_confidence", 0.80))
+        tw_conf=float(last.get("trade_window_confidence", 0.0))
         # Rank the margin above the active gates, not an unrelated absolute scale.
         edge_strength=max(0.0, min(1.0, (robust_edge-edge_floor)/max(edge_floor*4.0, 0.006)))
         confidence_strength=max(0.0, min(1.0, (confidence-probability_floor)/max(1.0-probability_floor, 1e-6)))
@@ -255,9 +278,13 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
             + 0.10 * tw_strength
         )
         detail_keys=(
-            "p_up","expected_return","expected_return_lcb","expected_return_ucb","score",
-            "meta_success","model_disagreement","return_disagreement","regime",
-            "regime_persistence","analog_edge","analog_agreement","analog_dispersion","analog_n",
+            "p_up","probability_baseline","p_short","short_probability_baseline",
+            "expected_return","expected_return_lcb","expected_return_ucb",
+            "short_expected_return","short_expected_return_lcb","short_expected_return_ucb",
+            "score","long_score","short_score","meta_success","short_meta_success",
+            "model_disagreement","short_model_disagreement","return_disagreement",
+            "regime","regime_persistence","analog_edge","analog_agreement","analog_dispersion","analog_n",
+            "short_analog_edge","short_analog_agreement","short_analog_dispersion","short_analog_n",
             "trade_window_available","trade_window_ready","trade_window_direction",
             "trade_window_confidence","trade_window_reason","funding_rate","funding_cost_return","funding_intervals",
         )
@@ -275,7 +302,13 @@ def assess_symbol(settings,root=".",symbol=None,exchange=None,*,skip_network=Fal
         })
         return LiveAssessment(
             symbol,stamp,"SIGNAL" if signal!="FLAT" else "WAIT",signal,
-            confidence,float(last.get("expected_return",0.0)),price,
+            confidence,float(
+                last.get("short_expected_return",0.0)
+                if signal=="SHORT"
+                else last.get("expected_return",0.0)
+                if signal=="LONG"
+                else 0.0
+            ),price,
             (reasons + ([str(last.get("trade_window_reason"))] if tw.get("trade_window_reason") not in {None, "ok", "disabled"} and str(last.get("trade_window_reason")) else []) or quality_reasons),fp,
             details,correlation_returns=correlation_returns,
         )
