@@ -157,3 +157,12 @@ def test_conformal_quantile_uses_finite_sample_order_statistic():
     assert _finite_sample_conformal_quantile(residuals, 0.80) == pytest.approx(9.0)
     # ceil((4+1)*0.9) = 5 is beyond the available sample: fail conservatively.
     assert np.isinf(_finite_sample_conformal_quantile([1.0, 2.0, 3.0, 4.0], 0.90))
+
+
+
+def test_cpu_only_xgboost_runtime_keeps_standard_classifier_api():
+    from ai_trading_lab import models
+
+    assert models.HAVE_XGB
+    assert callable(models.XGBClassifier)
+    assert callable(models.XGBRegressor)
