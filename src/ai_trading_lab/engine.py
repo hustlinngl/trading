@@ -186,6 +186,12 @@ class AdaptiveEngine:
         meta_x=MetaPolicy.frame(base,features,meta_regime,analog,regime_persistence=meta_persistence,regime_probs=meta_probs); meta_p=self.meta.predict_proba(meta_x); actions,scores=decide_actions(base,regime,analog,meta_p,self.settings,regime_persistence=persistence,regime_probs=probs)
         pred=base.copy(); pred['regime']=regime; pred['analog_edge']=analog.edge; pred['analog_agreement']=analog.agreement; pred['analog_dispersion']=analog.dispersion; pred['analog_n']=analog.n; pred['regime_persistence']=persistence; pred['meta_success']=meta_p; pred['score']=scores; pred['action']=actions
         pred=pred.replace([np.inf,-np.inf],np.nan)
+        # Preserve the gate diagnostics outside the tabular prediction schema so
+        # benchmark/reporting code can explain why an OOS policy stays FLAT.
+        pred.attrs["policy_diagnostics"] = dict(scores.attrs.get("diagnostics", {}))
+        pred.attrs["action_counts"] = {
+            str(key): int(value) for key, value in actions.value_counts().items()
+        }
         if strict:
             required=('p_up','expected_return','expected_return_lcb','expected_return_ucb','model_disagreement','meta_success','score','analog_edge','analog_agreement','analog_n')
             missing_outputs=[c for c in required if c not in pred.columns or not pd.notna(pred.iloc[-1][c])]
