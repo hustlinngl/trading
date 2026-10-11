@@ -22,3 +22,6 @@ build/
 dist/
 *.spec
 release/
+
+# Isolated Sakura Atlas desktop runtime
+.venv-atlas/
