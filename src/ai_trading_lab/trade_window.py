@@ -94,8 +94,8 @@ def _barrier_labels(df, horizon_bars=96, min_bars=12, pt_atr=1.25, sl_atr=0.90):
     active = decisions[valid_initial]
     if active.size:
         active_entries = opens[active + 1]
-        upper = active_entries + pt * atr[active]
-        lower = active_entries - sl * atr[active]
+        active_upper = active_entries + pt * atr[active]
+        active_lower = active_entries - sl * atr[active]
         directions[active] = 0.0
         gross_returns[active] = opens[active + horizon + 1] / active_entries - 1.0
         exit_positions[active] = (active + horizon + 1).astype(float)
@@ -118,10 +118,10 @@ def _barrier_labels(df, horizon_bars=96, min_bars=12, pt_atr=1.25, sl_atr=0.90):
                 execution_status[bad] = "invalid_ohlc"
             keep = ~invalid_open
             active, bar_positions = active[keep], bar_positions[keep]
+            active_upper, active_lower = active_upper[keep], active_lower[keep]
             if active.size == 0:
                 break
             bar_open = opens[bar_positions]
-            active_upper, active_lower = upper[keep], lower[keep]
             active_entries = opens[active + 1]
 
             # Opening gaps take precedence over intrabar high/low checks.
