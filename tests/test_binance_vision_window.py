@@ -169,3 +169,4 @@ def test_research_workflow_starts_after_documented_binance_spot_halt():
     assert '"src/ai_trading_lab/trade_window.py"' in workflow
     assert '"src/ai_trading_lab/config.py"' in workflow
     assert '"config.yaml"' in workflow
+    assert "cancel-in-progress: true" in workflow
