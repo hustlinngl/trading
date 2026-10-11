@@ -4,6 +4,9 @@ name: Intensive Real Research
 on:
   # Re-run bounded real-data research after changes to ingestion and quality gates.
   # Scheduled and manually dispatched runs retain the full research budget.
+  # Binance Spot had an official exchange-wide trading halt on 2023-03-24,
+  # leaving a real 90-minute no-candle interval. Start after that event rather
+  # than fabricate candles or weaken the long-gap data-quality gate.
   push:
     branches: [main]
     paths:
@@ -16,7 +19,7 @@ on:
       start:
         description: UTC start date
         required: false
-        default: '2022-01-01'
+        default: '2023-03-25'
       end:
         description: UTC end date
         required: false
@@ -87,10 +90,10 @@ jobs:
           INPUT_END: ${{ inputs.end }}
           INPUT_TRIALS: ${{ inputs.trials }}
         run: |
-          START_DATE="${INPUT_START:-2022-01-01}"
+          START_DATE="${INPUT_START:-2023-03-25}"
           END_DATE="${INPUT_END:-}"
           TRIALS="${INPUT_TRIALS:-}"
-          START_DATE=${START_DATE:-2022-01-01}
+          START_DATE=${START_DATE:-2023-03-25}
           END_DATE="${END_DATE:-$(python -c 'from ai_trading_lab.binance_vision import rolling_closed_history_window; print(rolling_closed_history_window()["end"])')}"
           if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
             TRIALS=${TRIALS:-3}
