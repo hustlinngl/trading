@@ -550,8 +550,8 @@ def test_live_event_gate_rejects_probability_below_natural_event_prior(tmp_path)
 
 
 def test_default_event_probability_floor_is_compatible_with_rare_event_scores():
-    result = directional_event_probabilities([0.04, 0.40, 0.56], [-1, 0, 1])
+    result = directional_event_probabilities([0.004, 0.95, 0.046], [-1, 0, 1])
 
-    assert np.isclose(result["event_probability"], 0.60)
+    assert np.isclose(result["event_probability"], 0.05)
     assert result["direction"] == "LONG"
     assert result["direction_confidence"] > 0.80
