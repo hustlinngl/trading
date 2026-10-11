@@ -150,6 +150,18 @@ def track_spy(
     stale_days = (now_ny.date() - current.index[-1].date()).days
     if stale_days < 0 or stale_days > 7:
         raise RuntimeError("SPY latest completed daily candle is stale or future-dated. No forecast recorded.")
+    # Do not issue a decision for yesterday *after* its next-day market open.
+    # That would be a retroactive forecast with hindsight, even if the
+    # historical candle was genuinely closed.
+    if (
+        current.index[-1].date() < now_ny.date()
+        and now_ny.weekday() < 5
+        and (now_ny.hour, now_ny.minute) >= (9, 30)
+    ):
+        raise RuntimeError(
+            "The next US trading day already started. No retroactive paper "
+            "decision can be recorded; retry after today's daily close."
+        )
     added = False
     if not any(x.get("session") == day for x in journal):
         if day <= str(report["split"]["test_end"]):
