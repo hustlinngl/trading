@@ -312,11 +312,19 @@ def test_funding_snapshot_accepts_ccxt_string_funding_interval():
             assert symbol == "BTC/USDT:USDT"
             return {"fundingRate": "0.0001", "fundingInterval": "8h"}
 
+    settings = load_settings("config.yaml")
     snapshot = live_mod._funding_snapshot(
-        FakeSwapExchange(), "BTC/USDT:USDT", load_settings("config.yaml")
+        FakeSwapExchange(), "BTC/USDT:USDT", settings
     )
 
     assert snapshot["market_type"] == "swap"
     assert snapshot["funding_data_missing"] is False
-    assert snapshot["funding_intervals"] == 1
-    assert snapshot["funding_cost_return"] == pytest.approx(0.0001)
+    from ai_trading_lab.data import timeframe_offset
+    bar_hours = timeframe_offset(settings.timeframe).nanos / 3_600_000_000_000.0
+    holding_hours = max(
+        float(getattr(settings, "max_holding_bars", settings.horizon_bars)) * bar_hours,
+        bar_hours,
+    )
+    expected_intervals = max(1, int(np.ceil(holding_hours / 8.0)))
+    assert snapshot["funding_intervals"] == expected_intervals
+    assert snapshot["funding_cost_return"] == pytest.approx(0.0001 * expected_intervals)
