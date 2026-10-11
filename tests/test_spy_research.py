@@ -85,6 +85,15 @@ def test_analyze_stores_auditable_research_version_and_no_live_signal(tmp_path):
     assert model.exists() and (folder / "adjusted_spy_sessions.csv").exists()
     assert hashlib.sha256(model.read_bytes()).hexdigest() == result["model_sha256"]
     assert json.loads((folder / "report.json").read_text()) == result
+    equity = pd.read_csv(folder / "test_equity_curve.csv")
+    assert len(equity) == result["test"]["sessions"]
+    assert equity["research_equity"].iloc[-1] == pytest.approx(
+        1 + result["test"]["compounded_net_return"]
+    )
+    assert equity["buy_hold_equity"].iloc[-1] == pytest.approx(
+        1 + result["test_buy_and_hold_net_return"]
+    )
+    assert result["test_evidence"]["production_ready"] is False
     other = spy.analyze_spy(tmp_path, adjusted_history=sample_history())
     assert other["run_id"] != result["run_id"]
     assert len(spy.list_studies(tmp_path)) == 2
