@@ -146,20 +146,13 @@ class SignalModel:
             rets_meta = np.column_stack([m.predict(Xmeta) for m in self.regs])
 
             uniform = np.ones(len(self.clfs), dtype=float) / len(self.clfs)
-            briers = np.array(
-                [brier_score_loss(ycal_fit, probs_fit[:, j]) for j in range(probs_fit.shape[1])],
-                dtype=float,
-            )
-            rmses = np.array(
-                [mean_squared_error(ycal_fit_r, rets_fit[:, j]) ** 0.5 for j in range(rets_fit.shape[1])],
-                dtype=float,
-            )
-            inv_b = 1.0 / np.maximum(briers, 1e-6)
-            inv_r = 1.0 / np.maximum(rmses, 1e-8)
-            learned_cls = inv_b / inv_b.sum()
-            learned_reg = inv_r / inv_r.sum()
-            self.weights_cls = 0.5 * uniform + 0.5 * learned_cls
-            self.weights_reg = 0.5 * uniform + 0.5 * learned_reg
+            # Keep blend weights fixed before probability/interval calibration.
+            # Learning weights on this same small calibration slice and then
+            # measuring calibration residuals on it double-uses its labels.
+            # If adaptive weights are reintroduced, learn them from cross-fitted
+            # predictions or an earlier disjoint slice.
+            self.weights_cls = uniform.copy()
+            self.weights_reg = np.ones(len(self.regs), dtype=float) / len(self.regs)
             self.weights = uniform
 
             raw_p_fit = probs_fit @ self.weights_cls
