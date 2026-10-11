@@ -172,6 +172,35 @@ def _aggregate_bootstrap(fold_returns, fold_dds, seed):
     return out
 
 
+def _data_quality_diagnostics(df: pd.DataFrame, quality, timeframe: str) -> dict:
+    """Return actionable timestamps and metrics for a rejected historical dataset."""
+    expected_delta = pd.Timedelta(minutes=timeframe_minutes(timeframe))
+    index = pd.DatetimeIndex(df.index)
+    deltas = index.to_series().diff()
+    gap_positions = np.flatnonzero((deltas > expected_delta * 1.5).to_numpy())
+    gap_details = []
+    for position in gap_positions[:10]:
+        delta = index[position] - index[position - 1]
+        missing_bars = max(0, int(round(delta / expected_delta)) - 1)
+        gap_details.append({
+            "after": index[position - 1].isoformat(),
+            "before": index[position].isoformat(),
+            "missing_bars_estimate": missing_bars,
+            "gap_minutes": int(delta.total_seconds() // 60),
+        })
+    return {
+        "rows": quality.rows,
+        "reasons": list(quality.reasons),
+        "gap_rows": quality.gap_rows,
+        "max_gap_bars": quality.max_gap_bars,
+        "gap_ratio": quality.gap_ratio,
+        "coverage_ratio": quality.coverage_ratio,
+        "inferred_timeframe": quality.inferred_timeframe,
+        "median_bar_minutes": quality.median_bar_minutes,
+        "first_gap_details": gap_details,
+    }
+
+
 def run_symbol(symbol, args, base_settings):
     settings = _clone_settings(base_settings)
     settings.symbol = symbol
@@ -205,34 +234,7 @@ def run_symbol(symbol, args, base_settings):
 
     quality = audit_market_data(df, settings.timeframe)
     if not quality.passed:
-        # Include concrete gap boundaries in the failure report. A reason-only
-        # message cannot distinguish a missing archive from a small isolated gap,
-        # and the research workflow otherwise loses the evidence needed to fix it.
-        expected_delta = pd.Timedelta(minutes=timeframe_minutes(settings.timeframe))
-        index = pd.DatetimeIndex(df.index)
-        deltas = index.to_series().diff()
-        gap_positions = np.flatnonzero((deltas > expected_delta * 1.5).to_numpy())
-        gap_details = []
-        for position in gap_positions[:10]:
-            delta = index[position] - index[position - 1]
-            missing_bars = max(0, int(round(delta / expected_delta)) - 1)
-            gap_details.append({
-                "after": index[position - 1].isoformat(),
-                "before": index[position].isoformat(),
-                "missing_bars_estimate": missing_bars,
-                "gap_minutes": int(delta.total_seconds() // 60),
-            })
-        diagnostics = {
-            "rows": quality.rows,
-            "reasons": list(quality.reasons),
-            "gap_rows": quality.gap_rows,
-            "max_gap_bars": quality.max_gap_bars,
-            "gap_ratio": quality.gap_ratio,
-            "coverage_ratio": quality.coverage_ratio,
-            "inferred_timeframe": quality.inferred_timeframe,
-            "median_bar_minutes": quality.median_bar_minutes,
-            "first_gap_details": gap_details,
-        }
+        diagnostics = _data_quality_diagnostics(df, quality, settings.timeframe)
         raise RuntimeError(
             f"Data quality failed for {symbol}: "
             + json.dumps(diagnostics, sort_keys=True, default=str)
