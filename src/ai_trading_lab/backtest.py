@@ -33,9 +33,10 @@ def _stats(equity: pd.Series, trades: list[dict], bars_per_year: float | None = 
     if bars_per_year is None:
         bars_per_year = _annualization_factor(equity.index)
     rets = equity.pct_change().replace([np.inf, -np.inf], np.nan).fillna(0)
-    downside = rets.where(rets < 0, 0.0)
+    downside = np.minimum(rets.to_numpy(dtype=float), 0.0)
+    downside_deviation = float(np.sqrt(np.mean(np.square(downside)))) if len(downside) else 0.0
     sharpe = float(np.sqrt(bars_per_year) * rets.mean() / (rets.std() + 1e-12))
-    sortino = float(np.sqrt(bars_per_year) * rets.mean() / (downside.std() + 1e-12))
+    sortino = float(np.sqrt(bars_per_year) * rets.mean() / (downside_deviation + 1e-12))
     dd = equity / equity.cummax() - 1
     pnls = np.array([t['pnl_net'] for t in trades], dtype=float)
     abs_pnls = np.abs(pnls)
@@ -142,8 +143,6 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
         prev_row = df.iloc[i - 1] if i > 0 else None
         prev_atr = prev_row.get('atr_14', np.nan) if prev_row is not None else np.nan
         atr = float(prev_atr) if pd.notna(prev_atr) else np.nan
-        if not np.isfinite(atr) or atr <= 0:
-            atr = max((float(prev_row['close']) if prev_row is not None else close) * 0.01, 1e-8)
         if prev_row is not None:
             if 'quote_volume' in prev_row.index and pd.notna(prev_row.get('quote_volume')):
                 prev_quote_volume = float(prev_row.get('quote_volume', 0.0))
@@ -165,6 +164,11 @@ def run_backtest(df: pd.DataFrame, signal: pd.Series, risk, initial_cash: float,
                 close_position(ts, open_, prev_quote_volume, 'reverse' if reverse else 'signal_exit')
 
         if side == 0 and i > 0 and pending in {'LONG', 'SHORT'}:
+            # ATR defines executable barriers and position size; don't invent a
+            # risk scale when market-derived ATR is missing or invalid.
+            if not np.isfinite(atr) or atr <= 0:
+                equity_curve.append(mark(close))
+                continue
             direction = 1 if pending == 'LONG' else -1
             if direction < 0 and require_short_borrow_cost and float(short_borrow_bps_per_bar) <= 0.0:
                 equity_curve.append(mark(close))
