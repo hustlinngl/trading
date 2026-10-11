@@ -83,6 +83,7 @@ class SignalModel:
         self.conformal_scaled_residuals_ = None
         self.conformal_scale_col = None
         self.conformal_level = 0.90
+        self.class_prior_ = 0.5
         self.ready = False
 
     def _clean(self, x: pd.DataFrame) -> pd.DataFrame:
@@ -119,8 +120,9 @@ class SignalModel:
                     # early fit slice and a purged, later meta-training slice.
                     use_cal = False
         if use_cal:
+            self.class_prior_ = float(ycore_c.mean()) if len(ycore_c) else 0.5
             self.fill_values = Xcore_raw.median(numeric_only=True)
-            Xcore = Xcore_raw.fillna(self.fill_values).ffill().fillna(0.0)
+            Xcore = Xcore_raw.fillna(self.fill_values).fillna(0.0)
             for clf in self.clfs:
                 clf.fit(Xcore, ycore_c)
             for reg in self.regs:
@@ -138,8 +140,8 @@ class SignalModel:
             ycal_fit = ycal.iloc[:n_cal_fit]
             ycal_fit_r = ycal_r.iloc[:n_cal_fit]
 
-            Xcal_fit = Xcal_fit_raw.fillna(self.fill_values).ffill().fillna(0.0)
-            Xmeta = Xmeta_raw.fillna(self.fill_values).ffill().fillna(0.0)
+            Xcal_fit = Xcal_fit_raw.fillna(self.fill_values).fillna(0.0)
+            Xmeta = Xmeta_raw.fillna(self.fill_values).fillna(0.0)
             probs_fit = np.column_stack([m.predict_proba(Xcal_fit)[:, 1] for m in self.clfs])
             rets_fit = np.column_stack([m.predict(Xcal_fit) for m in self.regs])
             probs_meta = np.column_stack([m.predict_proba(Xmeta)[:, 1] for m in self.clfs])
@@ -217,8 +219,9 @@ class SignalModel:
             # Do not refit on calibration or meta rows: calibration, conformal
             # margins, and meta-policy features must describe these deployed learners.
         else:
+            self.class_prior_ = float(yc.mean()) if len(yc) else 0.5
             self.fill_values = Xraw.median(numeric_only=True)
-            Xfit = Xraw.fillna(self.fill_values).ffill().fillna(0.0)
+            Xfit = Xraw.fillna(self.fill_values).fillna(0.0)
             for clf in self.clfs: clf.fit(Xfit, yc)
             for reg in self.regs: reg.fit(Xfit, yr)
             self.fit_rows_ = int(len(Xfit))
@@ -275,6 +278,7 @@ class SignalModel:
         if not self.ready: raise RuntimeError('Model not fitted')
         Xn = self._clean(X); raw = self._predict_raw(Xn)
         raw['p_up'] = self._calibrated_probabilities(raw['p_up_raw'].to_numpy(float))
+        raw['probability_baseline'] = float(getattr(self, 'class_prior_', 0.5))
         pmat = np.column_stack([m.predict_proba(Xn)[:, 1] for m in self.clfs])
         rmat = np.column_stack([m.predict(Xn) for m in self.regs])
         raw['model_disagreement'] = pmat.std(axis=1)
@@ -288,7 +292,7 @@ class SignalModel:
             margin_arr = np.full(len(raw), float(max(0.0, self.conformal_abs_error_)))
         raw['expected_return_lcb'] = raw['expected_return'] - margin_arr
         raw['expected_return_ucb'] = raw['expected_return'] + margin_arr
-        return raw[['p_up_raw','p_up','expected_return','expected_return_lcb','expected_return_ucb','model_disagreement','return_disagreement']]
+        return raw[['p_up_raw','p_up','probability_baseline','expected_return','expected_return_lcb','expected_return_ucb','model_disagreement','return_disagreement']]
 
     def evaluate(self, X: pd.DataFrame, y_cls: pd.Series, y_ret: pd.Series) -> ModelReport:
         mask = y_cls.notna() & y_ret.notna(); pred = self.predict(X.loc[mask])

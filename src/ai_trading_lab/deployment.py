@@ -7,7 +7,7 @@ import math
 from .objectives import robust_performance_utility
 
 # Increment this when calibration behavior changes; old bundles must be retrained.
-PROBABILITY_CALIBRATION_SEMANTICS = "purged_temporal_oos_isotonic_platt_core_deployed_finite_sample_conformal_v3"
+PROBABILITY_CALIBRATION_SEMANTICS = "purged_temporal_oos_isotonic_platt_core_deployed_finite_sample_conformal_side_specific_v4"
 
 
 
@@ -18,11 +18,13 @@ def model_semantics_fingerprint(settings) -> str:
     fields = {
         # Bump when target, calibration, or meta train/serve semantics change.
         # Existing bundles must be retrained rather than silently reused.
-        "label_target_semantics": "direction_from_execution_aligned_triple_barrier_return_v4",
+        "label_target_semantics": "side_specific_direction_from_execution_aligned_triple_barrier_return_v5",
+        "short_head_target_semantics": "independent_short_position_profit_stop_time_stop_v1",
+        "feature_imputation_semantics": "training_median_fill_without_forward_fill_v2",
         "trade_window_target_semantics": "three_class_gap_first_barrier_event_after_entry_elapsed_min_duration_v5_prior_corrected_execution_aligned_holdout_pnl",
         "trade_window_feature_imputation_semantics": "training_median_fill_v1",
         "probability_calibration_semantics": PROBABILITY_CALIBRATION_SEMANTICS,
-        "meta_policy_semantics": "raw_oos_probability_and_unadjusted_return_bounds_v2",
+        "meta_policy_semantics": "side_specific_oos_probabilities_returns_memory_and_cost_hurdles_v3",
         "timeframe": str(getattr(settings, "timeframe", "")),
         "horizon_bars": int(getattr(settings, "horizon_bars", 8)),
         "pt_atr": float(getattr(settings, "pt_atr", 1.6)),
@@ -42,10 +44,13 @@ def model_semantics_fingerprint(settings) -> str:
 
 ENGINE_ARTIFACTS = (
     "signal_model.joblib",
+    "short_signal_model.joblib",
     "analog_memory.joblib",
+    "short_analog_memory.joblib",
     "regime_detector.joblib",
     "meta_regime_detector.joblib",
     "meta_policy.joblib",
+    "short_meta_policy.joblib",
     "feature_efficiency.joblib",
 )
 MANAGED_BUNDLE_FILES = ENGINE_ARTIFACTS + (
@@ -284,6 +289,7 @@ def deployment_semantics_fingerprint(settings) -> str:
         "model_semantics": model_semantics_fingerprint(settings),
         "exchange": str(getattr(settings, "exchange", "binance")),
         "probability_threshold": float(getattr(settings, "probability_threshold", 0.57)),
+        "minimum_probability_edge": float(getattr(settings, "minimum_probability_edge", 0.05)),
         "min_expected_return": float(getattr(settings, "min_expected_return", 0.0015)),
         "min_edge_after_cost_bps": float(getattr(settings, "min_edge_after_cost_bps", 5.0)),
         "decision_threshold": float(getattr(settings, "decision_threshold", 0.16)),
@@ -313,6 +319,25 @@ def deployment_semantics_fingerprint(settings) -> str:
         "signal_only_mode": bool(getattr(settings, "signal_only_mode", True)),
         "require_deployment_manifest_for_signal": bool(getattr(settings, "require_deployment_manifest_for_signal", False)),
         "live_max_data_age_minutes": float(getattr(settings, "live_max_data_age_minutes", 30.0)),
+        "paper_signal_profile": str(getattr(settings, "paper_signal_profile", "strict")),
+        "research_probability_threshold": float(getattr(settings, "research_probability_threshold", 0.55)),
+        "research_minimum_probability_edge": float(getattr(settings, "research_minimum_probability_edge", 0.02)),
+        "research_min_expected_return": float(getattr(settings, "research_min_expected_return", 0.0005)),
+        "research_decision_threshold": float(getattr(settings, "research_decision_threshold", 0.05)),
+        "research_meta_threshold": float(getattr(settings, "research_meta_threshold", 0.50)),
+        "research_uncertainty_penalty_mult": float(getattr(settings, "research_uncertainty_penalty_mult", 1.0)),
+        "research_signal_confidence_threshold": float(getattr(settings, "research_signal_confidence_threshold", 0.60)),
+        "research_signal_probability_threshold": float(getattr(settings, "research_signal_probability_threshold", 0.55)),
+        "research_signal_min_expected_return": float(getattr(settings, "research_signal_min_expected_return", 0.001)),
+        "research_signal_meta_threshold": float(getattr(settings, "research_signal_meta_threshold", 0.52)),
+        "research_signal_min_score": float(getattr(settings, "research_signal_min_score", 0.04)),
+        "research_signal_max_disagreement": float(getattr(settings, "research_signal_max_disagreement", 0.20)),
+        "research_signal_memory_min_neighbors": int(getattr(settings, "research_signal_memory_min_neighbors", 8)),
+        "research_signal_memory_min_agreement": float(getattr(settings, "research_signal_memory_min_agreement", 0.55)),
+        "research_trade_window_required_for_signal": bool(getattr(settings, "research_trade_window_required_for_signal", False)),
+        "require_short_borrow_cost": bool(getattr(settings, "require_short_borrow_cost", True)),
+        "require_funding_data_for_derivatives": bool(getattr(settings, "require_funding_data_for_derivatives", True)),
+        "funding_rate_column": str(getattr(settings, "funding_rate_column", "funding_rate")),
         "trade_window_xgb_estimators": int(getattr(settings, "trade_window_xgb_estimators", 180)),
         "trade_window_lgbm_estimators": int(getattr(settings, "trade_window_lgbm_estimators", 180)),
         "trade_window_hist_max_iter": int(getattr(settings, "trade_window_hist_max_iter", 220)),

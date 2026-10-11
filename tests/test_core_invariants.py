@@ -12,7 +12,7 @@ from ai_trading_lab.data import asof_join, drop_unclosed_tail, timeframe_offset,
 from ai_trading_lab.master_tuner import _fold_cache_key
 from ai_trading_lab.risk import RiskEngine
 from ai_trading_lab.backtest import run_backtest, _stats
-from ai_trading_lab.engine import AdaptiveEngine
+from ai_trading_lab.engine import AdaptiveEngine, execution_aligned_targets
 from ai_trading_lab.features import make_features, make_oos_features
 from ai_trading_lab.labels import triple_barrier_labels
 from ai_trading_lab.benchmarks import _atr
@@ -566,3 +566,82 @@ def test_benchmark_atr_returns_finite_positive_series_for_trade_simulation():
     assert atr.notna().all()
     assert np.isfinite(atr.to_numpy(dtype=float)).all()
     assert (atr > 0).all()
+
+def test_short_barriers_produce_independent_profitable_short_target():
+    idx = pd.date_range("2026-01-01", periods=24, freq="15min", tz="UTC")
+    market = pd.DataFrame(
+        {
+            "open": np.full(24, 100.0),
+            "high": np.full(24, 100.1),
+            "low": np.full(24, 99.9),
+            "close": np.full(24, 100.0),
+            "volume": np.full(24, 100_000.0),
+        },
+        index=idx,
+    )
+    # With signal at idx[14], the entry is idx[15]. A downward excursion at
+    # idx[16] hits the long stop and the mirrored short profit barrier.
+    market.loc[idx[16], ["open", "high", "low", "close"]] = [
+        100.0, 100.1, 99.5, 100.0
+    ]
+
+    _, long_returns, long_target = execution_aligned_targets(
+        market, 3, 1.0, 1.0, side=1
+    )
+    _, short_returns, short_target = execution_aligned_targets(
+        market, 3, 1.0, 1.0, side=-1
+    )
+
+    assert long_target.loc[idx[14]] == 0.0
+    assert short_target.loc[idx[14]] == 1.0
+    assert long_returns.loc[idx[14]] < 0.0
+    assert short_returns.loc[idx[14]] > 0.0
+    assert np.isclose(long_returns.loc[idx[14]], -short_returns.loc[idx[14]])
+
+
+def test_random_noise_has_near_zero_gross_edge_for_random_symmetric_sides():
+    rng = np.random.default_rng(42)
+    count = 6_000
+    log_returns = rng.normal(0.0, 0.002, count)
+    close = 100.0 * np.exp(np.cumsum(log_returns))
+    open_ = np.r_[close[0], close[:-1]]
+    upper_excursion = rng.uniform(0.0002, 0.0020, count)
+    lower_excursion = rng.uniform(0.0002, 0.0020, count)
+    high = np.maximum(open_, close) * (1.0 + upper_excursion)
+    low = np.minimum(open_, close) * (1.0 - lower_excursion)
+    market = pd.DataFrame(
+        {
+            "open": open_,
+            "high": high,
+            "low": low,
+            "close": close,
+            "volume": np.full(count, 100_000.0),
+        },
+        index=pd.date_range("2024-01-01", periods=count, freq="15min", tz="UTC"),
+    )
+
+    _, long_returns, _ = execution_aligned_targets(
+        market, 8, 1.0, 1.0, side=1
+    )
+    _, short_returns, _ = execution_aligned_targets(
+        market, 8, 1.0, 1.0, side=-1
+    )
+    valid = long_returns.notna() & short_returns.notna()
+    random_sides = rng.choice(np.array([-1.0, 1.0]), size=int(valid.sum()))
+    gross_returns = np.where(
+        random_sides > 0.0,
+        long_returns.loc[valid].to_numpy(float),
+        short_returns.loc[valid].to_numpy(float),
+    )
+
+    assert len(gross_returns) > 5_000
+    assert abs(float(np.mean(gross_returns))) < 3e-4
+
+
+def test_calibration_mask_does_not_silently_fall_back_on_timezone_error():
+    from ai_trading_lab.engine import _pre_calibration_core_mask
+
+    index = pd.date_range("2026-01-01", periods=20, freq="15min", tz="UTC")
+    with pytest.raises(TypeError):
+        _pre_calibration_core_mask(index, pd.Timestamp("2026-01-01"), 3)
+
