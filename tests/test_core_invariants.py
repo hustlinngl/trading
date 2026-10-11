@@ -5,12 +5,13 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from ai_trading_lab.config import load_settings
-from ai_trading_lab.data import asof_join, drop_unclosed_tail, timeframe_offset, load_cached
+from ai_trading_lab.data import asof_join, drop_unclosed_tail, timeframe_offset, load_cached, fetch_ohlcv
 from ai_trading_lab.master_tuner import _fold_cache_key
 from ai_trading_lab.risk import RiskEngine
-from ai_trading_lab.backtest import run_backtest
+from ai_trading_lab.backtest import run_backtest, _stats
 from ai_trading_lab.engine import AdaptiveEngine
 from ai_trading_lab.features import make_features, make_oos_features
 from ai_trading_lab.labels import triple_barrier_labels
@@ -442,3 +443,79 @@ def test_base_return_target_uses_next_open_at_the_horizon_not_exit_close():
     assert direction.loc[idx[14]] == 1.0
     # For this row, the old close-based target would have been exactly zero.
     assert not np.isclose(realized_return.loc[idx[14]], df.loc[idx[17], "close"] / df.loc[idx[15], "open"] - 1.0)
+
+
+class _PaginatedFakeExchange:
+    def __init__(self, rows):
+        self.rows = rows
+        self.rateLimit = 0
+        self.calls = []
+
+    def parse_timeframe(self, timeframe):
+        assert timeframe == "15m"
+        return 15 * 60
+
+    def fetch_ohlcv(self, symbol, timeframe, since=None, limit=1000):
+        self.calls.append({"since": since, "limit": limit})
+        eligible = self.rows if since is None else [
+            row for row in self.rows if int(row[0]) >= int(since)
+        ]
+        return eligible[: min(int(limit), 1000)]
+
+
+def _fake_ohlcv_rows(count):
+    end = pd.Timestamp.now(tz="UTC").floor("15min")
+    index = pd.date_range(end=end, periods=count, freq="15min")
+    return [
+        [int(ts.timestamp() * 1000), 100.0, 101.0, 99.0, 100.0, 10_000.0]
+        for ts in index
+    ]
+
+
+def test_fetch_ohlcv_paginates_beyond_exchange_page_limit_and_returns_requested_closed_bars():
+    exchange = _PaginatedFakeExchange(_fake_ohlcv_rows(2800))
+
+    result = fetch_ohlcv(exchange, "BTC/USDT", "15m", limit=2500)
+
+    assert len(result) == 2500
+    assert result.index.is_monotonic_increasing
+    assert not result.index.has_duplicates
+    assert len(exchange.calls) >= 3
+    assert all(call["since"] is not None for call in exchange.calls)
+
+
+def test_fetch_ohlcv_fails_loudly_when_history_is_shorter_than_requested():
+    exchange = _PaginatedFakeExchange(_fake_ohlcv_rows(1200))
+
+    with pytest.raises(RuntimeError, match=r"requested 1500 closed bars, received"):
+        fetch_ohlcv(exchange, "BTC/USDT", "15m", limit=1500)
+
+
+def test_sortino_uses_root_mean_square_of_negative_returns():
+    equity = pd.Series(
+        [100.0, 115.0, 92.0, 101.2, 101.2],
+        index=pd.date_range("2026-01-01", periods=5, freq="15min", tz="UTC"),
+    )
+    result = _stats(equity, [], bars_per_year=1.0)
+    returns = equity.pct_change().replace([np.inf, -np.inf], np.nan).fillna(0.0).to_numpy()
+    downside_deviation = np.sqrt(np.mean(np.square(np.minimum(returns, 0.0))))
+    expected = returns.mean() / (downside_deviation + 1e-12)
+
+    assert result["sortino_like"] == pytest.approx(expected)
+
+
+def test_backtest_skips_entries_when_atr_is_missing_instead_of_inventing_risk():
+    market = market_frame(40).assign(atr_14=np.nan)
+    actions = pd.Series("FLAT", index=market.index)
+    actions.iloc[4:12] = "LONG"
+    risk = RiskEngine(
+        10_000.0, 0.01, 0.25, 0.20, 1.0, 2.0, 0.0, 0.0, 1.0, 0.0,
+        max_holding_bars=5,
+    )
+
+    result = run_backtest(
+        market, actions, risk, 10_000.0, fee_bps=0.0,
+        slippage_bps=0.0, max_holding_bars=5, intrabar_barriers=False,
+    )
+
+    assert result.trades.empty
