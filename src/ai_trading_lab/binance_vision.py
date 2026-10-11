@@ -6,11 +6,13 @@ BASE='https://data.binance.vision/data'
 
 
 def rolling_closed_history_window(now=None, months=24):
-    """Return UTC date bounds for full monthly archives plus the latest closed days.
+    """Return UTC date bounds for monthly archives plus published recent daily data.
 
     Monthly Binance Vision archives are only complete after a month closes. The
-    latest partial month must therefore be downloaded from daily archives through
-    yesterday (UTC), not from the not-yet-published monthly archive.
+    latest partial month uses daily archives, but those can lag by a UTC day, so
+    the rolling end includes a one-day publication buffer rather than requiring
+    yesterday's archive to exist. On the first UTC day of a month, use the prior
+    month's monthly boundary instead.
     """
     months = int(months)
     if months < 1:
@@ -25,7 +27,12 @@ def rolling_closed_history_window(now=None, months=24):
     recent_start = today.replace(day=1)
     monthly_end = recent_start - pd.Timedelta(days=1)
     start = recent_start - pd.DateOffset(months=months)
-    end = today - pd.Timedelta(days=1)
+    # Binance Vision daily kline archives can lag the UTC close by a day.
+    # Keep a full-day publication buffer so a transiently unavailable yesterday
+    # archive does not prevent the Windows package from building. On UTC day 1,
+    # the previous month's monthly archive is the only complete source for the
+    # immediately preceding day.
+    end = monthly_end if today.day == 1 else today - pd.Timedelta(days=2)
     return {
         "start": start.strftime("%Y-%m-%d"),
         "monthly_end": monthly_end.strftime("%Y-%m-%d"),
