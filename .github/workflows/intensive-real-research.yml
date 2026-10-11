@@ -32,6 +32,8 @@ jobs:
     timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:
@@ -108,6 +110,7 @@ jobs:
         if: always()
         env:
           LEDGER_BRANCH: research-ledger
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           test -s data/research_ledger.json
@@ -130,5 +133,5 @@ jobs:
             exit 0
           fi
           git commit -m "chore: persist research governance ledger from run ${GITHUB_RUN_ID}"
-          git push origin "HEAD:refs/heads/${LEDGER_BRANCH}"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${LEDGER_BRANCH}"
 
