@@ -209,6 +209,20 @@ def _fill_feature_frame(frame, feature_columns, fill_values):
     return numeric.fillna(fill_values.reindex(feature_columns)).fillna(0.0)
 
 
+def _net_return_metrics(net_returns):
+    """Summarize realized net returns; no observations means unavailable, not -100%."""
+    values = np.asarray(net_returns, dtype=float).reshape(-1)
+    if not len(values):
+        return None, None
+    mean = float(values.mean())
+    compounded = (
+        float(np.prod(1.0 + values) - 1.0)
+        if np.all(values > -1.0)
+        else -1.0
+    )
+    return mean, compounded
+
+
 def _wilson_lower_bound(successes, total, z=1.6448536269514722):
     n = int(total)
     if n <= 0:
@@ -579,12 +593,9 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
     precision = float(successes / support) if support else 0.0
     wilson = _wilson_lower_bound(successes, support)
     net_returns = np.asarray([row["net_return"] for row in accepted], dtype=float)
-    mean_net = float(net_returns.mean()) if len(net_returns) else 0.0
-    compounded_net = (
-        float(np.prod(1.0 + net_returns) - 1.0)
-        if len(net_returns) and np.all(net_returns > -1.0)
-        else -1.0
-    )
+    mean_net_report, compounded_net = _net_return_metrics(net_returns)
+    # Keep the internal gate numeric while exposing missing holdout evidence as null.
+    mean_net = mean_net_report if mean_net_report is not None else 0.0
 
     target_precision = float(getattr(settings, "trade_window_target_precision", 0.80))
     min_wilson = float(getattr(settings, "trade_window_min_holdout_wilson", 0.60))
@@ -639,7 +650,7 @@ def train_trade_window_backbone(df, settings, holdout_frac=0.15, save_path=None)
         "holdout_event_probability_mean": float(p_event.mean()) if len(p_event) else 0.0,
         "holdout_neutral_rate": float(np.mean(truth == 0)) if len(truth) else 0.0,
         "holdout_directional_confidence_mean": float(p_direction.mean()) if len(p_direction) else 0.0,
-        "holdout_net_return_mean": mean_net,
+        "holdout_net_return_mean": mean_net_report,
         "holdout_net_return_compounded": compounded_net,
         "holdout_economic_observations": int(len(net_returns)),
         "configured_min_event_probability": configured_min_event_probability,
