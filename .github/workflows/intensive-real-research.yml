@@ -14,6 +14,9 @@ on:
       - "run_intensive_real_research.py"
       - "src/ai_trading_lab/binance_vision.py"
       - "src/ai_trading_lab/data_quality.py"
+      - "src/ai_trading_lab/trade_window.py"
+      - "src/ai_trading_lab/config.py"
+      - "config.yaml"
   workflow_dispatch:
     inputs:
       start:
