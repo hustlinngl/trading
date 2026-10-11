@@ -445,7 +445,7 @@ def system_doctor(settings, root: str | Path = ".") -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description='Adaptive AI Trading Lab')
-    parser.add_argument('command', choices=['download', 'bulk-download', 'import-data', 'list-data', 'train', 'train-all', 'train-complete', 'train-complete-all', 'train-window', 'train-window-all', 'test', 'test-window', 'test-all', 'signals', 'live-scan', 'live-outcomes', 'research', 'discover', 'optimize', 'master-tune', 'benchmark', 'paper', 'paper-daemon', 'demo', 'auto-update', 'autonomous', 'grow', 'evolve', 'daemon', 'state', 'stream', 'real-history', 'real-ticker', 'bootstrap-live-data', 'doctor', 'rl-help'])
+    parser.add_argument('command', choices=['download', 'bulk-download', 'import-data', 'list-data', 'train', 'train-all', 'train-complete', 'train-complete-all', 'train-window', 'train-window-all', 'test', 'test-window', 'test-all', 'signals', 'live-scan', 'live-outcomes', 'scorecard', 'research', 'discover', 'optimize', 'master-tune', 'benchmark', 'paper', 'paper-daemon', 'demo', 'auto-update', 'autonomous', 'grow', 'evolve', 'daemon', 'state', 'stream', 'real-history', 'real-ticker', 'bootstrap-live-data', 'doctor', 'rl-help'])
     parser.add_argument('--config', default='config.yaml')
     parser.add_argument('--iterations', type=int, default=1)
     parser.add_argument('--query', default=None, help='External-intelligence query for autonomous research')
@@ -467,6 +467,7 @@ def main():
     parser.add_argument('--live-bars', type=int, default=None, help='Closed OHLCV bars to cache for the live dashboard')
     parser.add_argument('--workers', type=int, default=None, help='Bounded parallel public-data workers for bootstrap-live-data (default 4, max 8)')
     parser.add_argument('--benchmark-bars', type=int, default=3000, help='Bars used by the diagnostic benchmark suite')
+    parser.add_argument('--min-resolved', type=int, default=30, help='Minimum resolved signals before the scorecard gives a verdict')
     args = parser.parse_args()
     s = load_settings(args.config)
     if args.symbol:
@@ -545,6 +546,11 @@ def main():
         write_live_snapshot(results, '.')
         append_live_signal_history(results, '.')
         print(json.dumps([x.to_dict() for x in results], indent=2, default=str)); return
+    if args.command == 'scorecard':
+        from .signal_scorecard import format_scorecard, run_scorecard
+        card = run_scorecard('.', min_resolved=max(2, int(args.min_resolved)))
+        print(format_scorecard(card)); return
+
     if args.command == 'live-outcomes':
         from .live_tracker import update_live_signal_outcomes
         result = update_live_signal_outcomes(s, '.')

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+- Added the scheduled `Signal Journal` workflow (every 6 hours and on demand): scan, resolve outcomes and publish the scorecard to the orphan `signal-journal` branch and the run summary. It never retrains (training stays under the research-ledger governance of `Build Windows EXE`), takes models only from a PRODUCTION-READY package, and skips with an explicit notice when models or exchange access are unavailable.
+- Added `signal_scorecard` and the `scorecard` CLI command: a statistical verdict on the live signal journal (bootstrap confidence interval of the mean net return, Wilson hit-rate interval, probabilistic Sharpe ratio, profit factor, drawdown). Ambiguous outcomes are never imputed, a minimum sample is required, and per-symbol/per-side breakdowns use a Bonferroni-adjusted confidence level. Verdicts: `EDGE_SUPPORTED`, `NEGATIVE_EDGE`, `INCONCLUSIVE`, `INSUFFICIENT_EVIDENCE`.
+
 ## 0.9.46
 - Train independent long and short signal heads with side-mirrored executable triple-barrier labels, position-PnL returns, independent meta-policies and analog memories.
 - Remove the unsafe 1 - p_up short-confidence shortcut; each side must clear its own core-training success prior plus the configured probability edge. Short signals remain disabled by default.
