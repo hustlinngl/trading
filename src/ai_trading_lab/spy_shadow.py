@@ -133,11 +133,12 @@ def track_spy(
     now = pd.Timestamp.now(tz="UTC") if as_of is None else pd.Timestamp(as_of)
     if now.tzinfo is None:
         raise ValueError("as_of must be timezone aware")
+    # Validate exactly once: a normalized UTC session label is NOT a raw NY
+    # provider timestamp and must never be shifted a second time.
     current = (
         fetch_adjusted_spy() if adjusted_history is None
         else validate_adjusted_history(only_closed_sessions(adjusted_history, as_of=now))
     )
-    current = validate_adjusted_history(current)
     report, model = _read_trusted_latest_model(root)
     journal = read_shadow_journal(root)
     if len({str(x.get("session")) for x in journal}) != len(journal):
