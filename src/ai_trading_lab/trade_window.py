@@ -643,17 +643,6 @@ def score_trade_window_frame(
     """
     frame = df.sort_index().copy() if isinstance(df, pd.DataFrame) else pd.DataFrame()
     index = frame.index
-    columns = {
-        "trade_window_available": False,
-        "trade_window_ready": False,
-        "trade_window_direction": "FLAT",
-        "trade_window_confidence": 0.0,
-        "trade_window_event_probability": 0.0,
-        "trade_window_reason": "unavailable",
-        "trade_window_report_precision": np.nan,
-        "trade_window_feature_missing_fraction": 1.0,
-    }
-
     def failed(reason, *, available=False, precision=np.nan):
         result = pd.DataFrame(index=index)
         result["trade_window_available"] = bool(available)
