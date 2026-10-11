@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Added `signal_scorecard` and the `scorecard` CLI command: a statistical verdict on the live signal journal (bootstrap confidence interval of the mean net return, Wilson hit-rate interval, probabilistic Sharpe ratio, profit factor, drawdown). Ambiguous outcomes are never imputed, a minimum sample is required, and per-symbol/per-side breakdowns use a Bonferroni-adjusted confidence level. Verdicts: `EDGE_SUPPORTED`, `NEGATIVE_EDGE`, `INCONCLUSIVE`, `INSUFFICIENT_EVIDENCE`.
+
 ## 0.9.45
 - Corrected the 3–24h specialist holdout economics to use the actual first executable barrier/gap exit or time-stop return instead of always pricing a candidate at the later full-horizon open.
 - Record exit location, holding duration and execution type in the specialist label path; ambiguous OHLC collision PnL remains unknown and is excluded from economic readiness.
