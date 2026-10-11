@@ -43,6 +43,18 @@ def _flat_market(rows=40):
     return frame
 
 
+def test_empty_holdout_returns_are_reported_as_unavailable():
+    from ai_trading_lab.trade_window import _net_return_metrics
+
+    mean, compounded = _net_return_metrics([])
+    assert mean is None
+    assert compounded is None
+
+    mean, compounded = _net_return_metrics([0.01, -0.005])
+    assert np.isclose(mean, 0.0025)
+    assert np.isclose(compounded, (1.01 * 0.995) - 1.0)
+
+
 def test_trade_window_retains_neutral_no_event_labels():
     frame = _flat_market()
     labels = _barrier_labels(frame, horizon_bars=3, min_bars=1, pt_atr=10.0, sl_atr=10.0)
