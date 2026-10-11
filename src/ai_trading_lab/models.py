@@ -10,6 +10,25 @@ from sklearn.isotonic import IsotonicRegression
 from sklearn.metrics import roc_auc_score, brier_score_loss, mean_squared_error
 from sklearn.linear_model import LogisticRegression
 
+def _finite_sample_conformal_quantile(residuals, level: float) -> float:
+    """Finite-sample split-conformal order statistic.
+
+    The usual coverage interpretation relies on exchangeability, which market
+    time series generally violate; this corrects the finite-sample rank only and
+    does not claim distribution-free coverage for temporal data.
+    """
+    values = np.asarray(residuals, dtype=float).reshape(-1)
+    values = values[np.isfinite(values)]
+    if not len(values):
+        return 0.0
+    rank = int(np.ceil((len(values) + 1) * float(np.clip(level, 0.50, 0.999))))
+    if rank > len(values):
+        # Correct conformal behavior at unattainably high levels is an unbounded
+        # interval, rather than silently understating the required quantile.
+        return float("inf")
+    return float(np.partition(values, rank - 1)[rank - 1])
+
+
 try:
     from xgboost import XGBClassifier, XGBRegressor
     HAVE_XGB = True
@@ -168,8 +187,8 @@ class SignalModel:
             self.conformal_scale_col = scale_col
             if len(residuals):
                 self.conformal_abs_residuals_ = residuals.astype(float)
-                self.conformal_abs_error_ = float(
-                    np.quantile(residuals, self.conformal_level, method='higher')
+                self.conformal_abs_error_ = _finite_sample_conformal_quantile(
+                    residuals, self.conformal_level
                 )
                 if scale_col is not None:
                     scale = np.maximum(
@@ -177,8 +196,8 @@ class SignalModel:
                     )
                     scaled = residuals / scale
                     self.conformal_scaled_residuals_ = scaled.astype(float)
-                    self.conformal_scaled_error_ = float(
-                        np.quantile(scaled, self.conformal_level, method='higher')
+                    self.conformal_scaled_error_ = _finite_sample_conformal_quantile(
+                        scaled, self.conformal_level
                     )
                 else:
                     self.conformal_scaled_residuals_ = None
@@ -223,9 +242,13 @@ class SignalModel:
     def set_conformal_level(self, level: float):
         self.conformal_level = float(np.clip(level, 0.50, 0.999))
         if self.conformal_abs_residuals_ is not None and len(self.conformal_abs_residuals_):
-            self.conformal_abs_error_ = float(np.quantile(self.conformal_abs_residuals_, self.conformal_level, method='higher'))
+            self.conformal_abs_error_ = _finite_sample_conformal_quantile(
+                self.conformal_abs_residuals_, self.conformal_level
+            )
         if self.conformal_scaled_residuals_ is not None and len(self.conformal_scaled_residuals_):
-            self.conformal_scaled_error_ = float(np.quantile(self.conformal_scaled_residuals_, self.conformal_level, method='higher'))
+            self.conformal_scaled_error_ = _finite_sample_conformal_quantile(
+                self.conformal_scaled_residuals_, self.conformal_level
+            )
         return self
 
     def _predict_raw(self, X: pd.DataFrame) -> pd.DataFrame:
