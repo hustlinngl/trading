@@ -1638,10 +1638,82 @@
       "purpose": "combined_live_policy_holdout_validation",
       "run_id": "combined_live_policy_holdout_validation:2026-10-11T13:33:45.349825+00:00",
       "scope": "DOT/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "652dfc2287508deb92a4e075:11",
+      "accessed_at": "2026-10-11T13:41:07.335524+00:00",
+      "dataset_fingerprint": "ab36d02b2f9e18ce9b0aecf5ddde9fe9",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "652dfc2287508deb92a4e075",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "19a8f5f18d83b89693da8922a46c1304",
+        "symbol": "ADA/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 10,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T13:41:07.335524+00:00",
+      "scope": "ADA/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "f3a1eb74ab40cf76c331ad6e:10",
+      "accessed_at": "2026-10-11T13:42:24.772893+00:00",
+      "dataset_fingerprint": "e09d86b87d15792a33b88b07adad9ce9",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "f3a1eb74ab40cf76c331ad6e",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "64d812b369ad67db7a6d7122f3e81565",
+        "symbol": "ATOM/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 9,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T13:42:24.772893+00:00",
+      "scope": "ATOM/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "2ff1148dcecce080899f4650:9",
+      "accessed_at": "2026-10-11T13:43:46.129155+00:00",
+      "dataset_fingerprint": "ceef5caa475c7d39771cea58f7b24055",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "2ff1148dcecce080899f4650",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "649ba2beb128b5b7a2401f80225edce4",
+        "symbol": "AVAX/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 8,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T13:43:46.129155+00:00",
+      "scope": "AVAX/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "e86ddf66b5595f5b99f2df1b:8",
+      "accessed_at": "2026-10-11T13:45:04.438461+00:00",
+      "dataset_fingerprint": "60325622a3d8d29e337d340815d0ada0",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "e86ddf66b5595f5b99f2df1b",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "96926dd529145057c179031a47872fc3",
+        "symbol": "BCH/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 7,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T13:45:04.438461+00:00",
+      "scope": "BCH/USDT|15m|adaptive_signal"
     }
   ],
   "schema_version": 2,
   "total_trials": 0,
   "trial_runs": [],
-  "updated_at": "2026-10-11T13:33:45.349825+00:00"
+  "updated_at": "2026-10-11T13:45:04.438461+00:00"
 }
