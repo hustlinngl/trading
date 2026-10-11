@@ -264,7 +264,7 @@ class AtlasApp(tk.Tk if tk is not None else object):
                         "Paper observation saved." if value["recorded_new_observation"]
                         else "No new observation; recorded history preserved."
                     )
-                    self._show("\\n".join([
+                    self._show("\n".join([
                         "SPY / FORWARD PAPER OBSERVATIONS",
                         "",
                         "These are research observations, NEVER market orders.",
