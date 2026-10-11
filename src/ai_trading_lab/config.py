@@ -60,7 +60,7 @@ class Settings:
     trade_window_enabled: bool = True
     trade_window_required_for_signal: bool = True
     trade_window_min_confidence: float = 0.80
-    trade_window_min_event_probability: float = 0.60
+    trade_window_min_event_probability: float = 0.02
     trade_window_min_expected_return: float = 0.0015
     trade_window_require_base_agreement: bool = True
     trade_window_min_hours: float = 3.0

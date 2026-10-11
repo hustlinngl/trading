@@ -11,12 +11,21 @@ from ai_trading_lab.trade_window import (
     BALANCED_PROBABILITY_SEMANTICS,
     _barrier_labels,
     _correct_balanced_class_probabilities,
+    _effective_min_event_probability,
     _fill_feature_frame,
     assess_trade_window,
     directional_event_probabilities,
     score_trade_window_frame,
     train_trade_window_backbone,
 )
+
+
+
+class _FixedProbabilityClassifier:
+    classes_ = np.asarray([-1, 0, 1])
+
+    def predict_proba(self, X):
+        return np.tile(np.asarray([[0.04, 0.40, 0.56]], dtype=float), (len(X), 1))
 
 
 def _flat_market(rows=40):
@@ -481,3 +490,68 @@ def test_vectorized_barrier_labels_match_reference_scan_on_mixed_ohlc_paths():
             equal_nan=True, err_msg=f"vectorized mismatch in {column}",
         )
     np.testing.assert_array_equal(actual["execution_status"].to_numpy(), statuses)
+
+
+
+def test_effective_event_probability_gate_uses_training_event_prior():
+    settings = load_settings("config.yaml")
+    settings.trade_window_min_event_probability = 0.02
+
+    threshold, event_prior = _effective_min_event_probability(
+        settings, {"-1": 2, "0": 95, "1": 3}
+    )
+
+    assert np.isclose(event_prior, 0.05)
+    assert np.isclose(threshold, 0.05)
+
+    settings.trade_window_min_event_probability = 0.06
+    threshold, event_prior = _effective_min_event_probability(
+        settings, {"-1": 2, "0": 95, "1": 3}
+    )
+    assert np.isclose(event_prior, 0.05)
+    assert np.isclose(threshold, 0.06)
+
+
+def test_live_event_gate_rejects_probability_below_natural_event_prior(tmp_path):
+    settings = load_settings("config.yaml")
+    settings.symbol = "BTC/USDT"
+    settings.trade_window_min_event_probability = 0.02
+    settings.trade_window_min_confidence = 0.80
+    settings.live_max_missing_feature_fraction = 1.0
+    frame = _flat_market(rows=40)
+    path = tmp_path / "prior-gated.joblib"
+    report = {
+        "production_ready": True,
+        "symbol": settings.symbol,
+        "timeframe": settings.timeframe,
+        "model_semantics_fingerprint": model_semantics_fingerprint(settings),
+        "deployment_semantics_fingerprint": deployment_semantics_fingerprint(settings),
+        "holdout_precision": 0.85,
+        "train_class_counts": {"-1": 2, "0": 95, "1": 3},
+        "probability_semantics": BALANCED_PROBABILITY_SEMANTICS,
+    }
+    joblib.dump(
+        {
+            "model": _FixedProbabilityClassifier(),
+            "feature_columns": ["ret_1"],
+            "fill_values": pd.Series({"ret_1": 0.0}),
+            "report": report,
+        },
+        path,
+    )
+
+    result = assess_trade_window(frame, settings, path, symbol=settings.symbol)
+
+    assert result["trade_window_available"] is True
+    assert result["trade_window_event_probability"] > settings.trade_window_min_event_probability
+    assert result["trade_window_event_probability"] < 0.05
+    assert result["trade_window_ready"] is False
+    assert result["trade_window_direction"] == "FLAT"
+
+
+def test_default_event_probability_floor_is_compatible_with_rare_event_scores():
+    result = directional_event_probabilities([0.004, 0.95, 0.046], [-1, 0, 1])
+
+    assert np.isclose(result["event_probability"], 0.05)
+    assert result["direction"] == "LONG"
+    assert result["direction_confidence"] > 0.80

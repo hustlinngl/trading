@@ -347,7 +347,7 @@ def deployment_semantics_fingerprint(settings) -> str:
         "trade_window_min_holdout_wilson": float(getattr(settings, "trade_window_min_holdout_wilson", 0.60)),
         "trade_window_min_holdout_trades": int(getattr(settings, "trade_window_min_holdout_trades", 12)),
         "trade_window_min_confidence": float(getattr(settings, "trade_window_min_confidence", 0.80)),
-        "trade_window_min_event_probability": float(getattr(settings, "trade_window_min_event_probability", 0.60)),
+        "trade_window_min_event_probability": float(getattr(settings, "trade_window_min_event_probability", 0.02)),
         "trade_window_min_net_return": float(getattr(settings, "trade_window_min_net_return", 0.0005)),
         "trade_window_require_base_agreement": bool(getattr(settings, "trade_window_require_base_agreement", True)),
         "trade_window_min_expected_return": float(getattr(settings, "trade_window_min_expected_return", 0.0015)),
