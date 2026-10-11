@@ -16,7 +16,7 @@ def test_rolling_window_uses_monthly_archives_and_latest_closed_daily_range():
         "start": "2024-10-01",
         "monthly_end": "2026-09-30",
         "recent_start": "2026-10-01",
-        "end": "2026-10-09",
+        "end": "2026-10-08",
     }
 
 
@@ -39,7 +39,7 @@ def test_rolling_window_normalizes_naive_clock_as_utc_and_validates_months():
         months=12,
     )
     assert window["start"] == "2025-10-01"
-    assert window["end"] == "2026-10-09"
+    assert window["end"] == "2026-10-08"
 
     with pytest.raises(ValueError, match="months must be >= 1"):
         rolling_closed_history_window(now=pd.Timestamp("2026-10-10T00:00:00Z"), months=0)
