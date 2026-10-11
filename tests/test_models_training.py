@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from ai_trading_lab.meta import MetaPolicy
 from ai_trading_lab.models import SignalModel
@@ -34,7 +35,7 @@ class _FakeRegressor:
         return 0.002 * X.iloc[:, 0].to_numpy(float) + self.offset
 
 
-def test_signal_model_refits_production_learners_on_all_rows_after_oos_calibration():
+def test_signal_model_keeps_calibrated_core_learners_as_the_deployed_model():
     n = 800
     index = pd.date_range("2025-01-01", periods=n, freq="15min", tz="UTC")
     x = pd.DataFrame({"feature": np.linspace(-2.0, 2.0, n)}, index=index)
@@ -54,11 +55,10 @@ def test_signal_model_refits_production_learners_on_all_rows_after_oos_calibrati
     # its labels are not used to fit ensemble weights, the calibrator, or intervals.
     assert model.calibration_oos_.index.equals(index[-36:])
     assert {"p_up", "p_up_raw"} <= set(model.calibration_oos_.columns)
-    assert model.fit_rows_ == n
-    assert clf_fit_lengths[-1] == n
-    assert reg_fit_lengths[-1] == n
-    assert clf_fit_lengths.count(n) == len(model.clfs)
-    assert reg_fit_lengths.count(n) == len(model.regs)
+    expected_core_rows = n - max(48, int(n * 0.15)) - 12
+    assert model.fit_rows_ == expected_core_rows
+    assert clf_fit_lengths == [expected_core_rows] * len(model.clfs)
+    assert reg_fit_lengths == [expected_core_rows] * len(model.regs)
 
     predictions = model.predict(x.tail(4))
     assert {"p_up_raw", "p_up"} <= set(predictions.columns)
@@ -119,3 +119,30 @@ def test_meta_policy_uses_oos_probability_and_training_time_return_features():
     assert np.isclose(frame.loc[index[0], "p_up"], 0.31)
     assert np.isclose(frame.loc[index[0], "expected_return_lcb"], 0.004)
     assert np.isclose(frame.loc[index[0], "expected_return_ucb"], 0.004)
+
+
+def test_nan_conformal_scale_uses_fitted_imputer_and_keeps_bounds_finite():
+    model = SignalModel()
+    model.clfs = [_FakeClassifier(0.0, [])]
+    model.regs = [_FakeRegressor(0.0, [])]
+    model.feature_cols = ["feature", "atr_pct"]
+    model.fill_values = pd.Series({"feature": 0.0, "atr_pct": 0.02})
+    model.weights_cls = np.array([1.0])
+    model.weights_reg = np.array([1.0])
+    model.calibrator = None
+    model.calibrator_fallback = None
+    model.conformal_scale_col = "atr_pct"
+    model.conformal_scaled_error_ = 2.0
+    model.conformal_abs_error_ = 0.0
+    model.ready = True
+    frame = pd.DataFrame({"feature": [0.5], "atr_pct": [np.nan]})
+
+    predictions = model.predict(frame)
+
+    assert np.isfinite(
+        predictions[["expected_return_lcb", "expected_return_ucb"]].to_numpy()
+    ).all()
+    assert (
+        predictions.loc[frame.index[0], "expected_return_ucb"]
+        - predictions.loc[frame.index[0], "expected_return_lcb"]
+    ) == pytest.approx(0.08)
