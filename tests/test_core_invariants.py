@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from ai_trading_lab.config import load_settings
-from ai_trading_lab.data import asof_join, drop_unclosed_tail, timeframe_offset, load_cached, fetch_ohlcv
+from ai_trading_lab.data import asof_join, drop_unclosed_tail, timeframe_offset, load_cached, fetch_ohlcv, fetch_ohlcv_incremental, cache_ohlcv
 from ai_trading_lab.master_tuner import _fold_cache_key
 from ai_trading_lab.risk import RiskEngine
 from ai_trading_lab.backtest import run_backtest, _stats
@@ -525,6 +525,31 @@ def test_fetch_ohlcv_fails_loudly_when_history_is_shorter_than_requested():
 
     with pytest.raises(RuntimeError, match=r"requested 1500 closed bars, received"):
         fetch_ohlcv(exchange, "BTC/USDT", "15m", limit=1500)
+
+
+def test_incremental_ohlcv_refreshes_a_full_but_stale_cache(tmp_path):
+    rows = _fake_ohlcv_rows(24)
+    exchange = _PaginatedFakeExchange(rows)
+    timestamps = pd.to_datetime([row[0] for row in rows], unit="ms", utc=True)
+    cached = pd.DataFrame(
+        {
+            "open": 100.0, "high": 101.0, "low": 99.0,
+            "close": 100.0, "volume": 10_000.0,
+        },
+        index=timestamps[5:10],
+    )
+    path = tmp_path / "ohlcv.parquet"
+    cache_ohlcv(cached, path)
+
+    result = fetch_ohlcv_incremental(
+        exchange, "BTC/USDT", "15m", path, target_bars=5
+    )
+
+    expected_last_closed = timestamps[-2]
+    assert len(result) == 5
+    assert result.index[-1] == expected_last_closed
+    assert result.index[-1] > cached.index[-1]
+    assert len(exchange.calls) >= 2
 
 
 def test_sortino_uses_root_mean_square_of_negative_returns():

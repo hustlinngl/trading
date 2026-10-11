@@ -146,18 +146,25 @@ def fetch_ohlcv_incremental(exchange, symbol: str, timeframe: str, cache_path: s
     try:
         combined = cached.copy()
         cursor = since
-        while len(combined) < target_bars:
-            need = min(1000, target_bars - len(combined) + 2)
-            fresh = fetch_ohlcv(exchange, symbol, timeframe, need, since=cursor)
+        # Refresh the tail even when the cache already contains target_bars.
+        # Fetch unclosed rows during pagination so an in-progress candle at the
+        # end of the exchange response cannot prematurely stop a stale-cache catch-up.
+        while True:
+            need = min(1000, max(3, target_bars - len(combined) + 2))
+            fresh = fetch_ohlcv(
+                exchange, symbol, timeframe, need, since=cursor, include_unclosed=True
+            )
             if fresh.empty:
                 break
             combined = pd.concat([combined, fresh]).sort_index()
             combined = _deduplicate_ohlcv(combined)
             last = int(fresh.index[-1].timestamp() * 1000)
             next_cursor = last + tf_ms
-            if next_cursor <= cursor or len(fresh) < need:
+            if next_cursor <= cursor:
                 break
             cursor = next_cursor
+            if len(fresh) < need:
+                break
             time.sleep(max(float(getattr(exchange, 'rateLimit', 0)) / 1000.0, 0.0))
         combined = combined.sort_index()
         if not include_unclosed:
