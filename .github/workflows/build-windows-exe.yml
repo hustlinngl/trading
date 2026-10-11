@@ -24,6 +24,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -212,6 +214,8 @@ jobs:
       - name: Persist research ledger after bundled validation
         if: always() && steps.restore-ledger.outcome == 'success'
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           test -s data/research_ledger.json
@@ -233,7 +237,7 @@ jobs:
             exit 0
           fi
           git -C "$RUNNER_TEMP/research-ledger" commit -m "chore: persist research governance ledger from package run ${GITHUB_RUN_ID}"
-          git -C "$RUNNER_TEMP/research-ledger" push origin HEAD:refs/heads/research-ledger
+          git -C "$RUNNER_TEMP/research-ledger" push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/research-ledger
 
       - name: Upload model readiness diagnostics when packaging is blocked
         if: failure()
