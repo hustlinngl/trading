@@ -548,6 +548,7 @@ def test_base_holdout_report_records_timeframe_provenance(monkeypatch, tmp_path)
     class FakeEngine:
         def __init__(self, _settings):
             self.model = FakeModel()
+            self.short_model = FakeModel()
 
         def fit(self, _frame):
             return None
