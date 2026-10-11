@@ -918,10 +918,280 @@
       "purpose": "combined_live_policy_holdout_validation",
       "run_id": "combined_live_policy_holdout_validation:2026-10-11T01:59:32.380279+00:00",
       "scope": "XRP/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "652dfc2287508deb92a4e075:5",
+      "accessed_at": "2026-10-11T02:27:28.344227+00:00",
+      "dataset_fingerprint": "ab36d02b2f9e18ce9b0aecf5ddde9fe9",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "652dfc2287508deb92a4e075",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "19a8f5f18d83b89693da8922a46c1304",
+        "symbol": "ADA/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 4,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T02:27:28.344227+00:00",
+      "scope": "ADA/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "f3a1eb74ab40cf76c331ad6e:5",
+      "accessed_at": "2026-10-11T02:29:20.093602+00:00",
+      "dataset_fingerprint": "e09d86b87d15792a33b88b07adad9ce9",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "f3a1eb74ab40cf76c331ad6e",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "64d812b369ad67db7a6d7122f3e81565",
+        "symbol": "ATOM/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 4,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T02:29:20.093602+00:00",
+      "scope": "ATOM/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "2ff1148dcecce080899f4650:5",
+      "accessed_at": "2026-10-11T02:31:17.952871+00:00",
+      "dataset_fingerprint": "ceef5caa475c7d39771cea58f7b24055",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "2ff1148dcecce080899f4650",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "649ba2beb128b5b7a2401f80225edce4",
+        "symbol": "AVAX/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 4,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T02:31:17.952871+00:00",
+      "scope": "AVAX/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "e86ddf66b5595f5b99f2df1b:5",
+      "accessed_at": "2026-10-11T02:33:09.659451+00:00",
+      "dataset_fingerprint": "60325622a3d8d29e337d340815d0ada0",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "e86ddf66b5595f5b99f2df1b",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "96926dd529145057c179031a47872fc3",
+        "symbol": "BCH/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 4,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T02:33:09.659451+00:00",
+      "scope": "BCH/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "11d256c7ab1e53668d107e38:5",
+      "accessed_at": "2026-10-11T02:35:02.663583+00:00",
+      "dataset_fingerprint": "caabd972f1fd46f5a287b291d8954fed",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "11d256c7ab1e53668d107e38",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "f3451bac4bd94a2c7899212cd24a0f4f",
+        "symbol": "BNB/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 4,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T02:35:02.663583+00:00",
+      "scope": "BNB/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "c4f302b4f2af35aee000a7c7:5",
+      "accessed_at": "2026-10-11T02:36:56.577300+00:00",
+      "dataset_fingerprint": "465131435c053ebbf7eec1233cd6a578",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "c4f302b4f2af35aee000a7c7",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "e7a85367de6c42e81e085bcc93294a0f",
+        "symbol": "BTC/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 4,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T02:36:56.577300+00:00",
+      "scope": "BTC/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "3ff0ab0b443ccfd63a1e33e9:4",
+      "accessed_at": "2026-10-11T02:38:45.846601+00:00",
+      "dataset_fingerprint": "a9695929d2d4d94918b8064b4cfe89dd",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "3ff0ab0b443ccfd63a1e33e9",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "dbf41803758c4722a25fdbf22b8a2979",
+        "symbol": "DOGE/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 3,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T02:38:45.844590+00:00",
+      "scope": "DOGE/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "6b7502f48447eed6a800a241:4",
+      "accessed_at": "2026-10-11T02:40:39.900233+00:00",
+      "dataset_fingerprint": "5f69ddf3853152b6c5b107cf78c8efb5",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "6b7502f48447eed6a800a241",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "703c4047d0a28a5a4621896d2f89b975",
+        "symbol": "DOT/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 3,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T02:40:39.900233+00:00",
+      "scope": "DOT/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "691ff04139a63370a094e8f2:4",
+      "accessed_at": "2026-10-11T02:42:32.216217+00:00",
+      "dataset_fingerprint": "e26b030f8f54d961ea413380b5a89938",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "691ff04139a63370a094e8f2",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "e0e4edfb0a6cd61713dac360b38e6c05",
+        "symbol": "ETC/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 3,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T02:42:32.216217+00:00",
+      "scope": "ETC/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "887477fa9a688a0d0ff5b79d:4",
+      "accessed_at": "2026-10-11T02:44:34.332116+00:00",
+      "dataset_fingerprint": "1722a000f375940ca9dfe1348b4b7302",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "887477fa9a688a0d0ff5b79d",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "3bf06d41bd7931797dda6f69b37e1ceb",
+        "symbol": "ETH/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 3,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T02:44:34.332116+00:00",
+      "scope": "ETH/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "2c7847cea5ebbc9bd7243204:4",
+      "accessed_at": "2026-10-11T02:46:36.672296+00:00",
+      "dataset_fingerprint": "bb8b6d27868fc160a74f2b2716f4e9ee",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "2c7847cea5ebbc9bd7243204",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "27a364ebe56861a3e16d3643efd1d19e",
+        "symbol": "LINK/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 3,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T02:46:36.672296+00:00",
+      "scope": "LINK/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "3f9f14abf6d15ab292a3f875:4",
+      "accessed_at": "2026-10-11T02:48:37.615321+00:00",
+      "dataset_fingerprint": "cc0873c1f0a4dca0160039c02eb5cbc8",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "3f9f14abf6d15ab292a3f875",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "a4ac95497325da600b22036e6a6ec032",
+        "symbol": "LTC/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 3,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T02:48:37.615321+00:00",
+      "scope": "LTC/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "1b68d616504a21c902cbd42d:4",
+      "accessed_at": "2026-10-11T02:50:38.131787+00:00",
+      "dataset_fingerprint": "5b3245e82500d5087a5230467c6392fe",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "1b68d616504a21c902cbd42d",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "ca985b66aa255b685f5836a621aaa195",
+        "symbol": "SOL/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 3,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T02:50:38.131787+00:00",
+      "scope": "SOL/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "6628d4bcb08f66d2c7279225:4",
+      "accessed_at": "2026-10-11T02:52:39.277709+00:00",
+      "dataset_fingerprint": "ee0352e45e0d1b4d23492cdd80f8debe",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "6628d4bcb08f66d2c7279225",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "a56ea1a4ec9dc9d401295427433685fd",
+        "symbol": "UNI/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 3,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T02:52:39.277709+00:00",
+      "scope": "UNI/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "e98b999edc01842da39ef762:4",
+      "accessed_at": "2026-10-11T02:54:45.950234+00:00",
+      "dataset_fingerprint": "35cab599302714d5d1ec012e61d11ecf",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "e98b999edc01842da39ef762",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "f49b2c37460c45b04e9ff10c4078febf",
+        "symbol": "XRP/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 3,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T02:54:45.950234+00:00",
+      "scope": "XRP/USDT|15m|adaptive_signal"
     }
   ],
   "schema_version": 2,
   "total_trials": 0,
   "trial_runs": [],
-  "updated_at": "2026-10-11T01:59:32.380279+00:00"
+  "updated_at": "2026-10-11T02:54:45.950234+00:00"
 }
