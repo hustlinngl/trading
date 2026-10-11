@@ -6,6 +6,7 @@ API keys, broker connection, order entry or automatic publication of signals.
 from __future__ import annotations
 
 import argparse
+import csv
 import queue
 import sys
 import threading
@@ -151,17 +152,19 @@ class AtlasApp(tk.Tk if tk is not None else object):
         self.status_label.pack(anchor="w", pady=(0, 20))
 
         tk.Frame(left, bg=LINE, height=1).pack(fill="x", pady=(0, 18))
-        self._label(left, "HOW THE RESULT IS JUDGED", bg=SURFACE, color=PINK_PALE, size=11, bold=True).pack(anchor="w")
-        for explanation in (
-            "Train on the oldest 60% of available sessions.",
-            "Validate on the following 20%; evaluate on the latest 20%.",
-            "Compare after-cost returns against dividend-aware buy & hold.",
-            "Store a new, dated study and model. Never overwrite old runs.",
-        ):
-            self._label(
-                left, "•  " + explanation, bg=SURFACE, color=MUTED, size=10,
-                wraplength=460, pady=5,
-            ).pack(anchor="w")
+        self._label(
+            left, "SPY VS. MODEL  /  HISTORICAL TEST", bg=SURFACE,
+            color=PINK_PALE, size=10, bold=True,
+        ).pack(anchor="w", pady=(0, 10))
+        self.chart = tk.Canvas(
+            left, width=440, height=160, bg=SURFACE,
+            highlightthickness=0, bd=0,
+        )
+        self.chart.pack(fill="x")
+        self._label(
+            left, "● Model      ◇ Adjusted SPY buy & hold", bg=SURFACE,
+            color=MUTED, size=10,
+        ).pack(anchor="w", pady=(5, 0))
 
         right = tk.Frame(content, bg=SURFACE_ALT, padx=24, pady=24)
         right.grid(row=0, column=1, sticky="nsew")
@@ -192,6 +195,54 @@ class AtlasApp(tk.Tk if tk is not None else object):
             color=MUTED, size=9,
         ).pack(anchor="w")
 
+    def _draw_chart(self, study: dict | None):
+        """Draw saved normalized equity curves without another chart runtime."""
+        self.chart.delete("all")
+        if not study:
+            return
+        run_id = str(study.get("run_id", ""))
+        if not run_id or not run_id.replace("_", "").isalnum():
+            return
+        path = STORAGE / "models" / "spy_research" / run_id / "test_equity_curve.csv"
+        if not path.is_file():
+            return
+        try:
+            with path.open(encoding="utf-8", newline="") as handle:
+                points = list(csv.DictReader(handle))
+            model = [float(p["research_equity"]) for p in points]
+            market = [float(p["buy_hold_equity"]) for p in points]
+        except (OSError, KeyError, ValueError):
+            return
+        if len(model) < 2 or len(model) != len(market):
+            return
+        import math
+        if not all(math.isfinite(v) and v > 0 for v in model + market):
+            return
+        width = max(200, self.chart.winfo_width())
+        height = 160
+        margin = 12
+        all_values = model + market + [1.0]
+        low, high = min(all_values), max(all_values)
+        if high - low < 1e-10:
+            high = low + 0.01
+
+        def xy(values):
+            return [
+                (
+                    margin + i * (width - 2 * margin) / (len(values) - 1),
+                    height - margin - (v - low) * (height - 2 * margin) / (high - low),
+                )
+                for i, v in enumerate(values)
+            ]
+
+        self.chart.create_line(
+            margin, height - margin, width - margin, height - margin,
+            fill=LINE, width=1,
+        )
+        for sequence, tint, stroke in ((market, "#C5A0E5", 2), (model, PINK, 3)):
+            coords = [v for point in xy(sequence) for v in point]
+            self.chart.create_line(*coords, fill=tint, width=stroke, smooth=False)
+
     def _show(self, content: str):
         self.details.configure(state="normal")
         self.details.delete("1.0", "end")
@@ -213,13 +264,16 @@ class AtlasApp(tk.Tk if tk is not None else object):
             self.archive.selection_set(index)
             self.archive.see(index)
             self._show(summarize(self.studies[index]))
+            self._draw_chart(self.studies[index])
         else:
+            self._draw_chart(None)
             self._show("No study has been run yet.\n\nUse Analyze SPY to create your first locally saved research experiment.")
 
     def _selection_changed(self, _event=None):
         selection = self.archive.curselection()
         if selection and selection[0] < len(self.studies):
             self._show(summarize(self.studies[selection[0]]))
+            self._draw_chart(self.studies[selection[0]])
 
     def _start(self):
         self._launch("study")
