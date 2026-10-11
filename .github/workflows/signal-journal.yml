@@ -31,14 +31,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PAPER_ONLY: 'true'
       SANDBOX: 'true'
       JOURNAL_BRANCH: signal-journal
       SYMBOLS: BTC/USDT,ETH/USDT,BNB/USDT,SOL/USDT,XRP/USDT,ADA/USDT,DOGE/USDT,AVAX/USDT,LINK/USDT,DOT/USDT,LTC/USDT,BCH/USDT,ATOM/USDT,UNI/USDT,ETC/USDT
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:
@@ -63,6 +63,8 @@ jobs:
 
       - name: Fetch validated models from the latest package build
         id: models
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -uo pipefail
           echo "ready=false" >> "$GITHUB_OUTPUT"
@@ -120,6 +122,8 @@ jobs:
           { echo '### Signal scorecard'; echo '```'; cat logs/signal_scorecard.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Persist journal and scorecard
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           if [ ! -s logs/live_signal_history.jsonl ]; then
@@ -129,7 +133,7 @@ jobs:
           J="$RUNNER_TEMP/journal"
           rm -rf "$J"
           git init -q "$J"
-          git -C "$J" remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git -C "$J" remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
           if git -C "$J" fetch -q --depth 1 origin "$JOURNAL_BRANCH" 2>/dev/null; then
             git -C "$J" checkout -q -B "$JOURNAL_BRANCH" FETCH_HEAD
           else
@@ -146,4 +150,4 @@ jobs:
             exit 0
           fi
           git -C "$J" commit -q -m "chore: signal journal update from run ${GITHUB_RUN_ID}"
-          git -C "$J" push -q origin "HEAD:refs/heads/${JOURNAL_BRANCH}"
+          git -C "$J" push -q "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${JOURNAL_BRANCH}"
