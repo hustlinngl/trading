@@ -22,8 +22,8 @@ def _ohlcv(index: pd.DatetimeIndex) -> pd.DataFrame:
 def test_data_quality_diagnostics_reports_exact_gap_boundaries() -> None:
     start = pd.Timestamp("2026-01-01T00:00:00Z")
     index = start + pd.to_timedelta(
-        [0, 1, 2, 3, 12, 13, 14, 15], unit="15min"
-    )
+        [0, 1, 2, 3, 12, 13, 14, 15], unit="m"
+    ) * 15
     frame = _ohlcv(pd.DatetimeIndex(index))
     quality = audit_market_data(frame, "15m")
 
