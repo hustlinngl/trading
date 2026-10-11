@@ -7,7 +7,7 @@ import math
 from .objectives import robust_performance_utility
 
 # Increment this when calibration behavior changes; old bundles must be retrained.
-PROBABILITY_CALIBRATION_SEMANTICS = "purged_temporal_oos_isotonic_platt_v2"
+PROBABILITY_CALIBRATION_SEMANTICS = "purged_temporal_oos_isotonic_platt_core_deployed_finite_sample_conformal_v3"
 
 
 
