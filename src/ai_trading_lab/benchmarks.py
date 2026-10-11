@@ -48,7 +48,8 @@ def _atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
         ],
         axis=1,
     ).max(axis=1)
-    # Benchmark controls must remain causal too; never backfill from future bars.\n    return tr.rolling(period, min_periods=1).mean()
+    # Benchmark controls must remain causal too; never backfill from future bars.
+    return tr.rolling(period, min_periods=1).mean()
 
 
 def _baseline_actions(df: pd.DataFrame, kind: str) -> pd.Series:

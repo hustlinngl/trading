@@ -15,6 +15,7 @@ from ai_trading_lab.backtest import run_backtest, _stats
 from ai_trading_lab.engine import AdaptiveEngine
 from ai_trading_lab.features import make_features, make_oos_features
 from ai_trading_lab.labels import triple_barrier_labels
+from ai_trading_lab.benchmarks import _atr
 
 
 def market_frame(n: int = 240, freq: str = "15min") -> pd.DataFrame:
@@ -554,3 +555,14 @@ def test_backtest_skips_entries_when_atr_is_missing_instead_of_inventing_risk():
     )
 
     assert result.trades.empty
+
+
+def test_benchmark_atr_returns_finite_positive_series_for_trade_simulation():
+    market = market_frame(64)
+    atr = _atr(market)
+
+    assert isinstance(atr, pd.Series)
+    assert atr.index.equals(market.index)
+    assert atr.notna().all()
+    assert np.isfinite(atr.to_numpy(dtype=float)).all()
+    assert (atr > 0).all()
