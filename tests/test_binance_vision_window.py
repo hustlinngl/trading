@@ -130,3 +130,25 @@ def test_validate_history_window_rejects_missing_start_and_invalid_interval():
 
     with pytest.raises(ValueError, match="unsupported_history_interval"):
         validate_history_window(frame, "2026-10-01", "2026-10-09", interval="15xyz")
+
+
+
+def test_validate_history_window_rejects_even_one_missing_first_candle():
+    from ai_trading_lab.binance_vision import validate_history_window
+
+    full = pd.date_range(
+        "2026-10-01T00:00:00Z",
+        "2026-10-09T23:45:00Z",
+        freq="15min",
+    )
+    frame = pd.DataFrame({
+        "timestamp": full[1:],
+        "open": 1.0,
+        "high": 1.0,
+        "low": 1.0,
+        "close": 1.0,
+        "volume": 1.0,
+    })
+
+    with pytest.raises(ValueError, match="historical_window_start_missing"):
+        validate_history_window(frame, "2026-10-01", "2026-10-09", interval="15m")
