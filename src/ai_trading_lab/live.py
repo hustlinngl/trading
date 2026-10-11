@@ -108,8 +108,22 @@ def _funding_snapshot(exchange,symbol,settings):
         bar_delta=timeframe_offset(getattr(settings,"timeframe","15m"))
         bar_hours=max(bar_delta.total_seconds()/3600.0,1e-9)
         holding_hours=max(float(getattr(settings,"max_holding_bars",getattr(settings,"horizon_bars",8)))*bar_hours,bar_hours)
-        funding_hours=float(snapshot.get("fundingInterval") or getattr(settings,"funding_interval_hours",8.0)*3600.0)/3600.0
-        intervals=max(1,int(np.ceil(holding_hours/max(funding_hours,1e-9))))
+        raw_interval = snapshot.get("fundingInterval")
+        if raw_interval in (None, ""):
+            funding_hours = float(getattr(settings, "funding_interval_hours", 8.0))
+        elif isinstance(raw_interval, str):
+            interval_text = raw_interval.strip()
+            if interval_text.replace(".", "", 1).isdigit():
+                # Numeric CCXT values follow the existing seconds convention.
+                funding_hours = float(interval_text) / 3600.0
+            else:
+                funding_hours = pd.to_timedelta(interval_text).total_seconds() / 3600.0
+        else:
+            # Preserve compatibility with exchanges that report seconds.
+            funding_hours = float(raw_interval) / 3600.0
+        if not np.isfinite(funding_hours) or funding_hours <= 0:
+            raise ValueError("invalid_funding_interval")
+        intervals=max(1,int(np.ceil(holding_hours/funding_hours)))
         return {"market_type":market_type,"funding_rate":rate,"funding_cost_return":abs(rate)*intervals,"funding_intervals":intervals,"funding_data_missing":False}
     except Exception as exc:
         return {"market_type":market_type,"funding_rate":None,"funding_cost_return":0.0,"funding_data_missing":True,"funding_error":f"{type(exc).__name__}:{exc}"}
