@@ -7,7 +7,7 @@ on:
   pull_request:
     paths:
       - 'sakura_atlas.py'
-      - 'src/ai_trading_lab/spy_research.py'
+      - 'src/ai_trading_lab/spy_*.py'
       - 'requirements-atlas.txt'
       - '.github/workflows/build-atlas-windows.yml'
 
@@ -48,8 +48,10 @@ jobs:
       - name: Smoke test frozen app
         shell: pwsh
         run: |
-          & ".\dist\SakuraAtlas.exe" --check
-          if ($LASTEXITCODE -ne 0) { throw "Frozen SakuraAtlas --check failed" }
+          # Windowed executables do not reliably set LASTEXITCODE in pwsh.
+          $exe = (Resolve-Path '.\dist\SakuraAtlas.exe').Path
+          $proc = Start-Process -FilePath $exe -ArgumentList '--check' -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "Frozen SakuraAtlas --check failed: $($proc.ExitCode)" }
       - name: Upload verified desktop EXE
         uses: actions/upload-artifact@v4
         with:
