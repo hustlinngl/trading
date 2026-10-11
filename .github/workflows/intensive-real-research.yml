@@ -95,13 +95,14 @@ jobs:
           python run_cross_exchange_validation.py --trials 24 --holdout-frac 0.15
 
       - name: Upload research reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: intensive-real-research-${{ github.run_id }}
           path: |
             logs/intensive_real/**
             data/intensive_real/merged/**
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: Persist research ledger across runs
         if: always()
