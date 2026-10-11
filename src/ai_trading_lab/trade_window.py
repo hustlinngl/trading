@@ -34,6 +34,11 @@ def _barrier_labels(df, horizon_bars=96, min_bars=12, pt_atr=1.25, sl_atr=0.90):
     exit_position and holding_bars describe the actual executable path whether
     or not that exit qualifies as a 3–24h event. OHLC collisions with unknown
     intrabar order remain non-executable and have no fabricated return.
+
+    The barrier scan is vectorized across decision rows for each holding bar.
+    This preserves the per-row event priority while avoiding the previous
+    Python-level loop over every row *and* every bar (O(rows * horizon) Python
+    iterations), which made full-universe historical training unnecessarily slow.
     """
     horizon = int(horizon_bars)
     minimum = int(min_bars)
@@ -51,100 +56,141 @@ def _barrier_labels(df, horizon_bars=96, min_bars=12, pt_atr=1.25, sl_atr=0.90):
     highs = pd.to_numeric(x["high"], errors="coerce").to_numpy(float)
     lows = pd.to_numeric(x["low"], errors="coerce").to_numpy(float)
     atr = _atr(x).to_numpy(float)
-    directions = np.full(len(x), np.nan, dtype=float)
-    gross_returns = np.full(len(x), np.nan, dtype=float)
-    exit_positions = np.full(len(x), np.nan, dtype=float)
-    holding_bars = np.full(len(x), np.nan, dtype=float)
-    execution_status = np.full(len(x), "unresolved", dtype=object)
+    size = len(x)
+    directions = np.full(size, np.nan, dtype=float)
+    gross_returns = np.full(size, np.nan, dtype=float)
+    exit_positions = np.full(size, np.nan, dtype=float)
+    holding_bars = np.full(size, np.nan, dtype=float)
+    execution_status = np.full(size, "unresolved", dtype=object)
 
     # The time-stop exits at open[i + horizon + 1]. Inspect only the horizon
     # holding candles: i+1 through i+horizon, not the exit candle itself.
-    for i in range(max(0, len(x) - horizon - 1)):
-        atr_i = atr[i]
-        entry_i = i + 1
-        exit_open_i = entry_i + horizon
-        entry = opens[entry_i]
-        time_stop_price = opens[exit_open_i]
-        if (
-            not np.isfinite(atr_i) or atr_i <= 0
-            or not np.isfinite(entry) or entry <= 0
-            or not np.isfinite(time_stop_price) or time_stop_price <= 0
-        ):
-            continue
+    if size <= horizon + 1:
+        return pd.DataFrame(
+            {
+                "direction": directions,
+                "margin": np.abs(directions),
+                "gross_return": gross_returns,
+                "exit_position": exit_positions,
+                "holding_bars": holding_bars,
+                "execution_status": execution_status,
+            },
+            index=x.index,
+        )
 
-        upper = entry + pt * atr_i
-        lower = entry - sl * atr_i
-        outcome = 0.0
-        realized = time_stop_price / entry - 1.0
-        realized_exit_position = float(exit_open_i)
-        realized_holding_bars = float(horizon)
-        realized_status = "time_stop"
+    decisions = np.arange(size - horizon - 1, dtype=int)
+    entry_positions = decisions + 1
+    time_stop_positions = decisions + horizon + 1
+    entries = opens[entry_positions]
+    time_stop_prices = opens[time_stop_positions]
+    valid_initial = (
+        np.isfinite(atr[decisions])
+        & (atr[decisions] > 0)
+        & np.isfinite(entries)
+        & (entries > 0)
+        & np.isfinite(time_stop_prices)
+        & (time_stop_prices > 0)
+    )
+    active = decisions[valid_initial]
+    if active.size:
+        active_entries = opens[active + 1]
+        active_upper = active_entries + pt * atr[active]
+        active_lower = active_entries - sl * atr[active]
+        directions[active] = 0.0
+        gross_returns[active] = opens[active + horizon + 1] / active_entries - 1.0
+        exit_positions[active] = (active + horizon + 1).astype(float)
+        holding_bars[active] = float(horizon)
+        execution_status[active] = "time_stop"
 
-        for j in range(entry_i, exit_open_i):
-            bar_open = opens[j]
-            if not np.isfinite(bar_open) or bar_open <= 0:
-                outcome = np.nan
-                realized = np.nan
-                realized_exit_position = np.nan
-                realized_holding_bars = np.nan
-                realized_status = "invalid_ohlc"
+        for held in range(horizon):
+            if active.size == 0:
                 break
+            bar_positions = active + 1 + held
+            bar_open = opens[bar_positions]
 
-            # Elapsed intervals are measured from the executable entry open.
-            held = j - entry_i
-            # Opening gaps execute at their own price before the intrabar path.
-            if bar_open >= upper:
-                outcome = 1.0 if held >= minimum else 0.0
-                realized = bar_open / entry - 1.0
-                realized_exit_position = float(j)
-                realized_holding_bars = float(max(1, held + 1))
-                realized_status = "opening_gap_take_profit"
+            invalid_open = ~np.isfinite(bar_open) | (bar_open <= 0)
+            if invalid_open.any():
+                bad = active[invalid_open]
+                directions[bad] = np.nan
+                gross_returns[bad] = np.nan
+                exit_positions[bad] = np.nan
+                holding_bars[bad] = np.nan
+                execution_status[bad] = "invalid_ohlc"
+            keep = ~invalid_open
+            active, bar_positions = active[keep], bar_positions[keep]
+            active_upper, active_lower = active_upper[keep], active_lower[keep]
+            if active.size == 0:
                 break
-            if bar_open <= lower:
-                outcome = -1.0 if held >= minimum else 0.0
-                realized = bar_open / entry - 1.0
-                realized_exit_position = float(j)
-                realized_holding_bars = float(max(1, held + 1))
-                realized_status = "opening_gap_stop_loss"
-                break
+            bar_open = opens[bar_positions]
+            active_entries = opens[active + 1]
 
-            if not np.isfinite(highs[j]) or not np.isfinite(lows[j]):
-                outcome = np.nan
-                realized = np.nan
-                realized_exit_position = np.nan
-                realized_holding_bars = np.nan
-                realized_status = "invalid_ohlc"
-                break
-            hit_up = highs[j] >= upper
-            hit_down = lows[j] <= lower
-            if hit_up and hit_down:
-                # Class 0 marks no qualifying event; economics stay unknown.
-                outcome = 0.0
-                realized = np.nan
-                realized_exit_position = float(j)
-                realized_holding_bars = float(max(1, held + 1))
-                realized_status = "ambiguous_intrabar"
-                break
-            if hit_up:
-                outcome = 1.0 if held >= minimum else 0.0
-                realized = upper / entry - 1.0
-                realized_exit_position = float(j)
-                realized_holding_bars = float(max(1, held + 1))
-                realized_status = "take_profit"
-                break
-            if hit_down:
-                outcome = -1.0 if held >= minimum else 0.0
-                realized = lower / entry - 1.0
-                realized_exit_position = float(j)
-                realized_holding_bars = float(max(1, held + 1))
-                realized_status = "stop_loss"
+            # Opening gaps take precedence over intrabar high/low checks.
+            gap_up = bar_open >= active_upper
+            gap_down = (~gap_up) & (bar_open <= active_lower)
+            gap = gap_up | gap_down
+            if gap.any():
+                idx = active[gap]
+                directions[idx] = np.where(held >= minimum, np.where(gap_up[gap], 1.0, -1.0), 0.0)
+                gross_returns[idx] = bar_open[gap] / active_entries[gap] - 1.0
+                exit_positions[idx] = bar_positions[gap].astype(float)
+                holding_bars[idx] = float(max(1, held + 1))
+                execution_status[idx] = np.where(gap_up[gap], "opening_gap_take_profit", "opening_gap_stop_loss")
+            keep = ~gap
+            active, bar_positions = active[keep], bar_positions[keep]
+            active_upper, active_lower = active_upper[keep], active_lower[keep]
+            active_entries = active_entries[keep]
+            if active.size == 0:
                 break
 
-        directions[i] = outcome
-        gross_returns[i] = realized
-        exit_positions[i] = realized_exit_position
-        holding_bars[i] = realized_holding_bars
-        execution_status[i] = realized_status
+            bar_high = highs[bar_positions]
+            bar_low = lows[bar_positions]
+            invalid_range = ~np.isfinite(bar_high) | ~np.isfinite(bar_low)
+            if invalid_range.any():
+                bad = active[invalid_range]
+                directions[bad] = np.nan
+                gross_returns[bad] = np.nan
+                exit_positions[bad] = np.nan
+                holding_bars[bad] = np.nan
+                execution_status[bad] = "invalid_ohlc"
+            keep = ~invalid_range
+            active, bar_positions = active[keep], bar_positions[keep]
+            active_upper, active_lower = active_upper[keep], active_lower[keep]
+            active_entries = active_entries[keep]
+            bar_high, bar_low = bar_high[keep], bar_low[keep]
+            if active.size == 0:
+                break
+
+            hit_up = bar_high >= active_upper
+            hit_down = bar_low <= active_lower
+            ambiguous = hit_up & hit_down
+            if ambiguous.any():
+                idx = active[ambiguous]
+                directions[idx] = 0.0
+                gross_returns[idx] = np.nan
+                exit_positions[idx] = bar_positions[ambiguous].astype(float)
+                holding_bars[idx] = float(max(1, held + 1))
+                execution_status[idx] = "ambiguous_intrabar"
+
+            resolved = ambiguous | hit_up | hit_down
+            unambiguous_up = hit_up & ~hit_down
+            unambiguous_down = hit_down & ~hit_up
+            if unambiguous_up.any():
+                idx = active[unambiguous_up]
+                directions[idx] = 1.0 if held >= minimum else 0.0
+                gross_returns[idx] = active_upper[unambiguous_up] / active_entries[unambiguous_up] - 1.0
+                exit_positions[idx] = bar_positions[unambiguous_up].astype(float)
+                holding_bars[idx] = float(max(1, held + 1))
+                execution_status[idx] = "take_profit"
+            if unambiguous_down.any():
+                idx = active[unambiguous_down]
+                directions[idx] = -1.0 if held >= minimum else 0.0
+                gross_returns[idx] = active_lower[unambiguous_down] / active_entries[unambiguous_down] - 1.0
+                exit_positions[idx] = bar_positions[unambiguous_down].astype(float)
+                holding_bars[idx] = float(max(1, held + 1))
+                execution_status[idx] = "stop_loss"
+            active = active[~resolved]
+            active_upper = active_upper[~resolved]
+            active_lower = active_lower[~resolved]
 
     return pd.DataFrame(
         {
