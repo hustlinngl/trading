@@ -31,6 +31,29 @@ SIDE_COST_BPS = 7.0
 MIN_OBSERVATIONS = 600
 
 
+def only_closed_sessions(frame: pd.DataFrame, *, as_of=None) -> pd.DataFrame:
+    """Conservatively exclude today's incomplete US trading session.
+
+    Yahoo can return a forming daily candle during market hours. Requiring
+    17:00 US/Eastern (rather than exactly 16:00) adds a publication buffer.
+    Special early-close sessions are intentionally deferred until then.
+    """
+    if frame.empty:
+        return frame
+    if not isinstance(frame.index, pd.DatetimeIndex) or frame.index.tz is None:
+        raise ValueError("Session timestamps must be timezone aware")
+    now = pd.Timestamp.now(tz="UTC") if as_of is None else pd.Timestamp(as_of)
+    if now.tzinfo is None:
+        raise ValueError("as_of must be timezone aware")
+    today = now.tz_convert("America/New_York")
+    last_session = frame.index[-1].tz_convert("America/New_York").date()
+    if last_session > today.date():
+        raise ValueError("Provider returned a future-dated SPY candle")
+    if last_session == today.date() and today.hour < 17:
+        return frame.iloc[:-1].copy()
+    return frame
+
+
 def fetch_adjusted_spy() -> pd.DataFrame:
     """Fetch SPY *adjusted* prices. Never silently substitute unadjusted prices."""
     try:
@@ -44,6 +67,7 @@ def fetch_adjusted_spy() -> pd.DataFrame:
         raise RuntimeError("Yahoo returned no adjusted SPY history. No experiment was run.")
     frame.columns = [str(x).strip().lower().replace(" ", "_") for x in frame.columns]
     frame = frame.rename(columns={"stock_splits": "splits"})
+    frame = only_closed_sessions(frame)
     return validate_adjusted_history(frame)
 
 
@@ -83,13 +107,13 @@ def validate_adjusted_history(frame: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def make_observations(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
-    """Decision features at close(t), executable future open(t+1)->open(t+2)."""
+def make_features_only(frame: pd.DataFrame) -> pd.DataFrame:
+    """Fit/serve feature parity: each feature uses observations through t."""
     close = frame["close"]
     open_ = frame["open"]
     change = close.pct_change(fill_method=None)
     volume_median = frame["volume"].rolling(20).median().replace(0, np.nan)
-    x = pd.DataFrame({
+    return pd.DataFrame({
         "return_1": change,
         "return_5": close.pct_change(5, fill_method=None),
         "return_20": close.pct_change(20, fill_method=None),
@@ -98,9 +122,14 @@ def make_observations(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
         "volatility_20": change.rolling(20).std(),
         "daily_range": (frame["high"] - frame["low"]) / close,
         "relative_volume": frame["volume"] / volume_median - 1,
-    }, index=frame.index)
-    future = (open_.shift(-2) / open_.shift(-1) - 1).rename("future_return")
-    combined = pd.concat([x, future], axis=1).replace([np.inf, -np.inf], np.nan).dropna()
+    }, index=frame.index).loc[:, FEATURES]
+
+
+def make_observations(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
+    """Decision features at close(t), executable future open(t+1)->open(t+2)."""
+    features = make_features_only(frame)
+    future = (frame["open"].shift(-2) / frame["open"].shift(-1) - 1).rename("future_return")
+    combined = pd.concat([features, future], axis=1).replace([np.inf, -np.inf], np.nan).dropna()
     if len(combined) < MIN_OBSERVATIONS - 60:
         raise ValueError("Not enough complete, labelled SPY sessions")
     return combined.loc[:, FEATURES], combined["future_return"]
