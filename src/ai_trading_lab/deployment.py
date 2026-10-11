@@ -356,7 +356,6 @@ def deployment_semantics_fingerprint(settings) -> str:
         "objective_min_edge": float(getattr(settings, "objective_min_edge", 0.003)),
         "objective_max_data_age_minutes": float(getattr(settings, "objective_max_data_age_minutes", 30.0)),
         "objective_duration_bonus": float(getattr(settings, "objective_duration_bonus", 0.04)),
-        "trade_window_require_positive_holdout_backtest": bool(getattr(settings, "trade_window_require_positive_holdout_backtest", True)),
         "base_min_holdout_trades": int(getattr(settings, "base_min_holdout_trades", 20)),
         "base_require_positive_holdout_return": bool(getattr(settings, "base_require_positive_holdout_return", True)),
         "base_min_holdout_profit_factor": float(getattr(settings, "base_min_holdout_profit_factor", 1.0)),
@@ -499,7 +498,6 @@ def refresh_deployment_manifest(settings, root: str | Path = ".") -> dict:
     base_utility=robust_performance_utility(h,min_trades=int(getattr(settings,"base_min_holdout_trades",20)),max_drawdown=float(getattr(settings,"base_max_holdout_drawdown",-0.25))) if h else -1.0
     base_checks["risk_adjusted_utility"]=base_utility>=float(getattr(settings,"base_min_holdout_utility",0.0))
     duration_bt=duration.get("holdout",{}).get("backtest",{}) if isinstance(duration,dict) else {}
-    current_fp=meta.get("data_fingerprint") or base.get("data_fingerprint")
     duration_provenance_match=(
         bool(duration)
         and bool(base)
