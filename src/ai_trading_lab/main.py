@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import time
 import sys
 from datetime import datetime, timezone
@@ -19,6 +20,8 @@ from .optimizer import optimize_policy
 from .fingerprint import strong_dataset_fingerprint
 from .autonomous import autonomous_cycle, daemon
 from .deployment import model_semantics_fingerprint, deployment_semantics_fingerprint, MANAGED_BUNDLE_FILES, refresh_deployment_manifest as _refresh_deployment_manifest
+
+logger = logging.getLogger(__name__)
 
 
 def synthetic_data(s, n=5000):
@@ -144,6 +147,7 @@ def read_asset_dataframe(meta: dict):
 
 
 def test_base_holdout(df, settings, holdout_frac: float) -> dict:
+    import numpy as np
     import pandas as pd
 
     split = int(len(df) * (1.0 - holdout_frac))
@@ -178,6 +182,7 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     # Evaluate direction against untouched, realized next-open outcomes. This
     # is intentionally separate from the policy's predicted-vs-predicted checks.
     holdout_predictions = eng.model.predict(feat)
+    short_holdout_predictions = eng.short_model.predict(feat)
     labelled_market = pd.concat([train_df, test_df])
     # Score probability against the exact executable barrier/time-stop
     # returns used to train the base model, including ambiguous-OHLC exclusions.
@@ -192,6 +197,18 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
         holdout_predictions["p_up"].reindex(test_df.index).to_numpy(),
         realized_returns.to_numpy(),
     )
+    _, short_realized_returns, _ = execution_aligned_targets(
+        labelled_market,
+        settings.horizon_bars,
+        settings.pt_atr,
+        settings.sl_atr,
+        side=-1,
+    )
+    short_realized_returns = short_realized_returns.reindex(test_df.index)
+    short_directional_validation = directional_validation_diagnostics(
+        short_holdout_predictions["p_up"].reindex(test_df.index).to_numpy(),
+        short_realized_returns.to_numpy(),
+    )
     action_diagnostics = {
         "actions_by_side": {
             str(side): int(count)
@@ -202,6 +219,20 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
     bt = test_df.copy()
     bt["atr_14"] = feat["atr_14"].reindex(test_df.index).ffill()
     result = run_configured_backtest(bt, actions, settings)
+    # Fair activity baseline: preserve this model's action counts, but randomize
+    # their timestamps and use the same causal exits, risk rules, and cost engine.
+    baseline_rng = np.random.default_rng(int(getattr(settings, "seed", 42)))
+    random_actions = pd.Series(
+        baseline_rng.permutation(actions.to_numpy(dtype=object)),
+        index=actions.index,
+        name="randomized_model_activity",
+    )
+    random_result = run_configured_backtest(bt, random_actions, settings)
+    buy_hold_gross_return = (
+        float(test_df["close"].iloc[-1] / test_df["open"].iloc[0] - 1.0)
+        if len(test_df) and float(test_df["open"].iloc[0]) > 0.0
+        else float("nan")
+    )
     report = {
         "symbol": settings.symbol,
         "timeframe": str(settings.timeframe),
@@ -219,6 +250,15 @@ def test_base_holdout(df, settings, holdout_frac: float) -> dict:
         "validation_holdout_frac": float(holdout_frac),
         "action_diagnostics": action_diagnostics,
         "realized_directional_validation": realized_directional_validation,
+        "short_realized_directional_validation": short_directional_validation,
+        "baseline_metrics": {
+            "buy_and_hold_gross_return": buy_hold_gross_return,
+            "randomized_entries_net_return": float(random_result.stats.get("total_return", 0.0)),
+            "randomized_entries_trades": int(random_result.stats.get("trades", 0)),
+            "randomized_entries_action_counts": {
+                str(key): int(value) for key, value in random_actions.value_counts().items()
+            },
+        },
         "model_semantics_fingerprint": model_semantics_fingerprint(settings),
         "deployment_semantics_fingerprint": deployment_semantics_fingerprint(settings),
         "holdout": result.stats,
@@ -405,7 +445,7 @@ def system_doctor(settings, root: str | Path = ".") -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description='Adaptive AI Trading Lab')
-    parser.add_argument('command', choices=['download', 'bulk-download', 'import-data', 'list-data', 'train', 'train-all', 'train-complete', 'train-complete-all', 'train-window', 'train-window-all', 'test', 'test-window', 'test-all', 'live-scan', 'live-outcomes', 'scorecard', 'research', 'discover', 'optimize', 'master-tune', 'benchmark', 'paper', 'paper-daemon', 'demo', 'auto-update', 'autonomous', 'grow', 'evolve', 'daemon', 'state', 'stream', 'real-history', 'real-ticker', 'bootstrap-live-data', 'doctor', 'rl-help'])
+    parser.add_argument('command', choices=['download', 'bulk-download', 'import-data', 'list-data', 'train', 'train-all', 'train-complete', 'train-complete-all', 'train-window', 'train-window-all', 'test', 'test-window', 'test-all', 'signals', 'live-scan', 'live-outcomes', 'scorecard', 'research', 'discover', 'optimize', 'master-tune', 'benchmark', 'paper', 'paper-daemon', 'demo', 'auto-update', 'autonomous', 'grow', 'evolve', 'daemon', 'state', 'stream', 'real-history', 'real-ticker', 'bootstrap-live-data', 'doctor', 'rl-help'])
     parser.add_argument('--config', default='config.yaml')
     parser.add_argument('--iterations', type=int, default=1)
     parser.add_argument('--query', default=None, help='External-intelligence query for autonomous research')
@@ -499,7 +539,7 @@ def main():
         print(json.dumps(st.flatten(), indent=2, default=str))
         return
 
-    if args.command == 'live-scan':
+    if args.command in {'live-scan', 'signals'}:
         from .live import append_live_signal_history, scan_top5, write_live_snapshot
         symbols = [x.strip() for x in args.symbols.split(',') if x.strip()] if args.symbols else None
         results = scan_top5(s, '.', symbols=symbols)
@@ -510,6 +550,7 @@ def main():
         from .signal_scorecard import format_scorecard, run_scorecard
         card = run_scorecard('.', min_resolved=max(2, int(args.min_resolved)))
         print(format_scorecard(card)); return
+
     if args.command == 'live-outcomes':
         from .live_tracker import update_live_signal_outcomes
         result = update_live_signal_outcomes(s, '.')
@@ -579,7 +620,8 @@ def main():
             tf_delta = pd.Timedelta(timeframe_offset(str(getattr(s, 'timeframe', '15m'))))
             if not tf_delta > pd.Timedelta(0):
                 raise ValueError('non-positive timeframe')
-        except Exception:
+        except (TypeError, ValueError, OverflowError, KeyError) as exc:
+            logger.warning("Invalid timeframe %r; using 15m cache-age fallback: %s", getattr(s, 'timeframe', None), exc)
             tf_delta = pd.Timedelta(minutes=15)
         max_age = max(pd.Timedelta(minutes=30), tf_delta * 2.5)
 
@@ -640,10 +682,18 @@ def main():
                                     'source': 'cache',
                                     'end': last_stamp.isoformat(),
                                 }
-                    except Exception:
-                        # Corrupt/stale files are refreshed below; failures are recorded
-                        # only if the new download also fails.
-                        pass
+                    except (
+                        OSError,
+                        ValueError,
+                        KeyError,
+                        TypeError,
+                        pd.errors.ParserError,
+                        pd.errors.EmptyDataError,
+                        UnicodeDecodeError,
+                    ) as exc:
+                        # A corrupt/stale cache is refreshed below, but record why
+                        # the cached timestamp index could not be trusted.
+                        logger.debug("Ignoring invalid OHLCV cache %s: %s", path, exc)
 
                 frame = fetch_ohlcv(
                     worker_exchange(),
@@ -823,11 +873,8 @@ def main():
             for path in sorted(historical_root.iterdir()):
                 if path.suffix.lower() not in {'.csv', '.parquet', '.pq', '.json'}:
                     continue
-                try:
-                    sym = infer_symbol(path)
-                    sources.setdefault(str(sym), ('historical', str(path)))
-                except Exception:
-                    continue
+                sym = infer_symbol(path)
+                sources.setdefault(str(sym), ('historical', str(path)))
 
         for sym, (source, path) in sources.items():
             try:
@@ -867,10 +914,7 @@ def main():
             for path in sorted(historical_root.iterdir()):
                 if path.suffix.lower() not in {'.csv', '.parquet', '.pq', '.json'}:
                     continue
-                try:
-                    sources.setdefault(str(infer_symbol(path)), ('historical', str(path)))
-                except Exception:
-                    continue
+                sources.setdefault(str(infer_symbol(path)), ('historical', str(path)))
         for asset_index, (sym, (source, path)) in enumerate(sources.items(), start=1):
             try:
                 ss = load_settings(args.config); ss.symbol = sym

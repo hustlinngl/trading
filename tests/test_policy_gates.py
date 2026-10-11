@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from dataclasses import replace
 
 import numpy as np
@@ -12,6 +14,7 @@ from ai_trading_lab.policy import live_signal_gate
 def row(**overrides):
     base = {
         "p_up": 0.90,
+        "probability_baseline": 0.39,
         "expected_return": 0.006,
         "expected_return_lcb": 0.004,
         "score": 0.40,
@@ -50,7 +53,7 @@ def test_strict_signal_gate_rejects_insufficient_memory_support():
     assert "memory_neighbors" in reasons
 
 
-def test_short_signal_uses_upper_bound_for_directional_uncertainty():
+def test_short_signal_uses_its_own_probability_and_return_head():
     settings = replace(
         load_settings("config.yaml"),
         signal_only_mode=True,
@@ -58,13 +61,40 @@ def test_short_signal_uses_upper_bound_for_directional_uncertainty():
         short_signals_enabled=True,
         short_borrow_bps_per_bar=1.0,
     )
-    # A bearish forecast is only robust if the upper confidence bound remains below zero.
-    risky = row(p_up=0.10, expected_return=-0.004, expected_return_lcb=-0.010, expected_return_ucb=0.002)
+    # Bearish p_up alone cannot stand in for the probability of a profitable short.
+    missing_short_head = row(
+        action="SHORT", trade_window_direction="SHORT", market_type="swap",
+        p_up=0.10, expected_return=-0.006, expected_return_lcb=-0.012,
+        expected_return_ucb=-0.004,
+    )
+    action, reasons = live_signal_gate(missing_short_head, settings)
+    assert action == "FLAT"
+    assert any("p_short" in reason for reason in reasons)
+
+    risky = row(
+        action="SHORT", trade_window_direction="SHORT", market_type="swap",
+        p_up=0.10, expected_return=-0.006, expected_return_lcb=-0.012,
+        expected_return_ucb=-0.004, p_short=0.90,
+        short_probability_baseline=0.39, short_expected_return=0.002,
+        short_expected_return_lcb=0.001, short_expected_return_ucb=0.004,
+        short_meta_success=0.80, short_score=0.40,
+        short_model_disagreement=0.01, short_analog_n=32,
+        short_analog_agreement=0.85,
+    )
     action, reasons = live_signal_gate(risky, settings)
     assert action == "FLAT"
     assert "signal_expected_return" in reasons
 
-    robust = row(action="SHORT", trade_window_direction="SHORT", market_type="swap", p_up=0.10, expected_return=-0.006, expected_return_lcb=-0.012, expected_return_ucb=-0.004)
+    robust = row(
+        action="SHORT", trade_window_direction="SHORT", market_type="swap",
+        p_up=0.10, expected_return=-0.006, expected_return_lcb=-0.012,
+        expected_return_ucb=-0.004, p_short=0.90,
+        short_probability_baseline=0.39, short_expected_return=0.006,
+        short_expected_return_lcb=0.004, short_expected_return_ucb=0.008,
+        short_meta_success=0.80, short_score=0.40,
+        short_model_disagreement=0.01, short_analog_n=32,
+        short_analog_agreement=0.85,
+    )
     action, reasons = live_signal_gate(robust, settings)
     assert action == "SHORT"
     assert reasons == []
@@ -152,3 +182,70 @@ def test_live_assessment_fetch_failure_fails_closed(monkeypatch):
     result = assess_symbol(settings, root=".")
     assert result.status == "WAIT"
     assert any(x.startswith("data_fetch:RuntimeError") for x in result.reason_codes)
+
+def test_research_profile_logs_looser_candidates_without_changing_strict_gate():
+    settings = replace(
+        load_settings("config.yaml"),
+        signal_only_mode=True,
+        trade_window_required_for_signal=True,
+        research_trade_window_required_for_signal=False,
+        short_signals_enabled=False,
+    )
+    candidate = row(
+        p_up=0.65,
+        probability_baseline=0.39,
+        expected_return=0.003,
+        expected_return_lcb=0.002,
+        expected_return_ucb=0.004,
+        score=0.10,
+        meta_success=0.56,
+        model_disagreement=0.10,
+        analog_n=10,
+        analog_agreement=0.60,
+        trade_window_confidence=0.90,
+    )
+    strict_signal, strict_reasons = live_signal_gate(candidate, settings)
+    research_signal, research_reasons = live_signal_gate(
+        candidate, settings, profile="research"
+    )
+
+    assert strict_signal == "FLAT"
+    assert "signal_probability" in strict_reasons
+    assert research_signal == "LONG"
+    assert research_reasons == []
+
+
+def test_research_profile_cannot_bypass_short_or_funding_safety():
+    settings = replace(
+        load_settings("config.yaml"),
+        signal_only_mode=True,
+        short_signals_enabled=False,
+        require_short_borrow_cost=True,
+    )
+    candidate = row(
+        action="SHORT",
+        market_type="swap",
+        funding_data_missing=True,
+        p_short=0.95,
+        short_probability_baseline=0.39,
+        short_expected_return=0.01,
+        short_expected_return_lcb=0.008,
+        short_expected_return_ucb=0.012,
+        short_meta_success=0.95,
+        short_score=0.90,
+        short_model_disagreement=0.0,
+        short_analog_n=32,
+        short_analog_agreement=0.95,
+    )
+    signal, reasons = live_signal_gate(candidate, settings, profile="research")
+
+    assert signal == "FLAT"
+    assert "short_signals_disabled" in reasons
+    assert "funding_data_missing" in reasons
+
+
+def test_unknown_live_signal_profile_is_rejected():
+    settings = replace(load_settings("config.yaml"), signal_only_mode=True)
+    with pytest.raises(ValueError, match="unknown_signal_profile"):
+        live_signal_gate(row(), settings, profile="experimental")
+

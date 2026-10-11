@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
 import pandas as pd
 
 from .data_quality import audit_market_data, infer_timeframe
+
+logger = logging.getLogger(__name__)
 
 BINANCE_HEADERLESS = [
     "open_time", "open", "high", "low", "close", "volume",
@@ -114,8 +117,16 @@ def read_market_file(path: str | Path) -> pd.DataFrame:
                     cols = BINANCE_HEADERLESS[:no_header.shape[1]]
                     no_header.columns = cols
                     raw = no_header
-            except Exception:
-                pass
+            except (
+                pd.errors.ParserError,
+                pd.errors.EmptyDataError,
+                UnicodeDecodeError,
+                OSError,
+                ValueError,
+            ) as exc:
+                # Headerless import is only a compatibility fallback. Preserve
+                # the original parse result and log why fallback detection failed.
+                logger.debug("Headerless CSV fallback failed for %s: %s", p, exc)
     elif p.suffix.lower() in {".json"}:
         raw = pd.read_json(p)
     else:

@@ -1,13 +1,13 @@
 # Adaptive AI Trading Lab
 
-Release **0.9.45** — pre-alpha read-only signal terminal built on the trained research stack.
+Release **0.9.46** — pre-alpha read-only signal terminal built on the trained research stack.
 
 This repository is a research-first adaptive trading platform for real market data, purged walk-forward validation, pristine holdouts, cost-aware event-driven backtesting, autonomous research and guarded paper/signal workflows.
 
 ## What is included
 
 - Real-data adapters for Binance Vision and bounded Kraken validation.
-- Heterogeneous ML ensemble, regimes, analog memory, meta-policy and conformal uncertainty.
+- Independent long/short probability and return heads, each with its own training prior, analog memory and meta-policy; both use execution-aligned barriers and conformal uncertainty.
 - Purged walk-forward research plus untouched final-holdout governance.
 - Economic edge hurdles, impact-aware risk sizing and event-driven execution simulation.
 - Autonomous research memory, experience graph, matched-event studies and prequential shadow learning.
@@ -32,6 +32,12 @@ It binds to localhost only, opens the browser automatically, discovers active ex
 Headless check: `python signal_dashboard.py --once`
 
 Windows builds produce `SakuraSignalTerminal.exe`; source launchers also point to this terminal directly.
+
+## Model bundle trust and migration
+
+Model bundles use joblib serialization and must be produced by this repository or another explicitly trusted training environment. Only load bundles after manifest/provenance and artifact-hash validation; never load files sent by an untrusted source. Starting in 0.9.46, every deployable asset also needs independent short-head artifacts even while short signals are disabled. Existing bundles are intentionally rejected by the changed semantic fingerprint and must be retrained and revalidated.
+
+See [docs/MODEL_BUNDLE_SECURITY.md](docs/MODEL_BUNDLE_SECURITY.md) for the serving boundary.
 
 ## Safe operating model
 
@@ -81,7 +87,7 @@ python -m ai_trading_lab.main bootstrap-live-data --live-bars 1200 --workers 4
 python signal_dashboard.py
 ```
 
-Signals are deliberately fail-closed: live prices can be displayed without a model, but LONG/SHORT results require compatible trained and validated model bundles.
+Signals are deliberately fail-closed: live prices can be displayed without a model, but LONG/SHORT results require compatible trained and validated model bundles. Short signals remain disabled by default. Version 0.9.46 changes target and artifact semantics: retrain every asset bundle before expecting it to pass deployment compatibility.
 
 By default, `bootstrap-live-data` now discovers the full active exchange universe instead of only BTC/ETH/SOL. Use `--symbols` for a smaller subset, or `--market-types spot,swap,future` to control the market types downloaded. The dashboard's live quote universe follows the exchange-discovered markets; model signals still require compatible bundles.
 
