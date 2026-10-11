@@ -42,6 +42,7 @@ def as_percent(value: float | None) -> str:
 def summarize(report: dict) -> str:
     test = report.get("test", {})
     val = report.get("validation", {})
+    evidence = report.get("test_evidence", {})
     dates = report.get("split", {})
     return "\n".join([
         "SPY / RESEARCH STUDY",
@@ -50,6 +51,10 @@ def summarize(report: dict) -> str:
         "Daily bars               Adjusted for dividends and splits",
         "Decision / execution     Close signal, next-open entry, following-open exit",
         "",
+        "INDEPENDENT-EVIDENCE CHECK / RESEARCH ONLY",
+        f"Assessment               {evidence.get('verdict', 'NOT EVALUATED')}",
+        evidence.get("explanation", "No evidence gate has been run for this historic study."),
+        "",
         "OUT-OF-SAMPLE CHECK (exploratory, not pristine)",
         f"Strategy, after costs    {as_percent(test.get('compounded_net_return'))}",
         f"Buy & hold, after costs  {as_percent(report.get('test_buy_and_hold_net_return'))}",
@@ -57,6 +62,8 @@ def summarize(report: dict) -> str:
         f"Maximum drawdown         {as_percent(test.get('max_drawdown'))}",
         f"Executed paper trades    {test.get('trades', 0)} / {test.get('sessions', 0)} sessions",
         f"Trade win rate           {as_percent(test.get('win_rate_after_cost'))}",
+        f"Edge confidence interval {str(evidence.get('mean_daily_excess_90pct_block_bootstrap', 'not available'))}",
+        f"Beats timing placebo     {evidence.get('beats_random_timing_placebo', 'not evaluated')}",
         "",
         "EARLIER VALIDATION PERIOD",
         f"Net return               {as_percent(val.get('compounded_net_return'))}",
