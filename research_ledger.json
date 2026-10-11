@@ -1224,10 +1224,28 @@
       "purpose": "combined_live_policy_holdout_validation",
       "run_id": "combined_live_policy_holdout_validation:2026-10-11T12:28:36.245607+00:00",
       "scope": "ATOM/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "652dfc2287508deb92a4e075:7",
+      "accessed_at": "2026-10-11T12:35:44.637738+00:00",
+      "dataset_fingerprint": "ab36d02b2f9e18ce9b0aecf5ddde9fe9",
+      "holdout_end": "2026-10-09 23:45:00+00:00",
+      "holdout_frac": 0.15000563824988725,
+      "holdout_key": "652dfc2287508deb92a4e075",
+      "holdout_start": "2026-06-21 03:30:00+00:00",
+      "metadata": {
+        "holdout_fingerprint": "19a8f5f18d83b89693da8922a46c1304",
+        "symbol": "ADA/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 6,
+      "purpose": "combined_live_policy_holdout_validation",
+      "run_id": "combined_live_policy_holdout_validation:2026-10-11T12:35:44.637738+00:00",
+      "scope": "ADA/USDT|15m|adaptive_signal"
     }
   ],
   "schema_version": 2,
   "total_trials": 0,
   "trial_runs": [],
-  "updated_at": "2026-10-11T12:28:36.245607+00:00"
+  "updated_at": "2026-10-11T12:35:44.637738+00:00"
 }
