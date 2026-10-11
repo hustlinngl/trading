@@ -1,0 +1,149 @@
+name: Signal Journal
+
+# Scheduled, read-only signal scan -> outcome resolution -> statistical scorecard.
+#
+# * Models are NOT retrained here. Training is governed by the persistent
+#   research ledger and happens in "Build Windows EXE"; this workflow only
+#   consumes the validated bundles from that workflow's latest successful
+#   package artifact, and only when the package is PRODUCTION-READY.
+# * No orders are placed. PAPER_ONLY / SANDBOX stay enforced.
+# * Everything fails closed: no ready models, no reachable exchange (GitHub
+#   runners can be geo-blocked by Binance) -> the step is skipped and the job
+#   summary says so. A skipped scan is never reported as a successful signal run.
+# * The journal and scorecard live on the orphan branch `signal-journal`
+#   (never on main). If this repository is public, so is that branch.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '11 */6 * * *'
+
+permissions:
+  contents: write   # pushes only the `signal-journal` branch
+  actions: read     # downloads the latest package artifact
+
+concurrency:
+  group: signal-journal
+  cancel-in-progress: false
+
+jobs:
+  journal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PAPER_ONLY: 'true'
+      SANDBOX: 'true'
+      JOURNAL_BRANCH: signal-journal
+      SYMBOLS: BTC/USDT,ETH/USDT,BNB/USDT,SOL/USDT,XRP/USDT,ADA/USDT,DOGE/USDT,AVAX/USDT,LINK/USDT,DOT/USDT,LTC/USDT,BCH/USDT,ATOM/USDT,UNI/USDT,ETC/USDT
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Restore signal journal
+        run: |
+          set -euo pipefail
+          mkdir -p logs
+          if git fetch --no-tags --depth 1 origin "+refs/heads/${JOURNAL_BRANCH}:refs/remotes/origin/${JOURNAL_BRANCH}" 2>/dev/null; then
+            git show "refs/remotes/origin/${JOURNAL_BRANCH}:live_signal_history.jsonl" > logs/live_signal_history.jsonl 2>/dev/null || rm -f logs/live_signal_history.jsonl
+            echo "Journal restored: $(wc -l < logs/live_signal_history.jsonl 2>/dev/null || echo 0) rows"
+          else
+            echo "No journal branch yet; a new one will be created."
+          fi
+
+      - name: Fetch validated models from the latest package build
+        id: models
+        run: |
+          set -uo pipefail
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          run_id=$(gh run list --workflow "Build Windows EXE" --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -z "$run_id" ]; then
+            echo "::warning::No successful 'Build Windows EXE' run found; scan skipped."
+            echo "- Scan skipped: no successful package build to take validated models from." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if ! gh run download "$run_id" -n SakuraSignalTerminal-Windows-x64 -D pkg; then
+            echo "::warning::Package artifact of run $run_id is unavailable (expired after 14 days?); scan skipped. Re-run 'Build Windows EXE'."
+            echo "- Scan skipped: package artifact of build $run_id is unavailable (retention is 14 days)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if ! grep -q '^Package mode: PRODUCTION-READY' pkg/MODEL_READINESS.txt 2>/dev/null; then
+            echo "::notice::Package is research-only (no model passed the deployment gates); scan skipped by design."
+            echo "- Scan skipped: the latest package has no deployment-ready model. This is the safe default, not an error." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          cp -r pkg/models ./models
+          mkdir -p data && cp -r pkg/data/. ./data/
+          cp pkg/config.yaml ./config.yaml
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          echo "- Models from build run $run_id." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Probe exchange access
+        id: exchange
+        if: steps.models.outputs.ready == 'true'
+        run: |
+          echo "ok=false" >> "$GITHUB_OUTPUT"
+          if python - <<'PY'
+          from ai_trading_lab.data import exchange_client
+          exchange_client("binance", sandbox=False)
+          print("exchange-ok")
+          PY
+          then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Exchange unreachable from this runner (Binance often geo-blocks GitHub-hosted runners, HTTP 451); scan and outcome resolution skipped."
+            echo "- Scan skipped: exchange unreachable from the GitHub runner." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Scan and journal signals
+        if: steps.exchange.outputs.ok == 'true'
+        run: python -m ai_trading_lab.main live-scan --config config.yaml --symbols "$SYMBOLS"
+
+      - name: Resolve mature signals
+        if: steps.exchange.outputs.ok == 'true'
+        run: python -m ai_trading_lab.main live-outcomes --config config.yaml
+
+      - name: Statistical scorecard
+        run: |
+          set -euo pipefail
+          python -m ai_trading_lab.main scorecard --config config.yaml --min-resolved 30 | tee logs/signal_scorecard.txt
+          { echo '### Signal scorecard'; echo '```'; cat logs/signal_scorecard.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Persist journal and scorecard
+        run: |
+          set -euo pipefail
+          if [ ! -s logs/live_signal_history.jsonl ]; then
+            echo "No journal rows yet; nothing to persist."
+            exit 0
+          fi
+          J="$RUNNER_TEMP/journal"
+          rm -rf "$J"
+          git init -q "$J"
+          git -C "$J" remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git -C "$J" fetch -q --depth 1 origin "$JOURNAL_BRANCH" 2>/dev/null; then
+            git -C "$J" checkout -q -B "$JOURNAL_BRANCH" FETCH_HEAD
+          else
+            git -C "$J" checkout -q --orphan "$JOURNAL_BRANCH"
+          fi
+          cp logs/live_signal_history.jsonl "$J/"
+          cp logs/signal_scorecard.json "$J/"
+          cp logs/signal_scorecard.txt "$J/SCORECARD.txt"
+          git -C "$J" config user.name "github-actions[bot]"
+          git -C "$J" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$J" add -A
+          if git -C "$J" diff --cached --quiet; then
+            echo "Journal unchanged."
+            exit 0
+          fi
+          git -C "$J" commit -q -m "chore: signal journal update from run ${GITHUB_RUN_ID}"
+          git -C "$J" push -q origin "HEAD:refs/heads/${JOURNAL_BRANCH}"

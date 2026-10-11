@@ -63,6 +63,14 @@ python -m ai_trading_lab.main scorecard --min-resolved 30
 
 It reports the mean net return with a bootstrap confidence interval, hit rate, profit factor, drawdown and PSR, overall and per side/symbol. With too few resolved signals the answer is `INSUFFICIENT_EVIDENCE`; a positive verdict requires the interval to sit above zero. Results are OHLC-based estimates, not fills or account PnL. The report is also written to `logs/signal_scorecard.json`.
 
+#### Automatic daily tracking (GitHub Actions)
+
+The `Signal Journal` workflow (`.github/workflows/signal-journal.yml`) runs every 6 hours and on demand. It downloads the validated models from the latest successful `Build Windows EXE` run, scans, resolves mature signals and publishes the journal and scorecard to the `signal-journal` branch (`SCORECARD.txt`) and to the run summary. Prerequisites and limits:
+
+- A `Build Windows EXE` run with a **PRODUCTION-READY** package must exist (its artifact is kept 14 days). A research-only package means the scan is skipped by design.
+- GitHub-hosted runners can be geo-blocked by Binance (HTTP 451). If so the run says "exchange unreachable" and skips scanning; use a self-hosted runner in that case.
+- The `signal-journal` branch is public if the repository is public.
+
 ### Live dashboard data
 
 The dashboard is a read-only market-data terminal. To make it immediately useful even before model training, bootstrap closed OHLCV history and launch it:
