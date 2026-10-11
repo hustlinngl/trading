@@ -125,7 +125,6 @@ class AtlasApp(tk.Tk if tk is not None else object):
         )
         self.run_button.pack(anchor="w", pady=(30, 16))
         self.status_var = tk.StringVar(value="Ready to analyze.")
-        self._label(left, "", bg=SURFACE).pack_forget()  # spacer not a status badge
         self.status_label = self._label(
             left, "", bg=SURFACE, color=MUTED, size=11, textvariable=self.status_var,
             wraplength=450,
