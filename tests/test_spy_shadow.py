@@ -78,7 +78,7 @@ def test_shadow_forecast_is_forward_only_deduplicated_and_settles_later(tmp_path
     assert len(journal) == 2  # latest day prospectively recorded
     first_outcome = journal[0]["outcome"]
     assert first_outcome is not None
-    expected = extended["open"].iloc[-1] / extended["open"].iloc[-2] - 1
+    expected = extended["open"].iloc[-2] / extended["open"].iloc[-3] - 1
     assert first_outcome["market_open_to_open_return"] == pytest.approx(expected)
     assert first_outcome["paper_only"]
 
