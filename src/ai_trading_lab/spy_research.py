@@ -247,10 +247,23 @@ def analyze_spy(
     cost = side_cost_bps / 10000.0
     benchmark_return = float((final_open / first_open) * (1 - cost) ** 2 - 1)
 
+    # Paired, dated after-cost equity paths are saved for visual inspection.
+    # A flat model stays at 1.0; buy-and-hold pays one entry and one exit fee.
+    test_r = future.iloc[testing].to_numpy(dtype=float)
+    paper_r = np.where(pt >= ENTRY_PROBABILITY, test_r - 2.0 * cost, 0.0)
+    paper_equity = np.cumprod(1.0 + paper_r)
+    buy_hold_equity = (1.0 - cost) * np.cumprod(1.0 + test_r)
+    buy_hold_equity[-1] *= 1.0 - cost
+    equity_history = pd.DataFrame({
+        "research_equity": paper_equity,
+        "buy_hold_equity": buy_hold_equity,
+    }, index=test_dates)
+
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + "_" + uuid4().hex[:8]
     run_dir = Path(project_root) / "models" / "spy_research" / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
     history.to_csv(run_dir / "adjusted_spy_sessions.csv", index_label="session")
+    equity_history.to_csv(run_dir / "test_equity_curve.csv", index_label="session")
     joblib.dump(model, run_dir / "research_model.joblib")
     model_hash = hashlib.sha256((run_dir / "research_model.joblib").read_bytes()).hexdigest()
     report = {
@@ -279,6 +292,7 @@ def analyze_spy(
         "validation": val,
         "test": test,
         "test_evidence": evidence,
+        "test_equity_curve": "test_equity_curve.csv",
         "test_buy_and_hold_net_return": benchmark_return,
         "test_excess_vs_buy_and_hold": test["compounded_net_return"] - benchmark_return,
         "test_outperformed_buy_and_hold": test["compounded_net_return"] > benchmark_return,
