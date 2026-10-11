@@ -12,6 +12,9 @@ import threading
 from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parent
+# A frozen one-file EXE unpacks beside a temporary directory; never write
+# model evidence there or depend on the current working directory.
+STORAGE = (Path.home() / "SakuraAtlas") if getattr(sys, "frozen", False) else PROJECT
 sys.path.insert(0, str(PROJECT / "src"))
 
 from ai_trading_lab.spy_research import analyze_spy, list_studies  # noqa: E402
@@ -180,7 +183,7 @@ class AtlasApp(tk.Tk if tk is not None else object):
         self.details.configure(state="disabled")
 
     def _refresh_studies(self, latest_id: str | None = None):
-        self.studies = list_studies(PROJECT)
+        self.studies = list_studies(STORAGE)
         self.archive.delete(0, "end")
         for row in self.studies:
             test = row.get("test", {})
@@ -211,7 +214,7 @@ class AtlasApp(tk.Tk if tk is not None else object):
 
         def worker():
             try:
-                report = analyze_spy(PROJECT)
+                report = analyze_spy(STORAGE)
                 self.events.put(("complete", report))
             except Exception as exc:
                 self.events.put(("error", f"{type(exc).__name__}: {exc}"))
