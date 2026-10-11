@@ -80,7 +80,7 @@ jobs:
           END_DATE="${INPUT_END:-}"
           TRIALS="${INPUT_TRIALS:-60}"
           START_DATE=${START_DATE:-2022-01-01}
-          END_DATE=${END_DATE:-$(date -u +%F)}
+          END_DATE="${END_DATE:-$(python -c 'from ai_trading_lab.binance_vision import rolling_closed_history_window; print(rolling_closed_history_window()["end"])')}"
           TRIALS=${TRIALS:-60}
           python run_intensive_real_research.py \
             --symbols BTC/USDT,ETH/USDT,BNB/USDT,SOL/USDT,XRP/USDT,ADA/USDT,DOGE/USDT,LINK/USDT \
