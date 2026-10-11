@@ -189,6 +189,8 @@ def _barrier_labels(df, horizon_bars=96, min_bars=12, pt_atr=1.25, sl_atr=0.90):
                 holding_bars[idx] = float(max(1, held + 1))
                 execution_status[idx] = "stop_loss"
             active = active[~resolved]
+            active_upper = active_upper[~resolved]
+            active_lower = active_lower[~resolved]
 
     return pd.DataFrame(
         {
