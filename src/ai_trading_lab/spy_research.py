@@ -20,6 +20,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
+from .spy_evidence import study_evidence
+
 FEATURES = (
     "return_1", "return_5", "return_20", "ma_gap_10", "ma_gap_50",
     "volatility_20", "daily_range", "relative_volume",
@@ -201,6 +203,10 @@ def analyze_spy(
 
     val = evaluate_one_day(pv, future.iloc[val_check].to_numpy(), side_cost_bps=side_cost_bps)
     test = evaluate_one_day(pt, future.iloc[testing].to_numpy(), side_cost_bps=side_cost_bps)
+    evidence = study_evidence(
+        pt, future.iloc[testing].to_numpy(),
+        probability_gate=ENTRY_PROBABILITY, cost_bps_each_side=side_cost_bps,
+    )
     # A separate always-invested, dividend-aware benchmark. Buy at the same
     # first eligible next-open and sell at the last eligible following open;
     # unlike a daily flip policy, buy & hold pays round-trip costs only once.
@@ -243,6 +249,7 @@ def analyze_spy(
         "per_side_cost_bps": side_cost_bps,
         "validation": val,
         "test": test,
+        "test_evidence": evidence,
         "test_buy_and_hold_net_return": benchmark_return,
         "test_excess_vs_buy_and_hold": test["compounded_net_return"] - benchmark_return,
         "test_outperformed_buy_and_hold": test["compounded_net_return"] > benchmark_return,
