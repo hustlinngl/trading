@@ -7,7 +7,6 @@ are never backfilled or replaced. Outcomes mature only on later closed bars.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -18,7 +17,7 @@ import numpy as np
 import pandas as pd
 
 from .spy_research import (
-    ENTRY_PROBABILITY, FEATURES, SIDE_COST_BPS,
+    ENTRY_PROBABILITY, FEATURES,
     fetch_adjusted_spy, list_studies, make_features_only,
     only_closed_sessions, validate_adjusted_history,
 )

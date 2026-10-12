@@ -110,7 +110,6 @@ def validate_adjusted_history(frame: pd.DataFrame) -> pd.DataFrame:
 def make_features_only(frame: pd.DataFrame) -> pd.DataFrame:
     """Fit/serve feature parity: each feature uses observations through t."""
     close = frame["close"]
-    open_ = frame["open"]
     change = close.pct_change(fill_method=None)
     volume_median = frame["volume"].rolling(20).median().replace(0, np.nan)
     return pd.DataFrame({
