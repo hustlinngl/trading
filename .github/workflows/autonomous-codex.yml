@@ -84,6 +84,7 @@ jobs:
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           permission-profile: ':workspace'
+          codex-args: '["--search"]'
           safety-strategy: drop-sudo
           prompt-file: .codex-current-mission.md
           output-file: .codex-last-run.md
