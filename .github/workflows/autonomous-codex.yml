@@ -97,7 +97,26 @@ jobs:
           python -m compileall -q src signal_dashboard.py
           timeout 1200 python -m pytest -q
           python run_adversarial_integrity.py
-          python signal_dashboard.py --once
+          python -m ai_trading_lab.main demo
+
+      - name: Attempt network-dependent dashboard smoke
+        if: steps.gate.outputs.run == 'true'
+        id: live_smoke
+        continue-on-error: true
+        run: timeout 120 python signal_dashboard.py --once
+
+      - name: Record live-test limitation
+        if: steps.live_smoke.outcome == 'failure'
+        run: echo 'WARNING: dashboard live smoke could not complete on this GitHub runner. No live-data readiness is claimed; inspect environment/network before merge.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Preserve Codex run report for review
+        if: always() && steps.gate.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: autonomous-codex-report
+          path: .codex-last-run.md
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Generate bounded, reviewable patch
         if: steps.gate.outputs.run == 'true'
