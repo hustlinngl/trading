@@ -2873,10 +2873,143 @@
       "purpose": "combined_live_policy_holdout_validation",
       "run_id": "combined_live_policy_holdout_validation:2026-10-12T14:36:59.761559+00:00",
       "scope": "XRP/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "589428309572d4d3a0ec2e93:1",
+      "accessed_at": "2026-10-18T08:58:35.921910+00:00",
+      "dataset_fingerprint": "5c140d73b9cca40eeae00c055b8ca820",
+      "holdout_end": "2026-10-16 23:45:00+00:00",
+      "holdout_frac": 0.15,
+      "holdout_key": "589428309572d4d3a0ec2e93",
+      "holdout_start": "2026-04-04 16:45:00+00:00",
+      "metadata": {
+        "holdout_end": "2026-10-16 23:45:00+00:00",
+        "holdout_start": "2026-04-04 16:45:00+00:00",
+        "symbol": "ETH/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 11,
+      "purpose": "master_tune_final_holdout",
+      "run_id": "master_tune_final_holdout:2026-10-18T08:58:35.921853+00:00",
+      "scope": "ETH/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "29731466dc46f4d045331713:1",
+      "accessed_at": "2026-10-18T09:06:05.037460+00:00",
+      "dataset_fingerprint": "ed21209f836d5042dd24ba326755ffc2",
+      "holdout_end": "2026-10-16 23:45:00+00:00",
+      "holdout_frac": 0.15,
+      "holdout_key": "29731466dc46f4d045331713",
+      "holdout_start": "2026-04-04 16:45:00+00:00",
+      "metadata": {
+        "holdout_end": "2026-10-16 23:45:00+00:00",
+        "holdout_start": "2026-04-04 16:45:00+00:00",
+        "symbol": "BNB/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 13,
+      "purpose": "master_tune_final_holdout",
+      "run_id": "master_tune_final_holdout:2026-10-18T09:06:05.037411+00:00",
+      "scope": "BNB/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "91364fd76a75892fe629e0da:1",
+      "accessed_at": "2026-10-18T09:14:13.566344+00:00",
+      "dataset_fingerprint": "69626e5ae906f3adfc9a31f636275125",
+      "holdout_end": "2026-10-16 23:45:00+00:00",
+      "holdout_frac": 0.15,
+      "holdout_key": "91364fd76a75892fe629e0da",
+      "holdout_start": "2026-04-04 16:45:00+00:00",
+      "metadata": {
+        "holdout_end": "2026-10-16 23:45:00+00:00",
+        "holdout_start": "2026-04-04 16:45:00+00:00",
+        "symbol": "SOL/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 9,
+      "purpose": "master_tune_final_holdout",
+      "run_id": "master_tune_final_holdout:2026-10-18T09:14:13.566303+00:00",
+      "scope": "SOL/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "4bc3d32ca8ef752e73afd08d:1",
+      "accessed_at": "2026-10-18T09:21:59.022707+00:00",
+      "dataset_fingerprint": "6fff2d65850105fd20c95b926caa897a",
+      "holdout_end": "2026-10-16 23:45:00+00:00",
+      "holdout_frac": 0.15,
+      "holdout_key": "4bc3d32ca8ef752e73afd08d",
+      "holdout_start": "2026-04-04 16:45:00+00:00",
+      "metadata": {
+        "holdout_end": "2026-10-16 23:45:00+00:00",
+        "holdout_start": "2026-04-04 16:45:00+00:00",
+        "symbol": "XRP/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 9,
+      "purpose": "master_tune_final_holdout",
+      "run_id": "master_tune_final_holdout:2026-10-18T09:21:59.022664+00:00",
+      "scope": "XRP/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "9f19fdc7f0deba4e4697c913:1",
+      "accessed_at": "2026-10-18T09:29:41.337151+00:00",
+      "dataset_fingerprint": "342312936729d792c54b9c6789b5666e",
+      "holdout_end": "2026-10-16 23:45:00+00:00",
+      "holdout_frac": 0.15,
+      "holdout_key": "9f19fdc7f0deba4e4697c913",
+      "holdout_start": "2026-04-04 16:45:00+00:00",
+      "metadata": {
+        "holdout_end": "2026-10-16 23:45:00+00:00",
+        "holdout_start": "2026-04-04 16:45:00+00:00",
+        "symbol": "ADA/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 16,
+      "purpose": "master_tune_final_holdout",
+      "run_id": "master_tune_final_holdout:2026-10-18T09:29:41.337095+00:00",
+      "scope": "ADA/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "46b2d43c68a9bbc8ba4adc6d:1",
+      "accessed_at": "2026-10-18T09:37:24.224099+00:00",
+      "dataset_fingerprint": "72ae502f352aaca95822bc2f1160455c",
+      "holdout_end": "2026-10-16 23:45:00+00:00",
+      "holdout_frac": 0.15,
+      "holdout_key": "46b2d43c68a9bbc8ba4adc6d",
+      "holdout_start": "2026-04-04 16:45:00+00:00",
+      "metadata": {
+        "holdout_end": "2026-10-16 23:45:00+00:00",
+        "holdout_start": "2026-04-04 16:45:00+00:00",
+        "symbol": "DOGE/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 11,
+      "purpose": "master_tune_final_holdout",
+      "run_id": "master_tune_final_holdout:2026-10-18T09:37:24.224042+00:00",
+      "scope": "DOGE/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "048c6563c5426a6cbc01f5c3:1",
+      "accessed_at": "2026-10-18T09:45:42.144683+00:00",
+      "dataset_fingerprint": "14e9d7fe56450eccbe03a329374d73d8",
+      "holdout_end": "2026-10-16 23:45:00+00:00",
+      "holdout_frac": 0.15,
+      "holdout_key": "048c6563c5426a6cbc01f5c3",
+      "holdout_start": "2026-04-04 16:45:00+00:00",
+      "metadata": {
+        "holdout_end": "2026-10-16 23:45:00+00:00",
+        "holdout_start": "2026-04-04 16:45:00+00:00",
+        "symbol": "LINK/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 8,
+      "purpose": "master_tune_final_holdout",
+      "run_id": "master_tune_final_holdout:2026-10-18T09:45:42.144641+00:00",
+      "scope": "LINK/USDT|15m|adaptive_signal"
     }
   ],
   "schema_version": 2,
-  "total_trials": 45,
+  "total_trials": 525,
   "trial_runs": [
     {
       "count": 3,
@@ -3072,7 +3205,111 @@
       },
       "recorded_at": "2026-10-11T15:44:16.502777+00:00",
       "run_id": "master_tune:2026-10-11T15:44:16.502773+00:00"
+    },
+    {
+      "count": 60,
+      "cumulative_trials_after": 105,
+      "cumulative_trials_before": 45,
+      "dataset_fingerprint": "bf7b3fa2c97e00fa00922f415ffa250d",
+      "kind": "master_tune",
+      "metadata": {
+        "holdout_frac": 0.15,
+        "requested_trials": 60
+      },
+      "recorded_at": "2026-10-18T08:54:33.095135+00:00",
+      "run_id": "master_tune:2026-10-18T08:54:33.095132+00:00"
+    },
+    {
+      "count": 60,
+      "cumulative_trials_after": 165,
+      "cumulative_trials_before": 105,
+      "dataset_fingerprint": "5c140d73b9cca40eeae00c055b8ca820",
+      "kind": "master_tune",
+      "metadata": {
+        "holdout_frac": 0.15,
+        "requested_trials": 60
+      },
+      "recorded_at": "2026-10-18T08:56:19.049200+00:00",
+      "run_id": "master_tune:2026-10-18T08:56:19.049197+00:00"
+    },
+    {
+      "count": 60,
+      "cumulative_trials_after": 225,
+      "cumulative_trials_before": 165,
+      "dataset_fingerprint": "ed21209f836d5042dd24ba326755ffc2",
+      "kind": "master_tune",
+      "metadata": {
+        "holdout_frac": 0.15,
+        "requested_trials": 60
+      },
+      "recorded_at": "2026-10-18T09:03:49.128611+00:00",
+      "run_id": "master_tune:2026-10-18T09:03:49.128609+00:00"
+    },
+    {
+      "count": 60,
+      "cumulative_trials_after": 285,
+      "cumulative_trials_before": 225,
+      "dataset_fingerprint": "69626e5ae906f3adfc9a31f636275125",
+      "kind": "master_tune",
+      "metadata": {
+        "holdout_frac": 0.15,
+        "requested_trials": 60
+      },
+      "recorded_at": "2026-10-18T09:12:00.734004+00:00",
+      "run_id": "master_tune:2026-10-18T09:12:00.734002+00:00"
+    },
+    {
+      "count": 60,
+      "cumulative_trials_after": 345,
+      "cumulative_trials_before": 285,
+      "dataset_fingerprint": "6fff2d65850105fd20c95b926caa897a",
+      "kind": "master_tune",
+      "metadata": {
+        "holdout_frac": 0.15,
+        "requested_trials": 60
+      },
+      "recorded_at": "2026-10-18T09:19:41.446427+00:00",
+      "run_id": "master_tune:2026-10-18T09:19:41.446425+00:00"
+    },
+    {
+      "count": 60,
+      "cumulative_trials_after": 405,
+      "cumulative_trials_before": 345,
+      "dataset_fingerprint": "342312936729d792c54b9c6789b5666e",
+      "kind": "master_tune",
+      "metadata": {
+        "holdout_frac": 0.15,
+        "requested_trials": 60
+      },
+      "recorded_at": "2026-10-18T09:27:20.829109+00:00",
+      "run_id": "master_tune:2026-10-18T09:27:20.829106+00:00"
+    },
+    {
+      "count": 60,
+      "cumulative_trials_after": 465,
+      "cumulative_trials_before": 405,
+      "dataset_fingerprint": "72ae502f352aaca95822bc2f1160455c",
+      "kind": "master_tune",
+      "metadata": {
+        "holdout_frac": 0.15,
+        "requested_trials": 60
+      },
+      "recorded_at": "2026-10-18T09:35:07.170712+00:00",
+      "run_id": "master_tune:2026-10-18T09:35:07.170710+00:00"
+    },
+    {
+      "count": 60,
+      "cumulative_trials_after": 525,
+      "cumulative_trials_before": 465,
+      "dataset_fingerprint": "14e9d7fe56450eccbe03a329374d73d8",
+      "kind": "master_tune",
+      "metadata": {
+        "holdout_frac": 0.15,
+        "requested_trials": 60
+      },
+      "recorded_at": "2026-10-18T09:43:20.693306+00:00",
+      "run_id": "master_tune:2026-10-18T09:43:20.693304+00:00"
     }
   ],
-  "updated_at": "2026-10-12T14:36:59.761559+00:00"
+  "updated_at": "2026-10-18T09:45:42.144687+00:00"
 }
