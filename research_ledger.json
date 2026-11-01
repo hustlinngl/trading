@@ -3139,10 +3139,162 @@
       "purpose": "master_tune_final_holdout",
       "run_id": "master_tune_final_holdout:2026-10-25T10:26:14.980048+00:00",
       "scope": "LINK/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "c5d899e9c6b981380794ff8e:1",
+      "accessed_at": "2026-11-01T11:25:21.688136+00:00",
+      "dataset_fingerprint": "0fd2c18ae19f226c77b52655953142b9",
+      "holdout_end": "2026-10-31 23:45:00+00:00",
+      "holdout_frac": 0.15,
+      "holdout_key": "c5d899e9c6b981380794ff8e",
+      "holdout_start": "2026-04-17 10:45:00+00:00",
+      "metadata": {
+        "holdout_end": "2026-10-31 23:45:00+00:00",
+        "holdout_start": "2026-04-17 10:45:00+00:00",
+        "symbol": "BTC/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 11,
+      "purpose": "master_tune_final_holdout",
+      "run_id": "master_tune_final_holdout:2026-11-01T11:25:21.688039+00:00",
+      "scope": "BTC/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "29131a543189368dbbcd269e:1",
+      "accessed_at": "2026-11-01T11:38:00.848742+00:00",
+      "dataset_fingerprint": "4889b4a53040e3dbf5efebf44c3da12a",
+      "holdout_end": "2026-10-31 23:45:00+00:00",
+      "holdout_frac": 0.15,
+      "holdout_key": "29131a543189368dbbcd269e",
+      "holdout_start": "2026-04-17 10:45:00+00:00",
+      "metadata": {
+        "holdout_end": "2026-10-31 23:45:00+00:00",
+        "holdout_start": "2026-04-17 10:45:00+00:00",
+        "symbol": "ETH/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 13,
+      "purpose": "master_tune_final_holdout",
+      "run_id": "master_tune_final_holdout:2026-11-01T11:38:00.848661+00:00",
+      "scope": "ETH/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "2a7c64b83369fe63643c0a87:1",
+      "accessed_at": "2026-11-01T11:50:41.357114+00:00",
+      "dataset_fingerprint": "f217cbb0316570fc06ff9f16b514d46c",
+      "holdout_end": "2026-10-31 23:45:00+00:00",
+      "holdout_frac": 0.15,
+      "holdout_key": "2a7c64b83369fe63643c0a87",
+      "holdout_start": "2026-04-17 10:45:00+00:00",
+      "metadata": {
+        "holdout_end": "2026-10-31 23:45:00+00:00",
+        "holdout_start": "2026-04-17 10:45:00+00:00",
+        "symbol": "BNB/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 15,
+      "purpose": "master_tune_final_holdout",
+      "run_id": "master_tune_final_holdout:2026-11-01T11:50:41.357011+00:00",
+      "scope": "BNB/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "3a52bca8be52ff5ada2e6f5a:1",
+      "accessed_at": "2026-11-01T12:03:50.241791+00:00",
+      "dataset_fingerprint": "87a2e2595ccae1f147d7da34da5c7811",
+      "holdout_end": "2026-10-31 23:45:00+00:00",
+      "holdout_frac": 0.15,
+      "holdout_key": "3a52bca8be52ff5ada2e6f5a",
+      "holdout_start": "2026-04-17 10:45:00+00:00",
+      "metadata": {
+        "holdout_end": "2026-10-31 23:45:00+00:00",
+        "holdout_start": "2026-04-17 10:45:00+00:00",
+        "symbol": "SOL/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 11,
+      "purpose": "master_tune_final_holdout",
+      "run_id": "master_tune_final_holdout:2026-11-01T12:03:50.241716+00:00",
+      "scope": "SOL/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "147715c5acd6e94c75cbdfe4:1",
+      "accessed_at": "2026-11-01T12:16:57.560994+00:00",
+      "dataset_fingerprint": "fa76bbe3703b4ec769a8e420eeaaa34e",
+      "holdout_end": "2026-10-31 23:45:00+00:00",
+      "holdout_frac": 0.15,
+      "holdout_key": "147715c5acd6e94c75cbdfe4",
+      "holdout_start": "2026-04-17 10:45:00+00:00",
+      "metadata": {
+        "holdout_end": "2026-10-31 23:45:00+00:00",
+        "holdout_start": "2026-04-17 10:45:00+00:00",
+        "symbol": "XRP/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 11,
+      "purpose": "master_tune_final_holdout",
+      "run_id": "master_tune_final_holdout:2026-11-01T12:16:57.560921+00:00",
+      "scope": "XRP/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "691c86d2ade70af4aa42041c:1",
+      "accessed_at": "2026-11-01T12:29:40.777416+00:00",
+      "dataset_fingerprint": "522a13a03d8e2408a14a41f474f9aca5",
+      "holdout_end": "2026-10-31 23:45:00+00:00",
+      "holdout_frac": 0.15,
+      "holdout_key": "691c86d2ade70af4aa42041c",
+      "holdout_start": "2026-04-17 10:45:00+00:00",
+      "metadata": {
+        "holdout_end": "2026-10-31 23:45:00+00:00",
+        "holdout_start": "2026-04-17 10:45:00+00:00",
+        "symbol": "ADA/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 18,
+      "purpose": "master_tune_final_holdout",
+      "run_id": "master_tune_final_holdout:2026-11-01T12:29:40.777322+00:00",
+      "scope": "ADA/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "2cb8c87e864bba8219f0b421:1",
+      "accessed_at": "2026-11-01T12:42:35.175648+00:00",
+      "dataset_fingerprint": "ef68b05e0918107b591eb402643bccb8",
+      "holdout_end": "2026-10-31 23:45:00+00:00",
+      "holdout_frac": 0.15,
+      "holdout_key": "2cb8c87e864bba8219f0b421",
+      "holdout_start": "2026-04-17 10:45:00+00:00",
+      "metadata": {
+        "holdout_end": "2026-10-31 23:45:00+00:00",
+        "holdout_start": "2026-04-17 10:45:00+00:00",
+        "symbol": "DOGE/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 13,
+      "purpose": "master_tune_final_holdout",
+      "run_id": "master_tune_final_holdout:2026-11-01T12:42:35.175569+00:00",
+      "scope": "DOGE/USDT|15m|adaptive_signal"
+    },
+    {
+      "access_id": "a7bdcef863b70c2dff869d4d:1",
+      "accessed_at": "2026-11-01T12:55:45.034736+00:00",
+      "dataset_fingerprint": "a64c791209a6519b2cf667758b849151",
+      "holdout_end": "2026-10-31 23:45:00+00:00",
+      "holdout_frac": 0.15,
+      "holdout_key": "a7bdcef863b70c2dff869d4d",
+      "holdout_start": "2026-04-17 10:45:00+00:00",
+      "metadata": {
+        "holdout_end": "2026-10-31 23:45:00+00:00",
+        "holdout_start": "2026-04-17 10:45:00+00:00",
+        "symbol": "LINK/USDT",
+        "timeframe": "15m"
+      },
+      "overlapping_prior_run_count": 10,
+      "purpose": "master_tune_final_holdout",
+      "run_id": "master_tune_final_holdout:2026-11-01T12:55:45.034661+00:00",
+      "scope": "LINK/USDT|15m|adaptive_signal"
     }
   ],
   "schema_version": 2,
-  "total_trials": 1005,
+  "total_trials": 1485,
   "trial_runs": [
     {
       "count": 3,
@@ -3546,7 +3698,111 @@
       },
       "recorded_at": "2026-10-25T10:23:05.411196+00:00",
       "run_id": "master_tune:2026-10-25T10:23:05.411193+00:00"
+    },
+    {
+      "count": 60,
+      "cumulative_trials_after": 1065,
+      "cumulative_trials_before": 1005,
+      "dataset_fingerprint": "0fd2c18ae19f226c77b52655953142b9",
+      "kind": "master_tune",
+      "metadata": {
+        "holdout_frac": 0.15,
+        "requested_trials": 60
+      },
+      "recorded_at": "2026-11-01T11:21:31.562246+00:00",
+      "run_id": "master_tune:2026-11-01T11:21:31.562242+00:00"
+    },
+    {
+      "count": 60,
+      "cumulative_trials_after": 1125,
+      "cumulative_trials_before": 1065,
+      "dataset_fingerprint": "4889b4a53040e3dbf5efebf44c3da12a",
+      "kind": "master_tune",
+      "metadata": {
+        "holdout_frac": 0.15,
+        "requested_trials": 60
+      },
+      "recorded_at": "2026-11-01T11:34:10.559137+00:00",
+      "run_id": "master_tune:2026-11-01T11:34:10.559134+00:00"
+    },
+    {
+      "count": 60,
+      "cumulative_trials_after": 1185,
+      "cumulative_trials_before": 1125,
+      "dataset_fingerprint": "f217cbb0316570fc06ff9f16b514d46c",
+      "kind": "master_tune",
+      "metadata": {
+        "holdout_frac": 0.15,
+        "requested_trials": 60
+      },
+      "recorded_at": "2026-11-01T11:46:52.039394+00:00",
+      "run_id": "master_tune:2026-11-01T11:46:52.039390+00:00"
+    },
+    {
+      "count": 60,
+      "cumulative_trials_after": 1245,
+      "cumulative_trials_before": 1185,
+      "dataset_fingerprint": "87a2e2595ccae1f147d7da34da5c7811",
+      "kind": "master_tune",
+      "metadata": {
+        "holdout_frac": 0.15,
+        "requested_trials": 60
+      },
+      "recorded_at": "2026-11-01T11:59:58.953186+00:00",
+      "run_id": "master_tune:2026-11-01T11:59:58.953182+00:00"
+    },
+    {
+      "count": 60,
+      "cumulative_trials_after": 1305,
+      "cumulative_trials_before": 1245,
+      "dataset_fingerprint": "fa76bbe3703b4ec769a8e420eeaaa34e",
+      "kind": "master_tune",
+      "metadata": {
+        "holdout_frac": 0.15,
+        "requested_trials": 60
+      },
+      "recorded_at": "2026-11-01T12:13:07.769334+00:00",
+      "run_id": "master_tune:2026-11-01T12:13:07.769330+00:00"
+    },
+    {
+      "count": 60,
+      "cumulative_trials_after": 1365,
+      "cumulative_trials_before": 1305,
+      "dataset_fingerprint": "522a13a03d8e2408a14a41f474f9aca5",
+      "kind": "master_tune",
+      "metadata": {
+        "holdout_frac": 0.15,
+        "requested_trials": 60
+      },
+      "recorded_at": "2026-11-01T12:25:49.267071+00:00",
+      "run_id": "master_tune:2026-11-01T12:25:49.267068+00:00"
+    },
+    {
+      "count": 60,
+      "cumulative_trials_after": 1425,
+      "cumulative_trials_before": 1365,
+      "dataset_fingerprint": "ef68b05e0918107b591eb402643bccb8",
+      "kind": "master_tune",
+      "metadata": {
+        "holdout_frac": 0.15,
+        "requested_trials": 60
+      },
+      "recorded_at": "2026-11-01T12:38:45.547656+00:00",
+      "run_id": "master_tune:2026-11-01T12:38:45.547652+00:00"
+    },
+    {
+      "count": 60,
+      "cumulative_trials_after": 1485,
+      "cumulative_trials_before": 1425,
+      "dataset_fingerprint": "a64c791209a6519b2cf667758b849151",
+      "kind": "master_tune",
+      "metadata": {
+        "holdout_frac": 0.15,
+        "requested_trials": 60
+      },
+      "recorded_at": "2026-11-01T12:51:53.546624+00:00",
+      "run_id": "master_tune:2026-11-01T12:51:53.546621+00:00"
     }
   ],
-  "updated_at": "2026-10-25T10:26:14.980114+00:00"
+  "updated_at": "2026-11-01T12:55:45.034744+00:00"
 }
